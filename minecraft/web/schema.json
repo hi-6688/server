@@ -1,0 +1,142 @@
+{
+    "server-name": {
+        "label": "伺服器名稱 (Server Name)",
+        "type": "text",
+        "desc": "顯示在玩家列表中的伺服器名稱"
+    },
+    "gamemode": {
+        "label": "遊戲模式 (Game Mode)",
+        "type": "select",
+        "options": [
+            "survival",
+            "creative",
+            "adventure"
+        ],
+        "desc": "新玩家加入時的預設模式"
+    },
+    "difficulty": {
+        "label": "難度 (Difficulty)",
+        "type": "select",
+        "options": [
+            "easy",
+            "normal",
+            "hard",
+            "peaceful"
+        ],
+        "desc": "世界的困難程度"
+    },
+    "allow-cheats": {
+        "label": "允許作弊 (Allow Cheats)",
+        "type": "boolean",
+        "desc": "是否允許使用指令"
+    },
+    "max-players": {
+        "label": "最大玩家數 (Max Players)",
+        "type": "number",
+        "desc": "伺服器同時在線的人數上限"
+    },
+    "online-mode": {
+        "label": "正版驗證 (Online Mode)",
+        "type": "boolean",
+        "desc": "是否需要 Xbox Live 正版登入"
+    },
+    "white-list": {
+        "label": "白名單 (Whitelist)",
+        "type": "boolean",
+        "desc": "開啟後只有白名單內的玩家才能進入"
+    },
+    "server-port": {
+        "label": "IPv4 連接埠 (Port)",
+        "type": "number",
+        "desc": "伺服器監聽的 Port (預設 19132)"
+    },
+    "server-portv6": {
+        "label": "IPv6 連接埠 (Port v6)",
+        "type": "number",
+        "desc": "IPv6 監聯的 Port (預設 19133)"
+    },
+    "view-distance": {
+        "label": "視距 (View Distance)",
+        "type": "number",
+        "desc": "玩家能看到的區塊距離"
+    },
+    "tick-distance": {
+        "label": "模擬距離 (Tick Distance)",
+        "type": "number",
+        "desc": "生物和農作物會運作的距離範圍"
+    },
+    "player-idle-timeout": {
+        "label": "閒置踢出時間 (Idle Timeout)",
+        "type": "number",
+        "desc": "玩家掛機多久後會被踢出 (分鐘)"
+    },
+    "max-threads": {
+        "label": "最大執行緒 (Max Threads)",
+        "type": "number",
+        "desc": "CPU 核心使用數 (0 為自動分配)"
+    },
+    "level-name": {
+        "label": "世界名稱 (Level Name)",
+        "type": "text",
+        "desc": "世界存檔的資料夾名稱"
+    },
+    "level-seed": {
+        "label": "種子碼 (Seed)",
+        "type": "text",
+        "desc": "生成地圖的隨機種子碼"
+    },
+    "level-type": {
+        "label": "地圖類型 (Level Type)",
+        "type": "select",
+        "options": [
+            "DEFAULT",
+            "FLAT",
+            "LEGACY"
+        ],
+        "desc": "預設/超平坦/舊版世界"
+    },
+    "default-player-permission-level": {
+        "label": "預設權限 (Permission)",
+        "type": "select",
+        "options": [
+            "visitor",
+            "member",
+            "operator"
+        ],
+        "desc": "新玩家的預設權限"
+    },
+    "texturepack-required": {
+        "label": "強制材質包 (Texture Pack)",
+        "type": "boolean",
+        "desc": "是否強制玩家下載伺服器資源包"
+    },
+    "force-gamemode": {
+        "label": "強制遊戲模式 (Force Gamemode)",
+        "type": "boolean",
+        "desc": "是否強制玩家使用伺服器設定的遊戲模式"
+    },
+    "server-authoritative-movement": {
+        "label": "伺服器移動驗證",
+        "type": "select",
+        "options": [
+            "client-auth",
+            "server-auth",
+            "server-auth-with-rewind"
+        ],
+        "desc": "由誰來判定玩家位置"
+    },
+    "compression-threshold": {
+        "label": "封包壓縮門檻",
+        "type": "number",
+        "desc": "超過多少 Bytes 的封包才進行壓縮"
+    },
+    "compression-algorithm": {
+        "label": "壓縮演算法",
+        "type": "select",
+        "options": [
+            "zlib",
+            "snappy"
+        ],
+        "desc": "網路封包壓縮方式"
+    }
+}

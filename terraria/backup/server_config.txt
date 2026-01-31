@@ -1,0 +1,11 @@
+# Terraria Server Configuration
+world=./Worlds/world1.wld
+autocreate=3
+worldname=TerrariaWorld
+difficulty=0
+maxplayers=8
+port=7777
+password=
+motd=Welcome to our GCP Server!
+secure=1
+language=en-US

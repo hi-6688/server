@@ -1,0 +1,42 @@
+# 環境變數檔案（包含敏感資訊）
+.env
+*.env
+
+# Python 相關
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+
+# 日誌檔案
+*.log
+logs/
+
+# Terraria 伺服器檔案
+*.wld
+*.wld.bak
+Players/
+Worlds/
+
+# Minecraft 伺服器檔案
+*.jar
+bedrock-server.zip
+bedrock_server
+bedrock_server_mod.exe
+bedrock_server.pdb
+world/
+world_nether/
+world_the_end/
+logs/
+crash-reports/
+
+# SteamCMD 下載的檔案
+steamcmd/
+
+# 系統檔案
+.DS_Store
+Thumbs.db

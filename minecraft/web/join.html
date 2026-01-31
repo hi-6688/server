@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>Joining Server...</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #121212;
+            color: #fff;
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .big-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #2ecc71, #27ae60);
+            color: white;
+            text-decoration: none;
+            width: 80%;
+            max-width: 300px;
+            padding: 25px;
+            border-radius: 50px;
+            font-size: 24px;
+            font-weight: bold;
+            box-shadow: 0 10px 30px rgba(46, 204, 113, 0.4);
+            transition: transform 0.2s, box-shadow 0.2s;
+            text-align: center;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .big-btn:active {
+            transform: scale(0.95);
+            box-shadow: 0 5px 15px rgba(46, 204, 113, 0.2);
+        }
+
+        .big-btn::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(to bottom, rgba(255, 255, 255, 0.2), transparent);
+            pointer-events: none;
+        }
+
+        #status {
+            margin-top: 20px;
+            color: #666;
+            font-size: 14px;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% {
+                opacity: 0.5;
+            }
+
+            50% {
+                opacity: 1;
+            }
+
+            100% {
+                opacity: 0.5;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <a id="launchBtn" href="#" class="big-btn">
+        🚀 啟動遊戲
+    </a>
+
+    <div id="status">正在嘗試自動開啟...</div>
+
+    <script>
+        async function init() {
+            let ip = window.location.hostname;
+            let port = 19132;
+            let name = "Minecraft Server"; // 預設值，之後會被覆蓋
+
+            // Fetch config (Name + Port)
+            try {
+                // Add timestamp to prevent caching
+                const res = await fetch('/public_config?t=' + Date.now());
+                if (res.ok) {
+                    const conf = await res.json();
+                    if (conf.server_title) name = conf.server_title;
+                    if (conf.port) port = conf.port;
+                }
+            } catch (e) { console.log("Web config load failed", e); }
+
+            // Construct Deep Link
+            const nameEnc = encodeURIComponent(name);
+            // Protocol: minecraft://?addExternalServer=Name|IP:Port
+            const link = `minecraft://?addExternalServer=${nameEnc}|${ip}:${port}`;
+
+            // Set Button
+            const btn = document.getElementById('launchBtn');
+            btn.href = link;
+            btn.onclick = () => {
+                document.getElementById('status').innerText = "正在呼叫 Minecraft...";
+                // Fallback for Android Intent if needed (optional logic could go here)
+            };
+
+            // Auto Launch
+            setTimeout(() => {
+                window.location.href = link;
+                document.getElementById('status').innerText = "若未自動開啟，請點擊按鈕";
+            }, 800);
+        }
+
+        window.onload = init;
+    </script>
+</body>
+
+</html>

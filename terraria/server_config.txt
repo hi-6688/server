@@ -1,0 +1,11 @@
+# Terraria Server Configuration
+world=./Worlds/TaiLuanSiFuQi.wld
+autocreate=3
+worldname=泰亂四福氣
+difficulty=0
+maxplayers=8
+port=7777
+password=
+motd=Welcome to 泰亂四福氣 Server!
+secure=1
+language=zh-TW
