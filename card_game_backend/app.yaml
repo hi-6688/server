@@ -1,0 +1,21 @@
+name: apcpc-godot
+services:
+- name: api
+  dockerfile_path: Dockerfile
+  source_dir: backend
+  http_port: 8080
+  envs:
+  - key: DATABASE_URL
+    scope: RUN_AND_BUILD_TIME
+    value: ${DATABASE_URL}
+  health_check:
+    http_path: /health
+workers:
+- name: bot
+  dockerfile_path: Dockerfile
+  source_dir: backend
+  run_command: python bot.py
+  envs:
+  - key: DISCORD_TOKEN
+    scope: RUN_TIME
+    value: ${DISCORD_TOKEN}
