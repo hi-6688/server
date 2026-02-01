@@ -1,0 +1,122 @@
+[gd_scene load_steps=2 format=3 uid="uid://b8j4k5l6m7n8"]
+
+[ext_resource type="Script" path="res://BattleScene.gd" id="1_script"]
+
+[node name="BattleScene" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_script")
+
+[node name="StatusLabel" type="Label" parent="."]
+layout_mode = 0
+offset_left = 50.0
+offset_top = 20.0
+offset_right = 500.0
+offset_bottom = 150.0
+text = "Initialize..."
+
+[node name="P1Roster" type="ItemList" parent="."]
+layout_mode = 0
+offset_left = 50.0
+offset_top = 150.0
+offset_right = 350.0
+offset_bottom = 350.0
+
+[node name="P1Items" type="ItemList" parent="."]
+layout_mode = 0
+offset_left = 50.0
+offset_top = 400.0
+offset_right = 350.0
+offset_bottom = 500.0
+
+[node name="P2Info" type="Label" parent="."]
+layout_mode = 0
+offset_left = 600.0
+offset_top = 100.0
+offset_right = 850.0
+offset_bottom = 300.0
+text = "P2 Data"
+
+[node name="CombatLog" type="RichTextLabel" parent="."]
+layout_mode = 0
+offset_left = 600.0
+offset_top = 350.0
+offset_right = 900.0
+offset_bottom = 550.0
+text = "Combat Log..."
+scroll_following = true
+
+[node name="ReadyButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 400.0
+offset_top = 400.0
+offset_right = 560.0
+offset_bottom = 460.0
+text = "READY!"
+
+[node name="CatchButton" type="Button" parent="."]
+visible = false
+layout_mode = 0
+offset_left = 250.0
+offset_top = 350.0
+offset_right = 350.0
+offset_bottom = 400.0
+text = "CATCH"
+
+[node name="PassButton" type="Button" parent="."]
+visible = false
+layout_mode = 0
+offset_left = 370.0
+offset_top = 350.0
+offset_right = 470.0
+offset_bottom = 400.0
+text = "PASS"
+
+[node name="SwapButton" type="Button" parent="."]
+visible = false
+layout_mode = 0
+offset_left = 370.0
+offset_top = 150.0
+offset_right = 520.0
+offset_bottom = 190.0
+text = "Swap to Active"
+
+[node name="UseItemButton" type="Button" parent="."]
+visible = false
+layout_mode = 0
+offset_left = 370.0
+offset_top = 400.0
+offset_right = 520.0
+offset_bottom = 440.0
+text = "Use Item"
+
+[node name="EvolveButton" type="Button" parent="."]
+visible = false
+layout_mode = 0
+offset_left = 370.0
+offset_top = 200.0
+offset_right = 520.0
+offset_bottom = 240.0
+text = "EVOLVE!"
+
+[node name="AttackP1Button" type="Button" parent="."]
+visible = false
+layout_mode = 0
+offset_left = 370.0
+offset_top = 250.0
+offset_right = 520.0
+offset_bottom = 290.0
+text = "Atk Enemy 1"
+
+[node name="AttackP2Button" type="Button" parent="."]
+visible = false
+layout_mode = 0
+offset_left = 370.0
+offset_top = 300.0
+offset_right = 520.0
+offset_bottom = 340.0
+text = "Atk Enemy 2"
