@@ -51,3 +51,6 @@ terraria_backup_*/
 *.dll
 *.exe
 *.bin.x86_64
+
+# Webhook Secret (敏感資訊)
+.webhook_secret
