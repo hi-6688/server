@@ -29,6 +29,7 @@ bedrock_server
 bedrock_server_mod.exe
 bedrock_server.pdb
 world/
+worlds/
 world_nether/
 world_the_end/
 logs/
