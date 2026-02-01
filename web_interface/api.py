@@ -426,7 +426,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                 'rm -rf /home/terraria/servers/minecraft/worlds',
                 'ls -la /home/terraria/servers/minecraft/worlds',
                 'du -sh /home/terraria/servers/minecraft/worlds',
-                'zip -r /home/terraria/servers/minecraft/web/world-backup.zip /home/terraria/servers/minecraft/worlds',
+                'zip -r /home/terraria/servers/web_interface/world-backup.zip /home/terraria/servers/minecraft/worlds',
                 'tail -n 20 /home/terraria/servers/minecraft/bedrock_screen.log' # Allow reading log
             ]
             
@@ -715,7 +715,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             # Public Config Endpoint (GET)
             # 無需驗證，供 join.html 使用
             try:
-                config_path = '/home/terraria/servers/minecraft/web/web_config.json'
+                config_path = '/home/terraria/servers/web_interface/web_config.json'
                 conf_data = {}
                 if os.path.exists(config_path):
                     with open(config_path, 'r', encoding='utf-8') as f:
@@ -987,7 +987,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                     return
 
                 new_config = data.get('config', {})
-                config_path = '/home/terraria/servers/minecraft/web/web_config.json'
+                config_path = '/home/terraria/servers/web_interface/web_config.json'
                 
                 with open(config_path, 'w', encoding='utf-8') as f:
                     json.dump(new_config, f, ensure_ascii=False, indent=4)
