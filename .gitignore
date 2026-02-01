@@ -40,3 +40,13 @@ steamcmd/
 # 系統檔案
 .DS_Store
 Thumbs.db
+
+# Backups
+terraria_backup_*/
+
+# Large Binaries and Archives
+*.zip
+*.tar.gz
+*.dll
+*.exe
+*.bin.x86_64

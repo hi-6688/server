@@ -1,3 +1,92 @@
+Version 1.4.5.3 Changes -------------------------------------------------------------------------------------------
+
+I. Content & Additions
+
+- Added a Portraits Styles options to the Interface menu, with four distinct options: Detailed, Profile, Retro and Disabled.
+- Added an Inventory Effects toggle to the Interface menu (disables the item flash when crafting).
+- Added a Screen Shake toggle to the Video -> Effects menu.
+- Added a Thunder Effects toggle to the Video -> Effects menu, which disables visual flashes from lightning (does not disable lightning strikes).
+- Improved clipboard support on Linux.
+
+II. Balance
+
+- Storm lightning strike changes:
+	- Reduced damage to players from 200/300/400 on Classic/Expert/Master difficulty to 80/160/240. Legendary difficulty damage unchanged.
+	- Strike delay increased from 3.5 seconds to 4 seconds.
+	- Reduced player attachment range from three tiles to slightly less than one tile. Does not apply to Legendary difficulty.
+	- Strikes will no longer spawn directly in the path of fast moving players.
+	- Improved visuals of impending strike effect.
+	- Reduced the likelihood of lightning striking bodies of water.
+	- Strike frequency reduced when fishing, sleeping or fighting a boss.
+	- No longer appear during blizzards.
+	- Pylons no longer attract lightning.
+	- Visual effect intensity reduced for players who are behind walls.
+	- Villagers and pets now stay inside during thunderstorms.
+	- Lightning can now strike further from the player.
+- Increased the appearance rate of Cattiva and Foxparks by 50%. Adjusted the ratio of 70% Cattiva - 30% Foxparks to 60% Cattiva - 40% Foxparks.
+
+III. Bug Fixes
+
+- Fixed a multiplayer crash involving waterfalls.
+- Fixed a duplication glitch involving certain transformation mounts.
+- Fixed .ZIP file based resource packs no longer working.
+- Fixed the game being stuck in Halloween mode for the rest of the session once it becomes active. Spooky!
+- Fixed distressed Foxparks' mouseover hitbox being much larger than intended.
+- Fixed Music Boxes playing their record scratch sound effect when trying to record an unrecordable track (e.g. Rainbow Boulder).
+- Fixed Toybreaker Bricks not breaking Sticky Glowsticks and certain Kites.
+- Fixed petting, sleeping or sitting not resetting the Kite AFK timer.
+- Fixed sloped Rainbow Bricks not using the correct sprite.
+- Linux now automatically falls back to OpenGL where Vulkan is not fully supported
+	- If the game doesn't launch/black screen, try /gldevice:OpenGL (or try repairing your Vulkan drivers)
+	- If the audio is dropping out, try /audiodriver:pulseaudio or /audiodriver:alsa (or try repairing your pipewire drivers)
+	- If none of those work, please submit a bug on the terraia community forums
+	- Proton is not supported or recommended, please submit a bug report before resorting to Proton
+
+
+Version 1.4.5.2 Changes -------------------------------------------------------------------------------------------
+
+I. Bug Fixes
+
+- Fixed situation that prevented all Villagers from moving in if the Merchant is present and the Nurse can arrive.
+- Fixed Toybreaker Block not breaking glowsticks, golfballs, nor kites.
+
+
+Version 1.4.5.1 Changes -------------------------------------------------------------------------------------------
+
+I. Content & Additions
+
+- Reverted a change that stopped sloped platform hoiks from working.
+- Reverted a change that caused Leaf Blocks and Rich Mahogany Leaf Blocks to merge with each other.
+
+II. Balance
+
+- Obsidian Swordfish's fire projectiles now inflict Hellfire rather than On Fire!.
+
+III. Bug Fixes
+
+- Fixed the game being unable to start on certain iOS versions.
+- Fixed a crash related to Proton. Proton in general is not supported or necessary to run Terraria.
+- Fixed a crash caused by entering a seed that only contains special characters. 
+- Fixed resource packs not checking the width and height of textures properly.
+- Fixed the Shimmer island in Skyblock + Don't Dig Up worlds spawning partially out of bounds.
+- Fixed several crashes caused by the above.
+- Fixed several localization issues.
+- Fixed Villagers only being able to arrive homeless even if there are valid houses.
+- Fixed some ammo using weapons (such as Acorn Slingshot) showing both stack count and ammo count at the same time, causing an overlap.
+- Fixed instruments (including weapons like the Magic Harp) not having the correct range on all resolutions.
+- Fixed Confetti and Snowfall blocks not blocking drawing behind them in all cases.
+- Fixed several cases where right-clicking would cause multiple simultaneous interactions.
+- Fixed the Rainbow Phasesaber's hitbox being the wrong size.
+- Fixed minions being killed when they leave the world's bounds. They will now teleport back to the player instead.
+- Fixed fishing not resetting the kite AFK counter.
+- Fixed an exploit that allowed you to create items for free from the crafting menu.
+- Fixed an exploit that allowed you to duplicate items that deal damage to you when used.
+- Fixed the research cost of items not being visible in the crafting menu.
+- Fixed Abigail and the Desert Storm Tiger not benefiting from Summon weapon prefixes.
+- Fixed the Lavaproof Fishing Bag having a black pixel in all frames but the first.
+- Fixed a missing pixel in the Wooden Table.
+
+
 Version 1.4.5 Changes -------------------------------------------------------------------------------------------
 
 I. Content Changes & Additions
@@ -428,6 +517,7 @@ Ale Tosser
 - Is now a melee weapon.
 - Now deals damage in an area.
 - Damage increased from 20 to 32.
+- Attack speed increased by 20%.
 - Projectile speed increased by ~70%.
 - Knockback reduced by ~43%.
 - Now has a 5% chance to inflict the Confused debuff on enemies.
@@ -1625,7 +1715,7 @@ L. Visual Issues
 - Fixed cut-off rendering on Retro Lighting at high resolutions.
 - Fixed a framing issue with exposed gems.
 - Fixed certain wings not blinking when the wearer is damaged.
-- Fixed Martian Conduit Wall's glowmask not aligning with the main sprite.
+- Fixed the Vortex Helmet using an incorrect glowmask.
 - Fixed an issue with the Flesh Chandelier's animation.
 - Fixed Team Dye not applying properly to Minions, Pets, Light Pets and Hooks. 
 
