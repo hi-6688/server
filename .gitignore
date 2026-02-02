@@ -32,6 +32,9 @@ world/
 worlds/
 world_nether/
 world_the_end/
+minecraft/behavior_packs/
+minecraft/resource_packs/
+minecraft/definitions/
 logs/
 crash-reports/
 

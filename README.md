@@ -7,6 +7,7 @@
 - **`minecraft/`**: Minecraft Bedrock 伺服器核心 (存檔 `worlds/` 已被 Git 忽略)
 - **`terraria/`**: Terraria 伺服器核心 (存檔 `Worlds/` 已被 Git 忽略)
 - **`web_interface/`**: 網頁管理介面 (Python + HTML/JS，原 `minecraft/web`)
+- **`CardGame_Project/`**: 卡牌對戰遊戲 (Godot 前端 + FastAPI 後端)
 - **`discord_bot/`**: Discord 機器人 (查詢狀態、管理伺服器)
 - **`scripts/`**: 自動化腳本 (Git 同步、Webhook)
 - **`configs/`**: 設定檔存放處

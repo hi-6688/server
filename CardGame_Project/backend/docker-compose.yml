@@ -13,12 +13,4 @@ services:
       - PYTHONUNBUFFERED=1
     command: uvicorn main:app --host 0.0.0.0 --port 8080 --reload
 
-  bot:
-    build: .
-    volumes:
-      - .:/app
-    env_file:
-      - .env
-    environment:
-      - PYTHONUNBUFFERED=1
-    command: python bot.py
+
