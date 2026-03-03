@@ -10,6 +10,7 @@ __pycache__/
 .Python
 venv/
 env/
+backups/
 ENV/
 
 # 日誌檔案
@@ -57,3 +58,27 @@ terraria_backup_*/
 
 # Webhook Secret (敏感資訊)
 .webhook_secret
+
+# Minecraft World Data & Instances
+minecraft/data/
+oneblock/
+tmp_oneblock/
+instances/
+
+# 巨大的二進位與世界備份
+*.mcworld
+.vscode/*.mcworld
+web_interface/custom_bg.jpg
+
+# Discord Bot Data & Env
+discord_bot/.venv/
+discord_bot/data/
+discord_bot/test_audio.wav
+
+# Caches, Venvs and Logs
+.agent/workflows/
+scripts/nbt_env/
+web_interface/api_log.out
+*.out
+*/__pycache__/
+__pycache__/
