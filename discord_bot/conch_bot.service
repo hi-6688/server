@@ -1,0 +1,18 @@
+[Unit]
+Description=Magic Conch Discord Bot (神奇嗨螺)
+After=network.target
+
+[Service]
+Type=simple
+User=terraria
+WorkingDirectory=/home/terraria/servers/discord_bot
+ExecStart=/home/terraria/servers/discord_bot/.venv/bin/python3 main.py
+Restart=always
+RestartSec=10
+EnvironmentFile=/home/terraria/servers/.env
+Environment=BOT_MODE=CONCH
+Environment=PYTHONUNBUFFERED=1
+
+
+[Install]
+WantedBy=multi-user.target

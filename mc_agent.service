@@ -1,0 +1,14 @@
+[Unit]
+Description=Minecraft Remote Agent API
+After=network.target
+
+[Service]
+Type=simple
+User=terraria
+WorkingDirectory=/home/terraria/servers
+ExecStart=/usr/bin/python3 /home/terraria/servers/remote_api.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

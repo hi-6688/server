@@ -1,0 +1,16 @@
+[Unit]
+Description=HiHi Discord Bot
+After=network.target
+
+[Service]
+Type=simple
+User=terraria
+WorkingDirectory=/home/terraria/servers/discord_bot
+ExecStart=/home/terraria/servers/discord_bot/.venv/bin/python3 main.py
+Restart=always
+RestartSec=10
+EnvironmentFile=/home/terraria/servers/.env
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
