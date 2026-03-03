@@ -1,4 +1,2 @@
-discord.py
-python-dotenv
-discord.py
-sqlmodel
+google-api-python-client
+google-auth
