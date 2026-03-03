@@ -12,11 +12,12 @@ from dotenv import load_dotenv
 
 # --- CONFIGURATION ---
 # Load .env explicitly
-load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'))
+# Load .env (from project root)
+load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.env'))
 
-TOKEN = os.getenv('DISCORD_BOT_TOKEN')
+TOKEN = os.getenv('DISCORD_TOKEN')
 try:
-    CHANNEL_ID = int(os.getenv('DISCORD_CHANNEL_ID', '0'))
+    CHANNEL_ID = int(os.getenv('TERRARIA_CHANNEL_ID', '0'))
 except:
     CHANNEL_ID = 0
 SERVER_BIN = "./TerrariaServer.bin.x86_64"

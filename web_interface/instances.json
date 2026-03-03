@@ -1,0 +1,31 @@
+{
+  "instances": [
+    {
+      "uuid": "main",
+      "name": "天寶四福氣",
+      "path": "/home/terraria/servers/minecraft",
+      "port": 19132,
+      "screen_name": "bedrock",
+      "discord_channel_id": "1471089934319489045",
+      "created_at": 1771149001.2902021
+    },
+    {
+      "uuid": "d8dd38d7-bc0d-425c-a94b-a5e96941511a",
+      "name": "空島生存",
+      "path": "/home/terraria/servers/oneblock",
+      "port": 19134,
+      "screen_name": "bedrock_19134",
+      "discord_channel_id": "1471089934319489045",
+      "created_at": 1771152643.5971835
+    },
+    {
+      "uuid": "94e5eda6-ded0-48a0-a6f3-9dabcccabe41",
+      "name": "大逃殺",
+      "path": "/home/terraria/servers/instances/94e5eda6-ded0-48a0-a6f3-9dabcccabe41",
+      "port": 19135,
+      "screen_name": "bedrock_19135",
+      "discord_channel_id": "1328652163664187412",
+      "created_at": 1771339841.3879793
+    }
+  ]
+}

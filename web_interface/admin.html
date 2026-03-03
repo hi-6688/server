@@ -1,50 +1,85 @@
 <!DOCTYPE html>
+
 <html lang="zh-TW">
 
+</html>
+
 <head>
-    <meta charset="UTF-8">
-    <title>Server Control (Live Edit)</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="admin.css?v=9">
-    <script src="admin.js?v=18" defer></script>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>麥亂伺服器</title>
+    <!-- Tailwind CSS v3 CDN -->
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <!-- Google Fonts: Noto Sans TC for clean typography -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&display=swap"
+        rel="stylesheet" />
+    <style data-purpose="custom-glassmorphism">
+        body {
+            font-family: "Noto Sans TC", sans-serif;
+            background-image: url("custom_bg.jpg");
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+            color: white
+        }
+
+        /* Dark Semi-transparent style without blur */
+        .glass-panel {
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 20px
+        }
+
+        .glass-card {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 20px;
+            transition: all 0.3s ease
+        }
+
+        .glass-card:hover {
+            background: rgba(0, 0, 0, 0.5);
+            transform: translatey(-2px)
+        }
+
+        /* Scrollbar styling for a clean look */
+        ::-webkit-scrollbar {
+            width: 6px
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.1)
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 10px
+        }
+    </style>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200"
+        rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet" />
+    <link href="admin.css?v=11" rel="stylesheet" />
+    <script defer="True" src="admin.js?v=30"></script>
 </head>
 
-<body>
-    <input type="file" id="fileInput" style="display:none" accept=".zip,.mcworld" onchange="handleFileUpload(this)">
+<body
+    class="min-h-screen p-4 md:p-8 flex justify-center items-start overflow-y-auto custom-scrollbar pt-6 lg:pt-8 text-white">
+    <input accept=".zip,.mcworld" id="fileInput" onchange="handleFileUpload(this)" style="display:none" type="file" />
     <div id="loadingOverlay">
         <div id="loadingContent">
             <h2 style="color:var(--primary)"><i class="fas fa-spinner fa-spin"></i></h2>
             <h3 id="loadingText">Processing...</h3>
         </div>
     </div>
-
-    <!-- LOGIN MODAL -->
-    <div id="loginModal"
-        style="position:fixed; top:0; left:0; width:100%; height:100%; background:#1c1e22; z-index:2147483647; display:flex; justify-content:center; align-items:center;">
-        <div
-            style="background:#252830; padding:40px; border-radius:12px; text-align:center; width:300px; box-shadow:0 10px 30px rgba(0,0,0,0.5);">
-            <div style="font-size:40px; color:var(--primary); margin-bottom:20px;">
-                <i class="fas fa-user-lock"></i>
-            </div>
-            <h2 style="margin-bottom:20px; color:#fff;">管理員登入</h2>
-            <input type="password" id="loginPassword" placeholder="請輸入密碼"
-                style="width:100%; padding:12px; background:#1a1d23; border:1px solid #3a3f4a; color:#fff; border-radius:6px; margin-bottom:15px; box-sizing:border-box; outline:none;"
-                onkeypress="if(event.key === 'Enter') doLogin()">
-            <button onclick="doLogin()"
-                style="width:100%; padding:12px; background:var(--primary); border:none; color:#fff; border-radius:6px; cursor:pointer; font-weight:bold;">
-                登入 (Login)
-            </button>
-            <p id="loginError" style="color:#e74c3c; margin-top:15px; font-size:13px; display:none;"></p>
-        </div>
-    </div>
-
-    <!-- CUSTOM EDITOR MODAL -->
     <div id="editorModal">
         <div id="editorContent">
             <div id="editorHeader">
                 <span id="editorTitle" style="color:#fff; font-weight:bold">編輯器 (Editor)</span>
-                <i class="fas fa-times" style="color:gray; cursor:pointer" onclick="closeEditor()"></i>
+                <i class="fas fa-times" onclick="closeEditor()" style="color:gray; cursor:pointer"></i>
             </div>
             <div id="editorForm"
                 style="display:none; padding: 20px; overflow-y: auto; grid-template-columns: 1fr 1fr; gap: 20px;"></div>
@@ -55,355 +90,468 @@
             </div>
         </div>
     </div>
-
-    <div class="sidebar">
-        <div class="logo" onclick="location.reload()"><i class="fas fa-cube"></i> 我的伺服器</div>
-        <div class="nav-item active" onclick="showSection('dashboard')"><i class="fas fa-server"></i> 儀表板</div>
-        <div class="nav-item" onclick="showSection('options')"><i class="fas fa-sliders-h"></i> 設定</div>
-        <div class="nav-item" onclick="showSection('worlds')"><i class="fas fa-globe"></i> 世界</div>
-        <div class="nav-item" onclick="showSection('gamerules')"><i class="fas fa-gavel"></i> 規則</div>
-        <div class="nav-item" onclick="showSection('players')"><i class="fas fa-users"></i> 玩家</div>
+    <div id="instanceModal"
+        style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:2000; justify-content:center; align-items:center;">
+        <div
+            style="background:#252830; padding:25px; border-radius:8px; width:400px; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
+            <h3 style="color:white; margin-bottom:20px; border-bottom:1px solid #444; padding-bottom:10px;">
+                <i class="fas fa-plus-circle"></i> 新增伺服器實例
+            </h3>
+            <label style="color:#ccc; display:block; margin-bottom:5px; font-size:13px;">實例名稱 (Instance Name)</label>
+            <input id="newInstanceName" placeholder="例如: 生存服 (Survival)"
+                style="width:100%; padding:10px; margin-bottom:15px; background:#1a1d23; border:1px solid #444; color:white; border-radius:4px; box-sizing:border-box;"
+                type="text" />
+            <label style="color:#ccc; display:block; margin-bottom:5px; font-size:13px;">連接埠 (IPv4 Port)</label>
+            <input id="newInstancePort" placeholder="例如: 19134"
+                style="width:100%; padding:10px; margin-bottom:15px; background:#1a1d23; border:1px solid #444; color:white; border-radius:4px; box-sizing:border-box;"
+                type="number" value="" />
+            <div style="font-size:11px; color:#888; margin-top:-10px; margin-bottom:15px;">IPv6 將自動設為 Port + 1</div>
+            <label style="color:#ccc; display:block; margin-bottom:5px; font-size:13px;">Discord 頻道 ID (選填)</label>
+            <input id="newInstanceChannel" placeholder="例如: 123456789012345678"
+                style="width:100%; padding:10px; margin-bottom:25px; background:#1a1d23; border:1px solid #444; color:white; border-radius:4px; box-sizing:border-box;"
+                type="text" />
+            <div style="display:flex; justify-content:flex-end; gap:10px;">
+                <button onclick="closeInstanceModal()"
+                    style="padding:8px 15px; background:transparent; border:1px solid #555; color:#aaa; border-radius:4px; cursor:pointer;">取消</button>
+                <button onclick="doCreateInstance()"
+                    style="padding:8px 20px; background:var(--btn-green); border:none; color:white; border-radius:4px; cursor:pointer; font-weight:bold;">建立
+                    (Create)</button>
+            </div>
+        </div>
     </div>
-
-    <div class="main">
-        <div id="gamerules" class="section">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
-                <h2>遊戲規則 (Game Rules)</h2>
-                <div style="display:flex; align-items:center; gap:10px;">
-                    <span id="ruleSaveStatus"
-                        style="color:var(--success); font-size:12px; font-weight:bold; opacity:0; transition:opacity 0.2s;">已變更
-                        (Applied)</span>
-                </div>
+    <div id="loginModal"
+        style="position:fixed; top:0; left:0; width:100%; height:100%; background:#1c1e22; z-index:2147483647; display:flex; justify-content:center; align-items:center;">
+        <div
+            style="background:#252830; padding:40px; border-radius:12px; text-align:center; width:300px; box-shadow:0 10px 30px rgba(0,0,0,0.5);">
+            <div style="font-size:40px; color:var(--primary); margin-bottom:20px;">
+                <i class="fas fa-user-lock"></i>
             </div>
-
-            <div class="card">
-                <p style="color:#aaa; font-size:13px; margin-bottom:20px;">以下設定變更後會<strong>立即生效</strong> (Immediately
-                    Effective)，無需重啟。</p>
-                <div id="gameruleList" class="options-grid"
-                    style="grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 15px;">
-                    <p style="text-align:center; color:#666; width:100%;">正在讀取規則 (Loading Rules)...</p>
-                </div>
-            </div>
+            <h2 style="margin-bottom:20px; color:#fff;">管理員登入</h2>
+            <input id="loginPassword" onkeypress="if(event.key === 'Enter') doLogin()" placeholder="請輸入密碼"
+                style="width:100%; padding:12px; background:#1a1d23; border:1px solid #3a3f4a; color:#fff; border-radius:6px; margin-bottom:15px; box-sizing:border-box; outline:none;"
+                type="password" />
+            <button onclick="doLogin()"
+                style="width:100%; padding:12px; background:var(--primary); border:none; color:#fff; border-radius:6px; cursor:pointer; font-weight:bold;">
+                登入 (Login)
+            </button>
+            <p id="loginError" style="color:#e74c3c; margin-top:15px; font-size:13px; display:none;"></p>
         </div>
-
-        <div id="dashboard" class="section active">
-            <!-- Header with Status and Player Count -->
-            <div class="header-status">
-                <h2>伺服器狀態</h2>
-                <div style="display:flex; gap:10px;">
-                    <div class="status-badge">
-                        <i class="fas fa-users" style="font-size:10px; color:#aaa;"></i>
-                        <span id="playerCountDisplay">0 / 0</span>
+    </div>
+    <div class="w-full fixed top-0 left-0 z-50 flex flex-col shadow-lg">
+        <!-- TOP NAV -->
+        <nav class="w-full transition-all duration-300 bg-black/40 border-b border-white/10">
+            <div class="max-w-7xl mx-auto w-full px-6 py-3 flex items-center justify-between">
+                <!-- Logo & Profile -->
+                <div class="flex items-center gap-4">
+                    <div class="relative shrink-0">
+                        <div class="size-10 rounded-full bg-cover bg-center border-2 border-primary/30 shadow-[0_0_15px_rgba(238,43,140,0.3)]"
+                            style='background-image: url("https://avatars.githubusercontent.com/u/9919?v=4");'></div>
+                        <div
+                            class="absolute bottom-0 right-0 size-3 rounded-full bg-green-500 border-2 border-[#181114] status-dot text-green-500">
+                        </div>
                     </div>
-                    <div class="status-badge">
-                        <div class="status-dot offline"></div>
-                        <span id="statusText">離線 (Offline)</span>
-                    </div>
-                </div>
-
-                <!-- Power Controls (Rounded Rects) -->
-                <div class="power-section">
-                    <!-- Start/Stop Button -->
-                    <button id="powerBtn" class="btn-power rounded-rect" onclick="power('open')">
-                        <i class="fas fa-power-off"></i>
-                        <span style="font-size:14px; margin-left:8px;">啟動</span>
-                    </button>
-
-                    <!-- Restart Button -->
-                    <button id="restartBtn" class="btn-power rounded-rect restart-btn" onclick="power('restart')">
-                        <i class="fas fa-sync-alt"></i>
-                        <span style="font-size:14px; margin-left:8px;">重啟</span>
-                    </button>
-                </div>
-            </div>
-
-            <!-- Dashboard Cards Grid (now outside header-status) -->
-            <div class="grid">
-
-                <!-- 1. Share Link (Join) -->
-                <div class="card"
-                    style="display:flex; align-items:center; justify-content:space-between; padding:15px;">
-                    <div style="font-weight:bold; color:var(--text-sub);"><i class="fas fa-share-alt"
-                            style="margin-right:10px;"></i>加入伺服器連結</div>
-                    <div style="display:flex; align-items:center; gap:10px; flex:1; justify-content:flex-end;">
-                        <span id="shareLinkDisplay" class="share-link-text"
-                            style="font-family:'Consolas', monospace; font-size:13px; color:#aaa; background:#252830; padding:6px 12px; border-radius:4px; border:1px solid #333; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:400px; flex:1;">
-                            http://.../join.html
-                        </span>
-                        <button class="btn-action" onclick="copyText(window.location.origin + '/join.html')"
-                            style="background:var(--btn-blue); padding:6px 15px; font-size:13px;">
-                            <i class="fas fa-copy"></i> 複製
-                        </button>
-                        <a href="join.html" target="_blank" class="btn-action"
-                            style="background:var(--btn-blue); text-decoration:none; padding:6px 15px; border-radius:4px; font-size:13px;">
-                            <i class="fas fa-external-link-alt"></i> 開啟
-                        </a>
+                    <div class="hidden sm:flex flex-col">
+                        <h1 class="text-white text-lg font-bold truncate">麥亂伺服器</h1>
+                        <p class="text-secondary/80 text-[10px] sm:text-xs font-medium uppercase tracking-wider">
+                            Superuser
+                        </p>
                     </div>
                 </div>
-
-
-
-                <!-- 2. Server IP -->
-                <div class="card"
-                    style="display:flex; align-items:center; justify-content:space-between; padding:15px;">
-                    <div style="font-weight:bold; color:var(--text-sub);"><i class="fas fa-network-wired"
-                            style="margin-right:10px;"></i>伺服器 IP (Address)</div>
-                    <div style="display:flex; align-items:center; gap:10px;">
-                        <span style="font-family:'Consolas', monospace; font-size:16px; color:#fff;">34.81.50.240</span>
-
-                    </div>
-                </div>
-
-                <!-- 3. Port -->
-                <div class="card"
-                    style="display:flex; align-items:center; justify-content:space-between; padding:15px;">
-                    <div style="font-weight:bold; color:var(--text-sub);"><i class="fas fa-door-open"
-                            style="margin-right:10px;"></i>連接埠 (Port)</div>
-                    <div style="display:flex; align-items:center; gap:10px;">
+                <!-- Navigation Links -->
+                <div class="flex items-center gap-2 lg:gap-4 overflow-x-auto custom-scrollbar px-2">
+                    <a class="group w-auto flex items-center gap-2 px-4 py-2 rounded-xl bg-primary/20 text-white border border-white/20 shadow-[0_0_10px_rgba(238,43,140,0.1)] transition-all hover:bg-primary/30 whitespace-nowrap"
+                        href="#">
                         <span
-                            style="font-family:'Consolas', monospace; font-size:16px; color:var(--primary);">19132</span>
-
-                    </div>
+                            class="material-symbols-outlined text-primary group-hover:text-white transition-colors text-lg">dashboard</span>
+                        <span class="font-medium text-sm">儀表板</span>
+                    </a>
+                    <a class="group w-auto flex items-center gap-2 px-4 py-2 rounded-xl text-slate-300 border border-transparent hover:border-white/20 hover:bg-white/10 hover:text-white transition-all whitespace-nowrap"
+                        href="#">
+                        <span
+                            class="material-symbols-outlined group-hover:text-secondary transition-colors text-lg">settings</span>
+                        <span class="font-medium text-sm">設定</span>
+                    </a>
+                    <a class="group w-auto flex items-center gap-2 px-4 py-2 rounded-xl text-slate-300 border border-transparent hover:border-white/20 hover:bg-white/10 hover:text-white transition-all whitespace-nowrap"
+                        href="#">
+                        <span
+                            class="material-symbols-outlined group-hover:text-secondary transition-colors text-lg">globe</span>
+                        <span class="font-medium text-sm">世界</span>
+                    </a>
+                    <a class="group w-auto flex items-center gap-2 px-4 py-2 rounded-xl text-slate-300 border border-transparent hover:border-white/20 hover:bg-white/10 hover:text-white transition-all whitespace-nowrap"
+                        href="#">
+                        <span
+                            class="material-symbols-outlined group-hover:text-secondary transition-colors text-lg">gavel</span>
+                        <span class="font-medium text-sm">規則</span>
+                    </a>
+                    <a class="group w-auto flex items-center gap-2 px-4 py-2 rounded-xl text-slate-300 border border-transparent hover:border-white/20 hover:bg-white/10 hover:text-white transition-all whitespace-nowrap"
+                        href="#">
+                        <span
+                            class="material-symbols-outlined group-hover:text-secondary transition-colors text-lg">group</span>
+                        <span class="font-medium text-sm">玩家</span>
+                    </a>
                 </div>
+                <!-- Mobile Menu Toggle Button -->
+                <button class="md:hidden p-2 rounded-xl glass-button text-slate-300">
+                </button>
+            </div>
+        </nav>
+        <!-- END: TOP NAV -->
 
-                <!-- 4. Software -->
-                <div class="card"
-                    style="display:flex; align-items:center; justify-content:space-between; padding:15px;">
-                    <div style="font-weight:bold; color:var(--text-sub);"><i class="fas fa-microchip"
-                            style="margin-right:10px;"></i>軟體 (Software)</div>
-                    <span style="font-weight:bold;">Bedrock Dedicated Server</span>
-                </div>
-
-                <!-- 5. Version -->
-                <div class="card"
-                    style="display:flex; align-items:center; justify-content:space-between; padding:15px;">
-                    <div style="font-weight:bold; color:var(--text-sub);"><i class="fas fa-tag"
-                            style="margin-right:10px;"></i>版本 (Version)</div>
-                    <span id="versionDisplay" style="font-weight:bold; color:var(--success);">Loading...</span>
-                </div>
-
-                <!-- CPU -->
-                <div class="card" style="padding:15px;">
-                    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:5px;">
-                        <div style="font-weight:bold; color:var(--text-sub);"><i class="fas fa-microchip"
-                                style="margin-right:10px;"></i>CPU Load</div>
-                        <span id="cpuLoad" style="font-weight:bold; color:var(--text-main);">...</span>
-                    </div>
-                    <div style="font-size:12px; color:#888; text-align:right;">1min / 5min / 15min</div>
-                </div>
-
-                <!-- RAM -->
-                <div class="card" style="padding:15px;">
-                    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:5px;">
-                        <div style="font-weight:bold; color:var(--text-sub);"><i class="fas fa-memory"
-                                style="margin-right:10px;"></i>RAM</div>
-                        <span id="ramPercent" style="font-weight:bold;">...%</span>
-                    </div>
-                    <div
-                        style="font-size:12px; color:#888; display:flex; justify-content:space-between; margin-bottom:5px;">
-                        <span>Usage</span>
-                        <span><span id="ramUsed">...</span> / <span id="ramTotal">...</span></span>
-                    </div>
-                    <div style="background:#333; height:4px; border-radius:2px; overflow:hidden;">
-                        <div id="ramBar"
-                            style="background:var(--btn-blue); height:100%; width:0%; transition:width 0.5s;"></div>
-                    </div>
-                </div>
-
-                <!-- Disk -->
-                <div class="card" style="padding:15px;">
-                    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:5px;">
-                        <div style="font-weight:bold; color:var(--text-sub);"><i class="fas fa-hdd"
-                                style="margin-right:10px;"></i>Disk (Root)</div>
-                        <span id="diskPercent" style="font-weight:bold;">...%</span>
-                    </div>
-                    <div
-                        style="font-size:12px; color:#888; display:flex; justify-content:space-between; margin-bottom:5px;">
-                        <span>Usage</span>
-                        <span><span id="diskUsed">...</span> / <span id="diskTotal">...</span></span>
-                    </div>
-                    <div style="background:#333; height:4px; border-radius:2px; overflow:hidden;">
-                        <div id="diskBar"
-                            style="background:var(--btn-orange); height:100%; width:0%; transition:width 0.5s;">
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Network -->
-                <div class="card" style="padding:15px;">
-                    <div style="display:flex; align-items:center; justify-content:space-between;">
-                        <div style="font-weight:bold; color:var(--text-sub);"><i class="fas fa-network-wired"
-                                style="margin-right:10px;"></i>Network</div>
-                        <div style="font-size:12px; color:#ccc; text-align:right;">
-                            <span style="margin-left:10px;"><i class="fas fa-arrow-down"
-                                    style="color:var(--success)"></i> <span id="netRx">...</span></span>
-                            <span style="margin-left:10px;"><i class="fas fa-arrow-up"
-                                    style="color:var(--btn-blue)"></i> <span id="netTx">...</span></span>
-                        </div>
-                    </div>
+        <!-- SECOND NAV: Server List -->
+        <div class="w-full transition-all duration-300 bg-black/40 border-b border-white/10">
+            <div class="max-w-7xl mx-auto w-full px-6 py-3 flex items-center justify-between">
+                <div class="flex items-center gap-4">
+                    <div class="font-bold text-white uppercase tracking-widest whitespace-nowrap">伺服器列表</div>
+                    <button
+                        class="px-4 py-2 rounded-xl bg-green-500/20 border border-white/20 text-green-400 hover:bg-green-500/40 transition-colors whitespace-nowrap"
+                        onclick="openInstanceModal()">+ 新增</button>
                 </div>
             </div>
         </div>
+        <!-- END: SECOND NAV -->
+    </div>
+    <!-- END: Sidebar / Navigation Layout -->
 
-        <div id="worlds" class="section">
-            <h2>世界管理</h2>
-            <div class="card">
-                <div class="world-card">
-                    <div class="world-icon"><i class="fas fa-globe-americas"></i></div>
-                    <div class="world-info">
-                        <div class="world-name">主世界</div>
-                        <div style="font-size:12px; color:#aaa; margin-top:5px;">
-                            檔案大小: <span id="worldSize" style="color:var(--success); font-weight:bold;">載入中...</span>
-                        </div>
+    <div class="max-w-7xl w-full flex flex-col gap-6 pt-[120px]">
+        <!-- BEGIN: Main Content -->
+        <main class="flex-1 flex flex-col gap-6 overflow-visible pb-20 w-full mt-4">
+            <div class="section" id="gamerules">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                    <h2>遊戲規則</h2>
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <span id="ruleSaveStatus"
+                            style="color:var(--success); font-size:12px; font-weight:bold; opacity:0; transition:opacity 0.2s;">已變更
+                            (Applied)</span>
                     </div>
-                    <div class="world-actions" style="margin-top:10px;">
-                        <!-- 世界選擇器 -->
-                        <div style="background:#252830; padding:12px; border-radius:6px; margin-bottom:12px;">
-                            <div style="font-size:12px; color:#ccc; margin-bottom:10px;">
-                                <strong style="color:var(--success)">🌍 可用世界</strong>
-                            </div>
-                            <div id="worldList" style="max-height:200px; overflow-y:auto;">
-                                <span style="color:#666;">載入中...</span>
-                            </div>
-                        </div>
-                        <!-- 下載地圖 -->
-                        <div
-                            style="display:flex; justify-content:space-between; align-items:center; background:#252830; padding:10px; border-radius:6px; margin-bottom:8px;">
-                            <div style="font-size:12px; color:#ccc;">
-                                <strong style="color:var(--btn-blue)">下載地圖</strong><br>
-                                將世界檔案打包下載
-                            </div>
-                            <button class="btn-aternos btn-blue" onclick="downloadWorld()"><i
-                                    class="fas fa-download"></i></button>
-                        </div>
-
-                        <!-- 上傳地圖 -->
-                        <div
-                            style="display:flex; justify-content:space-between; align-items:center; background:#252830; padding:10px; border-radius:6px; margin-bottom:8px;">
-                            <div style="font-size:12px; color:#ccc;">
-                                <strong style="color:var(--btn-orange)">上傳地圖</strong><br>
-                                上傳 .zip 檔案覆蓋現有世界
-                            </div>
-                            <button class="btn-aternos btn-orange" onclick="triggerUpload()"><i
-                                    class="fas fa-upload"></i></button>
-                        </div>
-
-                        <!-- 重置世界 -->
-                        <div
-                            style="display:flex; justify-content:space-between; align-items:center; background:#252830; padding:10px; border-radius:6px;">
-                            <div style="font-size:12px; color:#ccc;">
-                                <strong style="color:var(--btn-green)">重置世界</strong><br>
-                                刪除現有世界並重新生成
-                            </div>
-                            <button class="btn-aternos btn-green" onclick="resetWorld()"><i
-                                    class="fas fa-redo"></i></button>
-                        </div>
+                </div>
+                <div class="glass-panel p-6 rounded-2xl text-white/90">
+                    <p style="color:#aaa; font-size:13px; margin-bottom:20px;">以下設定變更後會<strong>立即生效</strong>
+                        (Immediately
+                        Effective)，無需重啟。</p>
+                    <div class="options-grid" id="gameruleList"
+                        style="grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 15px;">
+                        <p style="text-align:center; color:#666; width:100%;">正在讀取規則...</p>
                     </div>
                 </div>
             </div>
-
-            <!-- 模組管理區塊 -->
-            <div class="card" style="margin-top: 20px;">
-                <h3 style="margin-bottom: 15px;">📦 模組管理</h3>
-
-                <!-- 上傳區 -->
-                <div style="background:#252830; padding:15px; border-radius:8px; margin-bottom:15px;">
-                    <div style="display:flex; align-items:center; gap:15px; flex-wrap:wrap;">
-                        <input type="file" id="addonFileInput" accept=".mcpack,.zip"
-                            style="flex:1; min-width:200px; background:#1a1d23; color:#fff; padding:8px; border-radius:4px; border:1px solid #3a3f4a;">
-                        <button class="btn-aternos btn-blue" onclick="uploadAddon()" style="padding:8px 20px;">
-                            <i class="fas fa-upload"></i> 安裝模組
+            <div class="section active" id="dashboard">
+                <!-- Header with Status and Player Count -->
+                <div class="header-status glass-panel p-6 rounded-2xl">
+                    <h2>伺服器狀態</h2>
+                    <div style="display:flex; gap:10px;">
+                        <div class="status-badge">
+                            <i class="fas fa-users" style="font-size:10px; color:#aaa;"></i>
+                            <span id="playerCountDisplay">0 / 0</span>
+                        </div>
+                        <div class="status-badge">
+                            <div class="status-dot offline"></div>
+                            <span id="statusText">離線</span>
+                        </div>
+                    </div>
+                    <!-- Power Controls (Rounded Rects) -->
+                    <div class="power-section">
+                        <!-- Start/Stop Button -->
+                        <button class="btn-power rounded-rect" id="powerBtn" onclick="power('open')">
+                            <i class="fas fa-power-off"></i>
+                            <span style="font-size:14px; margin-left:8px;">啟動</span>
+                        </button>
+                        <!-- Restart Button -->
+                        <button class="btn-power rounded-rect restart-btn" id="restartBtn" onclick="power('restart')">
+                            <i class="fas fa-sync-alt"></i>
+                            <span style="font-size:14px; margin-left:8px;">重啟</span>
                         </button>
                     </div>
-                    <div style="font-size:11px; color:#888; margin-top:8px;">
-                        支援格式：.mcpack、.zip（行為包或資源包）
-                    </div>
                 </div>
-
-                <!-- 已安裝模組清單 -->
-                <div id="addonList" style="display:grid; gap:10px;">
-                    <div style="color:#888; text-align:center; padding:20px;">
-                        <i class="fas fa-spinner fa-spin"></i> 載入中...
+                <!-- Dashboard Cards Grid (now outside header-status) -->
+                <div class="grid">
+                    <!-- 1. Share Link (Join) -->
+                    <div class="glass-panel p-6 rounded-2xl text-white/90"
+                        style="display:flex; align-items:center; justify-content:space-between; padding:15px;">
+                        <div style="font-weight:bold; color:var(--text-sub);"><i class="fas fa-share-alt"
+                                style="margin-right:10px;"></i>加入伺服器連結</div>
+                        <div style="display:flex; align-items:center; gap:10px; flex:1; justify-content:flex-end;">
+                            <span class="share-link-text" id="shareLinkDisplay"
+                                style="font-family:'Consolas', monospace; font-size:14px; color:rgba(255, 255, 255, 0.9); background:rgba(0, 0, 0, 0.3); padding:8px 14px; border-radius:6px; border:1px solid rgba(255, 255, 255, 0.1); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:400px; flex:1; box-shadow: inset 0 2px 4px rgba(0,0,0,0.5);">
+                                http://.../join.html
+                            </span>
+                            <button class="btn-action" onclick="copyText(window.location.origin + '/join.html')"
+                                style="background:rgba(0, 0, 0, 0.4); border: 1px solid rgba(255, 255, 255, 0.2); color: white; padding:8px 16px; font-size:14px; border-radius:6px; transition: all 0.2s ease;">
+                                <i class="fas fa-copy"></i> 複製
+                            </button>
+                            <a class="btn-action" href="join.html"
+                                style="background:rgba(0, 0, 0, 0.4); border: 1px solid rgba(255, 255, 255, 0.2); color: white; text-decoration:none; padding:8px 16px; border-radius:6px; font-size:14px; transition: all 0.2s ease;"
+                                target="_blank">
+                                <i class="fas fa-external-link-alt"></i> 開啟
+                            </a>
+                        </div>
+                    </div>
+                    <!-- 2. Server IP -->
+                    <div class="glass-panel p-6 rounded-2xl text-white/90"
+                        style="display:flex; align-items:center; justify-content:space-between; padding:15px;">
+                        <div style="font-weight:bold; color:var(--text-sub);"><i class="fas fa-network-wired"
+                                style="margin-right:10px;"></i>伺服器 IP (Address)</div>
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <span
+                                style="font-family:'Consolas', monospace; font-size:16px; color:#fff;">34.81.50.240</span>
+                        </div>
+                    </div>
+                    <!-- 3. Port -->
+                    <div class="glass-panel p-6 rounded-2xl text-white/90"
+                        style="display:flex; align-items:center; justify-content:space-between; padding:15px;">
+                        <div style="font-weight:bold; color:var(--text-sub);"><i class="fas fa-door-open"
+                                style="margin-right:10px;"></i>連接埠 (Port)</div>
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <span id="portDisplay"
+                                style="font-family:'Consolas', monospace; font-size:16px; color:var(--primary);">19132</span>
+                        </div>
+                    </div>
+                    <!-- 4. Software -->
+                    <div class="glass-panel p-6 rounded-2xl text-white/90"
+                        style="display:flex; align-items:center; justify-content:space-between; padding:15px;">
+                        <div style="font-weight:bold; color:var(--text-sub);"><i class="fas fa-microchip"
+                                style="margin-right:10px;"></i>軟體 (Software)</div>
+                        <span style="font-weight:bold;">Bedrock Dedicated Server</span>
+                    </div>
+                    <!-- 5. Version -->
+                    <div class="glass-panel p-6 rounded-2xl text-white/90"
+                        style="display:flex; align-items:center; justify-content:space-between; padding:15px;">
+                        <div style="font-weight:bold; color:var(--text-sub);"><i class="fas fa-tag"
+                                style="margin-right:10px;"></i>版本 (Version)</div>
+                        <span id="versionDisplay" style="font-weight:bold; color:var(--success);">Loading...</span>
+                    </div>
+                    <!-- CPU -->
+                    <div class="glass-panel p-6 rounded-2xl text-white/90" style="padding:15px;">
+                        <div
+                            style="display:flex; align-items:center; justify-content:space-between; margin-bottom:5px;">
+                            <div style="font-weight:bold; color:var(--text-sub);"><i class="fas fa-microchip"
+                                    style="margin-right:10px;"></i>處理器</div>
+                            <span id="cpuLoad" style="font-weight:bold; color:var(--text-main);">...</span>
+                        </div>
+                        <div style="font-size:12px; color:#888; text-align:right;">1min / 5min / 15min</div>
+                    </div>
+                    <!-- 記憶體 -->
+                    <div class="glass-panel p-6 rounded-2xl text-white/90" style="padding:15px;">
+                        <div
+                            style="display:flex; align-items:center; justify-content:space-between; margin-bottom:5px;">
+                            <div style="font-weight:bold; color:var(--text-sub);"><i class="fas fa-memory"
+                                    style="margin-right:10px;"></i>記憶體</div>
+                            <span id="ramPercent" style="font-weight:bold;">...%</span>
+                        </div>
+                        <div
+                            style="font-size:12px; color:#888; display:flex; justify-content:space-between; margin-bottom:5px;">
+                            <span>Usage</span>
+                            <span><span id="ramUsed">...</span> / <span id="ramTotal">...</span></span>
+                        </div>
+                        <div style="background:#333; height:4px; border-radius:2px; overflow:hidden;">
+                            <div id="ramBar"
+                                style="background:var(--btn-blue); height:100%; width:0%; transition:width 0.5s;">
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Disk -->
+                    <div class="glass-panel p-6 rounded-2xl text-white/90" style="padding:15px;">
+                        <div
+                            style="display:flex; align-items:center; justify-content:space-between; margin-bottom:5px;">
+                            <div style="font-weight:bold; color:var(--text-sub);"><i class="fas fa-hdd"
+                                    style="margin-right:10px;"></i>Disk (Root)</div>
+                            <span id="diskPercent" style="font-weight:bold;">...%</span>
+                        </div>
+                        <div
+                            style="font-size:12px; color:#888; display:flex; justify-content:space-between; margin-bottom:5px;">
+                            <span>Usage</span>
+                            <span><span id="diskUsed">...</span> / <span id="diskTotal">...</span></span>
+                        </div>
+                        <div style="background:#333; height:4px; border-radius:2px; overflow:hidden;">
+                            <div id="diskBar"
+                                style="background:var(--btn-orange); height:100%; width:0%; transition:width 0.5s;">
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Network -->
+                    <div class="glass-panel p-6 rounded-2xl text-white/90" style="padding:15px;">
+                        <div style="display:flex; align-items:center; justify-content:space-between;">
+                            <div style="font-weight:bold; color:var(--text-sub);"><i class="fas fa-network-wired"
+                                    style="margin-right:10px;"></i>Network</div>
+                            <div style="font-size:12px; color:#ccc; text-align:right;">
+                                <span style="margin-left:10px;"><i class="fas fa-arrow-down"
+                                        style="color:var(--success)"></i> <span id="netRx">...</span></span>
+                                <span style="margin-left:10px;"><i class="fas fa-arrow-up"
+                                        style="color:var(--btn-blue)"></i> <span id="netTx">...</span></span>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
-
-        <div id="players" class="section">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
-                <h2>玩家管理 (Player Manager)</h2>
-                <div style="display:flex; align-items:center; gap:10px;">
-                    <span id="saveStatus"
+            <div class="section" id="worlds">
+                <h2>世界管理</h2>
+                <div class="glass-panel p-6 rounded-2xl text-white/90">
+                    <div class="world-card">
+                        <div class="world-icon"><i class="fas fa-globe-americas"></i></div>
+                        <div class="world-info">
+                            <div class="world-name">主世界</div>
+                            <div style="font-size:12px; color:#aaa; margin-top:5px;">
+                                檔案大小: <span id="worldSize" style="color:var(--success); font-weight:bold;">載入中...</span>
+                            </div>
+                        </div>
+                        <div class="world-actions" style="margin-top:10px;">
+                            <!-- 世界選擇器 -->
+                            <div style="background:#252830; padding:12px; border-radius:6px; margin-bottom:12px;">
+                                <div style="font-size:12px; color:#ccc; margin-bottom:10px;">
+                                    <strong style="color:var(--success)">🌍 可用世界</strong>
+                                </div>
+                                <div id="worldList" style="max-height:200px; overflow-y:auto;">
+                                    <span style="color:#666;">載入中...</span>
+                                </div>
+                            </div>
+                            <!-- 下載地圖 -->
+                            <div
+                                style="display:flex; justify-content:space-between; align-items:center; background:#252830; padding:10px; border-radius:6px; margin-bottom:8px;">
+                                <div style="font-size:12px; color:#ccc;">
+                                    <strong style="color:var(--btn-blue)">下載地圖</strong><br />
+                                    將世界檔案打包下載
+                                </div>
+                                <button class="btn-aternos btn-blue" onclick="downloadWorld()"><i
+                                        class="fas fa-download"></i></button>
+                            </div>
+                            <!-- 上傳地圖 -->
+                            <div
+                                style="display:flex; justify-content:space-between; align-items:center; background:#252830; padding:10px; border-radius:6px; margin-bottom:8px;">
+                                <div style="font-size:12px; color:#ccc;">
+                                    <strong style="color:var(--btn-orange)">上傳地圖</strong><br />
+                                    上傳 .zip 檔案覆蓋現有世界
+                                </div>
+                                <button class="btn-aternos btn-orange" onclick="triggerUpload()"><i
+                                        class="fas fa-upload"></i></button>
+                            </div>
+                            <!-- 重置世界 -->
+                            <div
+                                style="display:flex; justify-content:space-between; align-items:center; background:#252830; padding:10px; border-radius:6px;">
+                                <div style="font-size:12px; color:#ccc;">
+                                    <strong style="color:var(--btn-green)">重置世界</strong><br />
+                                    刪除現有世界並重新生成
+                                </div>
+                                <button class="btn-aternos btn-green" onclick="resetWorld()"><i
+                                        class="fas fa-redo"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- 模組管理區塊 -->
+                <div class="glass-panel p-6 rounded-2xl text-white/90" style="margin-top: 20px;">
+                    <h3 style="margin-bottom: 15px;">📦 模組管理</h3>
+                    <!-- 上傳區 -->
+                    <div style="background:#252830; padding:15px; border-radius:8px; margin-bottom:15px;">
+                        <div style="display:flex; align-items:center; gap:15px; flex-wrap:wrap;">
+                            <input accept=".mcpack,.mcaddon,.zip" id="addonFileInput"
+                                style="flex:1; min-width:200px; background:#1a1d23; color:#fff; padding:8px; border-radius:4px; border:1px solid #3a3f4a;"
+                                type="file" />
+                            <button class="btn-aternos btn-blue" onclick="uploadAddon()" style="padding:8px 20px;">
+                                <i class="fas fa-upload"></i> 安裝模組
+                            </button>
+                        </div>
+                        <div style="font-size:11px; color:#888; margin-top:8px;">
+                            支援格式：.mcpack、.mcaddon、.zip（行為包或資源包）
+                        </div>
+                    </div>
+                    <!-- 已安裝模組清單 -->
+                    <div id="addonList" style="display:grid; gap:10px;">
+                        <div style="color:#888; text-align:center; padding:20px;">
+                            <i class="fas fa-spinner fa-spin"></i> 載入中...
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="section" id="players">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+                    <h2>玩家管理 (Player Manager)</h2>
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <span id="saveStatus"
+                            style="color:var(--success); font-size:12px; font-weight:bold; opacity:0; transition:opacity 0.2s;">已儲存</span>
+                    </div>
+                </div>
+                <div class="glass-panel p-6 rounded-2xl text-white/90">
+                    <div style="margin-bottom:15px;">
+                        <button class="btn-action" onclick="addUnifiedPlayer()" style="width:100%; padding:10px;">
+                            <i class="fas fa-plus"></i> 新增玩家 (Add Player)
+                        </button>
+                    </div>
+                    <div id="unifiedPlayerTable">
+                        <p style="text-align:center; color:#666; padding:20px;">請點擊「重新載入」來獲取玩家列表。</p>
+                    </div>
+                </div>
+            </div>
+            <div class="section" id="options">
+                <div
+                    style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; position:sticky; top:0; background:var(--bg-dark); z-index:10; padding:10px 0; border-bottom:1px solid #333;">
+                    <h2>伺服器設定 (Server Properties)</h2>
+                    <span id="propSaveStatus"
                         style="color:var(--success); font-size:12px; font-weight:bold; opacity:0; transition:opacity 0.2s;">已儲存</span>
                 </div>
-            </div>
-
-            <div class="card">
-                <div style="margin-bottom:15px;">
-                    <button class="btn-action" onclick="addUnifiedPlayer()" style="width:100%; padding:10px;">
-                        <i class="fas fa-plus"></i> 新增玩家 (Add Player)
-                    </button>
+                <div
+                    style="background: rgba(241, 196, 15, 0.15); border: 1px solid #f1c40f; border-radius: 8px; padding: 12px 16px; margin-bottom: 20px; display: flex; align-items: center; gap: 10px;">
+                    <i class="fas fa-exclamation-triangle" style="color: #f1c40f; font-size: 18px;"></i>
+                    <span style="color: #f1c40f; font-size: 13px;">修改的設定將在<strong>下次重啟伺服器後</strong>生效。</span>
                 </div>
-                <div id="unifiedPlayerTable">
-                    <p style="text-align:center; color:#666; padding:20px;">請點擊「重新載入」來獲取玩家列表。</p>
+                <!-- Server Update Card -->
+                <div class="glass-panel p-6 rounded-2xl text-white/90"
+                    style="margin-bottom: 20px; border-left: 4px solid var(--btn-orange);">
+                    <h3 style="margin-bottom:10px;"><i class="fas fa-cloud-download-alt"></i> 伺服器更新 (System Update)
+                    </h3>
+                    <p style="color:#aaa; font-size:13px; margin-bottom:15px;">
+                        請輸入官方 Linux 版下載連結 (Download URL)。系統會自動備份設定檔後進行覆蓋安裝。<br />
+                        <a href="https://www.minecraft.net/en-us/download/server/bedrock"
+                            style="color:var(--btn-blue); text-decoration:underline;" target="_blank">前往 Minecraft
+                            官網複製連結</a>
+                    </p>
+                    <div style="display:flex; gap:10px;">
+                        <input id="updateUrlInput"
+                            placeholder="例如: https://minecraft.azureedge.net/bin-linux/bedrock-server-1.21.x.zip"
+                            style="flex:1; background:#1a1d23; color:#fff; padding:10px; border-radius:4px; border:1px solid #3a3f4a;"
+                            type="text" />
+                        <button class="btn-aternos btn-orange" onclick="updateServer()">
+                            <i class="fas fa-sync-alt"></i> 開始更新
+                        </button>
+                    </div>
                 </div>
-            </div>
-        </div>
-
-        <div id="options" class="section">
-            <div
-                style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; position:sticky; top:0; background:var(--bg-dark); z-index:10; padding:10px 0; border-bottom:1px solid #333;">
-                <h2>伺服器設定 (Server Properties)</h2>
-                <span id="propSaveStatus"
-                    style="color:var(--success); font-size:12px; font-weight:bold; opacity:0; transition:opacity 0.2s;">已儲存</span>
-            </div>
-
-            <div
-                style="background: rgba(241, 196, 15, 0.15); border: 1px solid #f1c40f; border-radius: 8px; padding: 12px 16px; margin-bottom: 20px; display: flex; align-items: center; gap: 10px;">
-                <i class="fas fa-exclamation-triangle" style="color: #f1c40f; font-size: 18px;"></i>
-                <span style="color: #f1c40f; font-size: 13px;">修改的設定將在<strong>下次重啟伺服器後</strong>生效。</span>
-            </div>
-
-            <!-- Server Update Card -->
-            <div class="card" style="margin-bottom: 20px; border-left: 4px solid var(--btn-orange);">
-                <h3 style="margin-bottom:10px;"><i class="fas fa-cloud-download-alt"></i> 伺服器更新 (System Update)</h3>
-                <p style="color:#aaa; font-size:13px; margin-bottom:15px;">
-                    請輸入官方 Linux 版下載連結 (Download URL)。系統會自動備份設定檔後進行覆蓋安裝。<br>
-                    <a href="https://www.minecraft.net/en-us/download/server/bedrock" target="_blank"
-                        style="color:var(--btn-blue); text-decoration:underline;">前往 Minecraft 官網複製連結</a>
-                </p>
-                <div style="display:flex; gap:10px;">
-                    <input type="text" id="updateUrlInput"
-                        placeholder="例如: https://minecraft.azureedge.net/bin-linux/bedrock-server-1.21.x.zip"
-                        style="flex:1; background:#1a1d23; color:#fff; padding:10px; border-radius:4px; border:1px solid #3a3f4a;">
-                    <button class="btn-aternos btn-orange" onclick="updateServer()">
-                        <i class="fas fa-sync-alt"></i> 開始更新
-                    </button>
+                <!-- Web Settings (Server Title) -->
+                <div class="glass-panel p-6 rounded-2xl text-white/90"
+                    style="margin-bottom: 20px; border-left: 4px solid var(--btn-blue);">
+                    <h3 style="margin-bottom:10px;">
+                        <i class="fas fa-globe"></i> 網頁設定 (Web Settings)
+                        <span id="webSaveStatus"
+                            style="float:right; color:var(--success); font-size:12px; font-weight:bold; opacity:0; transition:opacity 0.2s; margin-top:4px;">已儲存</span>
+                    </h3>
+                    <div style="margin-bottom:15px;">
+                        <label style="display:block; color:#aaa; font-size:12px; margin-bottom:5px;">伺服器標題 (顯示於邀請頁面
+                            / Join
+                            Page Title)</label>
+                        <input id="serverTitleInput" onchange="saveWebConfig(true)"
+                            oninput="this.dataset.changed='true'" placeholder="例如: 四福氣"
+                            style="width:100%; background:#1a1d23; color:#fff; padding:10px; border-radius:4px; border:1px solid #3a3f4a;"
+                            type="text" />
+                    </div>
+                    <div style="text-align:right;">
+                        <button class="btn-aternos btn-blue" onclick="saveWebConfig()">
+                            <i class="fas fa-save"></i> 儲存網頁設定
+                        </button>
+                    </div>
                 </div>
-            </div>
-
-            <!-- Web Settings (Server Title) -->
-            <div class="card" style="margin-bottom: 20px; border-left: 4px solid var(--btn-blue);">
-                <h3 style="margin-bottom:10px;"><i class="fas fa-globe"></i> 網頁設定 (Web Settings)</h3>
-                <div style="margin-bottom:15px;">
-                    <label style="display:block; color:#aaa; font-size:12px; margin-bottom:5px;">伺服器標題 (顯示於邀請頁面 / Join
-                        Page Title)</label>
-                    <input type="text" id="serverTitleInput" placeholder="例如: 四福氣"
-                        style="width:100%; background:#1a1d23; color:#fff; padding:10px; border-radius:4px; border:1px solid #3a3f4a;">
-                </div>
-                <div style="text-align:right;">
-                    <button class="btn-aternos btn-blue" onclick="saveWebConfig()">
-                        <i class="fas fa-save"></i> 儲存網頁設定
-                    </button>
+                <div class="options-grid" id="inlineOptionsForm"
+                    style="grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 20px;">
+                    <p style="text-align:center; color:#666; width:100%;">正在載入設定 (Loading)...</p>
                 </div>
             </div>
-
-            <div id="inlineOptionsForm" class="options-grid"
-                style="grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 20px;">
-                <p style="text-align:center; color:#666; width:100%;">正在載入設定 (Loading)...</p>
-            </div>
-        </div>
+        </main>
+        <!-- END: Main Content -->
     </div>
+    <!-- Theme Toggle Floating Button -->
+    <button
+        class="fixed bottom-8 right-8 w-12 h-12 glass-panel flex items-center justify-center hover:scale-110 transition-transform">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+            <path d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"
+                stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+        </svg>
+    </button>
 </body>
 
 </html>

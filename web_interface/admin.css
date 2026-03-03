@@ -13,20 +13,9 @@
     --btn-green: #2ecc71;
 }
 
-body {
-    margin: 0;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background: var(--bg-dark);
-    color: var(--text-main);
-    display: flex;
-    height: 100vh;
-    overflow: hidden;
-    width: 100%;
-}
 
-* {
-    box-sizing: border-box;
-}
+
+
 
 /* Sidebar */
 .sidebar {
@@ -90,7 +79,6 @@ body {
     gap: 15px;
     margin-bottom: 20px;
     padding: 20px;
-    background: var(--bg-panel);
     border-radius: 12px;
 }
 
@@ -101,14 +89,15 @@ body {
 }
 
 .status-badge {
-    background: #333;
-    padding: 4px 12px;
-    border-radius: 6px;
-    /* Slightly rounded */
-    font-size: 12px;
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    padding: 6px 14px;
+    border-radius: 8px;
+    font-size: 13px;
     display: flex;
     align-items: center;
     gap: 8px;
+    color: rgba(255, 255, 255, 0.9);
 }
 
 .status-dot {
@@ -125,6 +114,7 @@ body {
 
 .status-dot.offline {
     background: var(--danger);
+    box-shadow: 0 0 10px var(--danger);
 }
 
 /* Dashboard Cards */
@@ -193,7 +183,7 @@ body {
 }
 
 .btn-aternos {
-    border: none;
+    border: 1px solid rgba(255, 255, 255, 0.2);
     padding: 6px 12px;
     font-weight: bold;
     color: white;
@@ -208,19 +198,27 @@ body {
 }
 
 .btn-blue {
-    background: #0088cc;
+    background: rgba(0, 136, 204, 0.3);
+    color: #80d4ff;
+    border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 .btn-orange {
-    background: #e67e22;
+    background: rgba(230, 126, 34, 0.3);
+    color: #ffc280;
+    border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 .btn-green {
-    background: #27ae60;
+    background: rgba(39, 174, 96, 0.3);
+    color: #7bed9f;
+    border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 .btn-aternos:hover {
-    filter: brightness(1.1);
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.4);
+    filter: brightness(1.2);
 }
 
 /* Power Button Enhanced */
@@ -241,13 +239,13 @@ body {
     min-width: 140px;
     height: 50px;
     border-radius: 12px;
-    /* Rounded Rect */
-    border: none;
+    border: 1px solid rgba(255, 255, 255, 0.2);
     font-size: 20px;
-    color: white;
+    color: #7bed9f;
+    /* light green */
     cursor: pointer;
     transition: 0.3s;
-    background: var(--success);
+    background: rgba(0, 210, 106, 0.25);
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
     display: flex;
     align-items: center;
@@ -261,11 +259,15 @@ body {
 }
 
 .btn-power.stop {
-    background: var(--danger);
+    background: rgba(248, 81, 73, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: #ff9999;
 }
 
 .btn-power.restart-btn {
-    background: var(--warning);
+    background: rgba(255, 177, 66, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: #ffda79;
 }
 
 /* Sections */
@@ -294,12 +296,23 @@ input {
 
 .btn-action {
     padding: 8px 15px;
-    background: var(--primary);
-    color: white;
-    border: none;
+    background: rgba(78, 128, 255, 0.25) !important;
+    color: #99bfff;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
     border-radius: 6px;
     cursor: pointer;
     font-size: 13px;
+    transition: 0.2s;
+}
+
+.btn-action:hover {
+    background: rgba(78, 128, 255, 0.4) !important;
+    color: #fff;
+}
+
+.btn-action:hover {
+    background: rgba(78, 128, 255, 0.5);
+    color: #fff;
 }
 
 /* CUSTOM EDITOR MODAL */
@@ -382,23 +395,11 @@ input {
 @media (max-width: 768px) {
 
     html,
-    body {
-        overflow-x: hidden !important;
-        /* Critical: Stop page scroll */
-        width: 100% !important;
-        position: relative;
-        max-width: 100vw !important;
-    }
 
-    body {
-        flex-direction: column !important;
-        height: auto;
-    }
 
-    * {
-        min-width: 0;
-        /* Critical for Flexbox shrinking */
-    }
+
+
+
 
     .sidebar {
         width: 100%;

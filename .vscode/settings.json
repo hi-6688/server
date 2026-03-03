@@ -1,3 +1,33 @@
 {
-    "godotTools.editorPath.godot4": "c:\\Users\\user\\Desktop\\Godot_v4.5.1-stable_win64.exe"
+    "sqltools.connections": [
+        {
+            "previewLimit": 50,
+            "server": "hihi-memory.postgres.database.azure.com",
+            "port": 5432,
+            "driver": "PostgreSQL",
+            "name": "HiHi Brain (SQLTools)",
+            "database": "postgres",
+            "username": "hi6688",
+            "password": "andy@950501",
+            "pgOptions": {
+                "ssl": {
+                    "rejectUnauthorized": false
+                }
+            }
+        }
+    ],
+    "database-client.connections": [
+        {
+            "name": "HiHi Brain (Database Client)",
+            "driver": "PostgreSQL",
+            "host": "hihi-memory.postgres.database.azure.com",
+            "port": 5432,
+            "user": "hi6688",
+            "password": "andy@950501",
+            "database": "postgres",
+            "ssl": true,
+            "timezone": "+00:00"
+        }
+    ],
+    "css.lint.unknownAtRules": "ignore"
 }
