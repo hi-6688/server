@@ -17,11 +17,10 @@ export default function TopNav({ activeTab = 'dashboard', onTabChange = () => { 
                     {/* Logo 與名稱 */}
                     <div className="flex items-center gap-4">
                         <div className="relative shrink-0">
-                            <div
-                                className="w-10 h-10 rounded-full bg-cover bg-center border-2 border-primary/30 shadow-[0_0_15px_rgba(238,43,140,0.3)]"
-                                style={{ backgroundImage: 'url("https://avatars.githubusercontent.com/u/9919?v=4")' }}
-                            ></div>
-                            <div className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-green-500 border-2 border-black/60 status-dot-online"></div>
+                            <div className="w-12 h-12 flex items-center justify-center bg-gradient-to-br from-black/40 to-white/5 rounded-xl border border-white/10 shadow-[0_0_15px_rgba(0,0,0,0.3)] p-1.5 overflow-visible">
+                                <img src="/cover.png" alt="Server Logo" className="w-full h-full object-contain drop-shadow-lg scale-110 hover:scale-125 transition-transform duration-300" style={{ imageRendering: 'pixelated' }} />
+                            </div>
+                            <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-green-500 border-[2.5px] border-[#1e1e1e] shadow-[0_0_8px_rgba(34,197,94,0.6)] z-10"></div>
                         </div>
                         <div className="hidden sm:flex flex-col">
                             <h1 className="text-white text-lg font-bold truncate">麥亂伺服器</h1>
