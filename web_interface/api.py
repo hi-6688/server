@@ -91,6 +91,12 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(b'{"status":"shutting_down"}')
 
             def do_shutdown():
+                # 在斷電前先備份所有設定檔到 VM1 離線快取
+                try:
+                    proxy_helpers.backup_all_instances_to_cache()
+                except Exception as e:
+                    print(f"[Webhook] Backup before shutdown failed: {e}")
+
                 # 加入 discord_bot 目錄以存取 GCPManager
                 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '../discord_bot'))
                 try:

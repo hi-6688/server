@@ -254,10 +254,20 @@ class Minecraft(commands.Cog):
     @app_commands.command(name="mc關機", description="關閉 Minecraft 遠端雲端主機 (省錢)")
     @app_commands.checks.has_permissions(administrator=True)
     async def slash_mc_stop(self, interaction: discord.Interaction):
-        await interaction.response.send_message("🔴 正在安全關閉伺服器並切斷雲端主機電源...", ephemeral=False)
+        await interaction.response.send_message("🔴 正在備份設定檔並安全關閉伺服器...", ephemeral=False)
         
         vm_name = "instance-20260220-174959"
         
+        # 關機前先備份所有設定檔到 VM1 離線快取
+        try:
+            import sys
+            api_path = "/home/terraria/servers/web_interface"
+            if api_path not in sys.path: sys.path.append(api_path)
+            import proxy_helpers
+            proxy_helpers.backup_all_instances_to_cache()
+        except Exception as e:
+            self.log_debug(f"Backup before shutdown failed: {e}")
+
         # First send stop to screen nicely
         for inst in self.instances:
             await self.send_command_to_instance(inst, "stop")

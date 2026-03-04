@@ -7,6 +7,7 @@ VM_NAME = "instance-20260220-174959"
 AGENT_PORT = 9999
 AGENT_SECRET = "hihi_secret_key_2026"
 SYNC_DIR = "/home/terraria/servers/web_interface/.sync"
+BACKUP_DIR = "/home/terraria/servers/web_interface/.backup_cache"
 
 # Use the GCPManager from discord_bot to keep logic DRY
 import sys
@@ -52,16 +53,60 @@ def save_offline_cache(instance_path, filename, content):
     with open(cache_file, 'w', encoding='utf-8') as f:
         f.write(content)
 
+def save_offline_backup(instance_path, filename, content):
+    os.makedirs(BACKUP_DIR, exist_ok=True)
+    import base64
+    safe_path = base64.urlsafe_b64encode(instance_path.encode()).decode()
+    cache_file = os.path.join(BACKUP_DIR, f"{safe_path}_{filename}")
+    with open(cache_file, 'w', encoding='utf-8') as f:
+        f.write(content)
+
 def read_offline_cache(instance_path, filename):
     import base64
     safe_path = base64.urlsafe_b64encode(instance_path.encode()).decode()
-    cache_file = os.path.join(SYNC_DIR, f"{safe_path}_{filename}")
-    if os.path.exists(cache_file):
-        with open(cache_file, 'r', encoding='utf-8') as f:
+    
+    # 使用者修改過的未同步設定 (優先級最高)
+    sync_file = os.path.join(SYNC_DIR, f"{safe_path}_{filename}")
+    if os.path.exists(sync_file):
+        with open(sync_file, 'r', encoding='utf-8') as f:
             return f.read()
+            
+    # 關機前拉取的唯讀備份 (提供讀取畫面用)
+    backup_file = os.path.join(BACKUP_DIR, f"{safe_path}_{filename}")
+    if os.path.exists(backup_file):
+        with open(backup_file, 'r', encoding='utf-8') as f:
+            return f.read()
+            
     return None
 
+def clear_offline_backup():
+    if os.path.exists(BACKUP_DIR):
+        import shutil
+        shutil.rmtree(BACKUP_DIR)
+
+def backup_all_instances_to_cache():
+    if not is_vm2_running(): return
+    import sys
+    # 由於在 api.py や minecraft.py 呼叫，必須確保載入 models
+    api_path = "/home/terraria/servers/web_interface"
+    if api_path not in sys.path: sys.path.append(api_path)
+    try:
+        from models import InstanceManager
+        mgr = InstanceManager()
+    except Exception as e:
+        print("[ProxyHelper] Cannot load models: ", e)
+        return
+
+    allowed_files = ['server.properties', 'whitelist.json', 'permissions.json', 'allowlist.json']
+    for inst in mgr.get_all_instances():
+        for fname in allowed_files:
+            fpath = os.path.join(inst.path, fname)
+            res = proxy_to_agent("read_file", filepath=fpath)
+            if isinstance(res, dict) and res.get("status") == "success":
+                save_offline_backup(inst.path, fname, res.get("content"))
+
 def flush_offline_cache():
+    clear_offline_backup() # 通電開機後備份即無效
     if not is_vm2_running(): return
     if not os.path.exists(SYNC_DIR): return
     
