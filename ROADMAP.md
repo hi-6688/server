@@ -35,6 +35,17 @@
     - [x] 完善 Players (白名單/權限) / Files (世界/模組) / Settings (設定編輯) 頁面
     - [x] UI 重新設計：從側邊欄改為頂部導航、透明玻璃風格、Noto Sans TC 字體
     - [ ] 將假資料 (Mock Data) 逐步替換為真實 API
+- [x] **GCP 雙 VM 架構遷移 (已完成)**
+    - [x] VM1 保留控制面板與 Discord Bot，VM2 運行 Minecraft
+    - [x] `proxy_helpers.py` 與 `remote_api.py` 雙向通訊
+    - [x] 頂部導航 Logo 狀態指示燈綁定 VM2 即時狀態
+- [x] **事件驅動自動安全關機 (已完成)**
+    - [x] VM2 背景線程監聽日誌，玩家離開後 10 分鐘無人在線自動關機
+    - [x] 智慧進程監控：確認遊戲引擎完全關閉後才切斷電源
+    - [x] Webhook 通知 VM1 並透過 Discord 廣播
+- [x] **離線設定備份 (已完成)**
+    - [x] 關機前自動備份 `server.properties` 等設定檔至 VM1 快取
+    - [x] 離線期間網頁可讀取與編輯，開機時自動同步至 VM2
 
 ## 🟡 暫緩開發 (On Hold)
 *目前僅保留原型，待未來評估*

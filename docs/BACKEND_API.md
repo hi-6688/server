@@ -11,7 +11,7 @@
 
 ```
 web_interface/
-├── api.py              ← 路由分發器 (入口, ~240 行)
+├── api.py              ← 路由分發器 (入口, ~290 行)
 ├── models.py           ← 資料模型 (Instance + InstanceManager)
 ├── routes/
 │   ├── auth.py         ← /login
@@ -57,9 +57,19 @@ web_interface/
 *   `POST /upload`: 支援 `multipart/form-data` 接收世界地圖包 (`.mcworld` / `.zip`) 並透過 Base64 proxy 至 Agent 端解壓縮。
 *   `POST /addon/upload`: 處理 Behavior / Resource packs 的上傳，並自動解析 `manifest.json` 寫入世界設定。
 
+### 3.5 自動關機 Webhook (Auto-Shutdown)
+*   `POST /webhook/shutdown_vm2`: 接收 VM2 代理程式的關機請求。收到後執行：
+    1.  呼叫 `proxy_helpers.backup_all_instances_to_cache()` 備份所有設定檔至 VM1 離線快取。
+    2.  呼叫 `GCPManager.stop_instance()` 切斷 VM2 電源。
+    3.  透過 Discord Bot API 發送自動關機通知。
+*   **授權**: 必須在 Query 中攜帶 `key=API_KEY`。
+
 ## 4. 資料庫與持久化 (Persistence)
 *   **狀態與實例紀錄**: 使用本地端 `instances.json` 記錄 UUID。
 *   **伺服器設定**: 直接讀寫 Minecraft 目錄下的文本檔案 (`.json`, `.properties`)，不依賴 SQL 資料庫。
+*   **離線快取**: `proxy_helpers.py` 管理兩層快取機制：
+    *   `.backup_cache/`: 關機前自動拉取的唯讀備份，讓 VM2 離線時網頁仍可讀取設定。
+    *   `.sync/`: 使用者在 VM2 離線期間修改的設定，開機時由 `flush_offline_cache()` 自動同步至 VM2。
 
 ## 5. 🚫 後端避坑指南 (Anti-Patterns)
 1. **禁止寫死伺服器路徑**: 必須透過 `current_instance.path` 來取得路徑，因為現在架構支援多實例 (Multi-instance)，寫死 `/home/terraria/servers/minecraft` 會導致呼叫錯誤的世界。

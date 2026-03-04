@@ -35,7 +35,7 @@ servers/
 ├── terraria/                   # 🌳 Terraria 遊戲伺服器核心
 ├── tmp_oneblock/               # 測試用：One Block Minecraft 伺服器解壓縮暫存目錄
 ├── web_interface/              # 🌐 網頁管理介面前後端
-│   ├── api.py                  # 後端 API 入口 (路由分發器, ~240 行)
+│   ├── api.py                  # 後端 API 入口 (路由分發器, ~290 行)
 │   ├── models.py               # 資料模型 (Instance + InstanceManager)
 │   ├── routes/                 # 路由處理模組 (依功能分檔)
 │   │   ├── auth.py            # 登入驗證
@@ -104,5 +104,9 @@ npm run dev -- --host
 - [x] 後端 `api.py` 從 1012 行單體重構為模組化架構 (`models.py` + `routes/` + `helpers/`)。
 - [x] 完善 Web 介面：Players (白名單) / Files (世界管理) / Settings (設定編輯) 頁面。
 - [x] UI 重新設計：從側邊欄改為頂部導航、透明玻璃風格、Noto Sans TC 字體。
+- [x] GCP 雙 VM 架構遷移：Minecraft 伺服器遷至 VM2、VM1 保留控制面板與 Bot。
+- [x] 頂部導航 Logo 狀態指示燈綁定 VM2 即時線上/離線狀態。
+- [x] 事件驅動自動安全關機：VM2 無人在線 10 分鐘後自動存檔並斷電（背景線程監聽日誌 + 智慧進程監控）。
+- [x] 離線設定備份：關機前自動備份設定檔至 VM1 快取，離線時網頁仍可讀取與編輯設定。
 - [ ] 撰寫 Dockerfile 與 docker-compose.yml 實作容器化目標。
 - [ ] 將前端假資料逐步替換為真實後端 API。
