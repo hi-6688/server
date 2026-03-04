@@ -153,7 +153,7 @@ function App() {
   return (
     <div className="min-h-screen p-4 md:p-8 flex justify-center items-start overflow-y-auto custom-scrollbar pt-6 lg:pt-8 text-white font-display antialiased">
       {/* 頂部導航 (固定) */}
-      <TopNav activeTab={activeTab} onTabChange={setActiveTab} />
+      <TopNav activeTab={activeTab} onTabChange={setActiveTab} isOnline={isOnline} />
 
       {/* 主內容區 (居中單欄) */}
       <div className="max-w-7xl w-full flex flex-col gap-6 pt-[120px]">

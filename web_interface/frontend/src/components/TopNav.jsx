@@ -1,5 +1,5 @@
 // TopNav.jsx — 頂部雙層導航列 (還原舊版 admin.html 的頂部導航)
-export default function TopNav({ activeTab = 'dashboard', onTabChange = () => { } }) {
+export default function TopNav({ activeTab = 'dashboard', onTabChange = () => { }, isOnline = false }) {
     // 導航項目定義 (與舊版一致)
     const tabs = [
         { id: 'dashboard', icon: 'dashboard', label: '儀表板' },
@@ -20,7 +20,7 @@ export default function TopNav({ activeTab = 'dashboard', onTabChange = () => { 
                             <div className="w-12 h-12 flex items-center justify-center bg-gradient-to-br from-black/40 to-white/5 rounded-xl border border-white/10 shadow-[0_0_15px_rgba(0,0,0,0.3)] p-1.5 overflow-visible">
                                 <img src="/cover.png" alt="Server Logo" className="w-full h-full object-contain drop-shadow-lg scale-110 hover:scale-125 transition-transform duration-300" style={{ imageRendering: 'pixelated' }} />
                             </div>
-                            <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-green-500 border-[2.5px] border-[#1e1e1e] shadow-[0_0_8px_rgba(34,197,94,0.6)] z-10"></div>
+                            <div className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-[2.5px] border-[#1e1e1e] z-10 transition-colors duration-500 ${isOnline ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]'}`}></div>
                         </div>
                         <div className="hidden sm:flex flex-col">
                             <h1 className="text-white text-lg font-bold truncate">麥亂伺服器</h1>
