@@ -82,3 +82,8 @@ web_interface/api_log.out
 *.out
 */__pycache__/
 __pycache__/
+api.py.bak
+
+# Godot Export
+export_presets.cfg
+*.cfg

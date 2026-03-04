@@ -1,51 +1,69 @@
+// LiveConsole.jsx — 嵌入式即時日誌 (舊版配色)
+import { useEffect, useRef } from 'react';
+
 export default function LiveConsole({ logs, commandInput, setCommandInput, onSendCommand }) {
-    return (
-    <div className="flex-1 glass-panel rounded-3xl p-0 flex flex-col overflow-hidden min-h-[400px]">
-      <div className="h-14 border-b border-white/5 flex items-center justify-between px-6 bg-black/20 shrink-0">
-        <div className="flex items-center gap-3">
-          <span className="material-symbols-outlined text-slate-400">terminal</span>
-          <span className="font-medium text-slate-300">Live Console</span>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-black/30 border border-white/5">
-            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-            <span className="text-xs text-slate-400 font-mono">Connected</span>
+  const logsContainerRef = useRef(null);
+
+  // 只在日誌容器內部捲動，不影響整個頁面
+  useEffect(() => {
+    if (logsContainerRef.current) {
+      logsContainerRef.current.scrollTop = logsContainerRef.current.scrollHeight;
+    }
+  }, [logs]);
+
+  // 根據日誌等級決定顏色
+  const getLevelColor = (level) => {
+    switch (level) {
+      case 'INFO': return 'text-green-400';
+      case 'WARN': return 'text-yellow-400';
+      case 'ERROR': return 'text-red-400';
+      case 'CMD': return 'text-cyan-400';
+      case 'Chat': return 'text-white';
+      default: return 'text-slate-300';
+    }
+  };
+
+  return (
+    <div className="glass-panel rounded-2xl flex flex-col overflow-hidden mt-4">
+      {/* 標題列 */}
+      <div className="h-12 border-b border-white/10 flex items-center px-4 shrink-0">
+        <i className="fas fa-terminal text-success mr-3"></i>
+        <h3 className="text-white font-semibold text-sm">Live Console</h3>
+        <span className="ml-auto flex items-center gap-2 text-xs text-green-400">
+          <div className="status-dot status-dot-online"></div>
+          Connected
+        </span>
+      </div>
+
+      {/* 日誌區 */}
+      <div ref={logsContainerRef} className="h-48 overflow-y-auto p-3 font-mono text-xs space-y-0.5 custom-scrollbar bg-black/20">
+        {logs.map((log, i) => (
+          <div key={i} className="flex gap-2">
+            {log.time && <span className="text-slate-600 shrink-0">[{log.time}]</span>}
+            <span className={`${getLevelColor(log.level)} font-medium shrink-0`}>[{log.level}]</span>
+            <span className="text-slate-300" dangerouslySetInnerHTML={{ __html: log.message }} />
           </div>
-        </div>
+        ))}
       </div>
 
-      <div className="flex-1 p-6 font-mono text-sm overflow-y-auto custom-scrollbar bg-[#0a0508]/40">
-        <div className="flex flex-col gap-1.5">
-          {logs.map((log, index) => (
-            <div key={index} className="flex gap-3">
-              <span className="text-slate-500 shrink-0">[{log.time}]</span>
-              <span className={\`shrink-0 \${log.level === 'WARN' ? 'text-yellow-400' : log.level === 'ERROR' ? 'text-red-400' : 'text-blue-400'}\`}>[{log.level}]</span>
-              <span className="text-slate-300" dangerouslySetInnerHTML={{ __html: log.message }}></span>
-            </div>
-          ))}
-        </div>
+      {/* 指令輸入 */}
+      <div className="h-10 border-t border-white/10 flex items-center px-3 gap-2 shrink-0">
+        <span className="text-success font-mono text-sm">$</span>
+        <input
+          type="text"
+          value={commandInput}
+          onChange={(e) => setCommandInput(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && onSendCommand()}
+          placeholder="輸入伺服器指令..."
+          className="flex-1 bg-transparent text-white placeholder:text-slate-600 outline-none font-mono text-xs"
+        />
+        <button
+          onClick={onSendCommand}
+          className="px-3 py-1 rounded-lg bg-success/20 text-success hover:bg-success/30 transition-all text-xs font-medium"
+        >
+          送出
+        </button>
       </div>
-
-      <div className="h-16 p-4 bg-black/20 border-t border-white/5 shrink-0">
-        <div className="flex items-center gap-3 w-full h-full bg-white/5 rounded-xl px-4 border border-white/5 focus-within:border-primary/50 focus-within:bg-white/10 transition-colors">
-          <span className="text-primary font-bold text-lg">&gt;_</span>
-          <input 
-            className="bg-transparent border-none outline-none text-white w-full h-full focus:ring-0 placeholder:text-slate-500 font-mono text-sm" 
-            placeholder="Type a command..." 
-            type="text" 
-            value={commandInput}
-            onChange={(e) => setCommandInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                onSendCommand();
-              }
-            }}
-          />
-          <button onClick={onSendCommand} className="text-slate-400 hover:text-primary transition-colors">
-            <span className="material-symbols-outlined">send</span>
-          </button>
-        </div>
-      </div>
-    </div >
+    </div>
   );
 }

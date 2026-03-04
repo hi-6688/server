@@ -10,14 +10,15 @@
 - **嚴格禁止盲目改檔**: 每當修改程式碼，必須先看目標檔案全文與專業手冊 (`docs/`)，並確保修改沒有架構衝突才能動手。
 
 ## 3. 開發手冊索引 (Architecture Docs)
-- **UI / Frontend**: 修改畫面時，必須遵循 `docs/FRONTEND_ARCH.md` (毛玻璃風格、堆疊式排版)。
-- **API / Backend**: 修改邏輯時，必須遵循 `docs/BACKEND_API.md`。
+- **UI / Frontend**: 修改畫面時，必須遵循 `docs/FRONTEND_ARCH.md` (透明玻璃風格、頂部導航+居中單欄佈局)。
+- **API / Backend**: 修改邏輯時，必須遵循 `docs/BACKEND_API.md`。新增路由時在 `routes/` 對應模組中加 handler，再到 `api.py` 註冊。
 - **VM split / Scaling**: 修改伺服器連線與節點分配時，必須遵循 `docs/VM_ARCHITECTURE.md`。
 - **Discord Bot / 機器人核心 (嗨嗨 HiHi)**: 修改 AI 聊天機器人邏輯與人格時，必須遵循 `docs/HiHi_Proposal.md`。
 - **Discord Bot / 功能總管 (嗨螺 Conch)**: 修改遊戲伺服器管理機器人 (神奇嗨螺) 時，請認知它與嗨嗨共用 `discord_bot/` 資料夾但啟動參數為 `BOT_MODE=CONCH`。
 - **Discord Bot / 指令對照**: 查詢或新增終端機器人指令時，必須遵循根目錄的 `COMMANDS.md`。
 
 ## 4. SOP 觸發機制與防呆 (Workflows & Safeguards)
-- **目錄守護原則 (Directory Guard)**: 新增任何測試或 Python 腳本，必須放 `scripts/`；備份檔放大檔必須放 `backups/`；嚴禁將任何新檔案建立在專案根目錄。
 - **知識索引強制同步法則 (Knowledge Sync Rule)**: 每次在 `docs/` 新增任何架構文件 (`.md`) 後，**必須**第一時間修改本檔案 (`readrules.md`) 的「開發手冊索引」，將新文件加上對應的標籤與路徑。禁止寫完文件就放著不管。
+- **完成重大改動後必須跑 `/full_audit`**: 每當完成結構性重構或新增/移除多個檔案後，必須呼叫 `.agent/workflows/full_audit.md` 同步所有文件。
 - 若要更新專案 README 狀態，請直接呼叫工作流 `.agent/workflows/update_readme.md`。
+- 若只需同步 `docs/` 內的文件，請呼叫 `.agent/workflows/sync_docs.md`。

@@ -53,15 +53,20 @@
 ```text
 servers/
 ├── discord_bot/
+│   ├── main.py             # 機器人主入口 (依 BOT_MODE 載入不同 cogs)
 │   ├── cogs/
 │   │   └── ai_chat.py      # [CORE] AI 核心邏輯 (含自動修剪演算法)
+│   ├── utils/
+│   │   └── memory_manager.py # [CORE] PostgreSQL 記憶管理器 (asyncpg)
 │   ├── data/
-│   │   ├── emojis.json     # [CONFIG] 表情包 ID 設定
-│   │   ├── memory.json     # [DATA] 長期特徵記憶
-│   │   └── chat_history.pkl # [DATA] 短期對話緩存
-│   ├── requirements.txt
-│   └── main.py
-├── .env                    # API Key 與設定
+│   │   ├── hihi/
+│   │   │   ├── core_memory.md  # [唯讀] 核心記憶 (DNA)
+│   │   │   └── emojis.json    # [CONFIG] 表情包 ID 設定
+│   │   └── emoji_meanings.json
+│   ├── discord_bot.service  # HiHi 的 systemd 服務檔
+│   ├── conch_bot.service    # 神奇嘿螺的 systemd 服務檔
+│   └── requirements.txt
+├── .env                    # API Key 與設定 (含 DATABASE_URL)
 └── docs/
     └── HiHi_Proposal.md    # 本企劃書
 ```
@@ -203,8 +208,7 @@ CREATE TABLE memory (
     *   **AI 權限**：**讀寫 (Read-Write)**。
     *   **機制**：當她發現您口味變了，AI 會自己更新這部分的筆記。
 
-#### 6.13 核心記憶 (Core Memory) - **NEW**
-我們將權限分為：核心記憶 (唯讀/開發者維護) 與 表層記憶 (讀寫/AI維護)。這確保了她永遠不會忘記自己是誰。
+
 
 #### 6.14 名字太長怎麼辦？ (Token Compression) - **NEW**
 您問到：「可以用代號來省 Token 嗎？」
@@ -227,7 +231,7 @@ CREATE TABLE memory (
 每一次您傳訊息給 AI 時，我們實際上是把這三樣東西疊在一起傳送：
 
 1.  **上層麵包：長期記憶 (System Prompt)**
-    *   **來源**：從 `memory.json` 讀取。
+    *   **來源**：從 Azure PostgreSQL 讀取。
     *   **內容**：`[核心設定] + [你的喜好: 喜歡拉麵]`
     *   **作用**：提供 **背景知識**。
 

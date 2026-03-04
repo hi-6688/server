@@ -1,85 +1,155 @@
-export default function Dashboard({ serverStatus, cpuUsage, ramUsage, activePlayers, maxPlayers, onStart, onStop }) {
-    const isOnline = serverStatus === 'Online';
-    return (
-        <div className="flex flex-col xl:flex-row gap-4 h-auto xl:h-48 shrink-0">
-            {/* Server Status Card */}
-            <div className="flex-1 glass-panel rounded-3xl p-6 flex flex-col justify-between relative overflow-hidden group">
-                <div className="absolute -right-10 -top-10 w-40 h-40 bg-primary/20 blur-[50px] rounded-full group-hover:bg-primary/30 transition-all duration-500"></div>
-                <div className="flex justify-between items-start z-10">
-                    <div>
-                        <h2 className="text-2xl font-bold text-white tracking-tight">BlockRealms Web Panel</h2>
-                        <div className="flex items-center gap-2 mt-1">
-                            <span className="relative flex h-3 w-3">
-                                {isOnline && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>}
-                                <span className={\`relative inline-flex rounded-full h-3 w-3 \${isOnline ? 'bg-green-500' : 'bg-red-500'}\`}></span>
-                        </span>
-                        <span className={\`font-medium text-sm \${isOnline ? 'text-green-400' : 'text-red-400'}\`}>{serverStatus}</span>
-                    <span className="text-slate-500 text-sm mx-1">•</span>
-                    <span className="text-slate-400 text-sm">v1.20.71 (Paper)</span>
-                </div>
-            </div>
-            <div className="px-3 py-1 rounded-full bg-white/5 border border-white/10">
-                <span className="text-xs font-mono text-slate-300">ID: #8291-MZK</span>
-            </div>
-        </div>
-
-        {/* Resources */ }
-        <div className="flex flex-wrap gap-8 mt-6 z-10">
-          <div className="flex items-center gap-4">
-            <div className="relative w-16 h-16">
-              <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
-                <path className="text-white/10" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeWidth="3"></path>
-                <path className="text-primary drop-shadow-[0_0_3px_rgba(238,43,140,0.8)]" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeDasharray={\`\${cpuUsage}, 100\`} strokeLinecap="round" strokeWidth="3"></path>
-              </svg>
-              <div className="absolute inset-0 flex items-center justify-center flex-col">
-                <span className="text-sm font-bold text-white">{cpuUsage}%</span>
-              </div>
-            </div>
-            <div className="flex flex-col">
-              <span className="text-sm font-medium text-slate-300">CPU Load</span>
-              <span className="text-xs text-slate-500">3.2 GHz</span>
-            </div>
+// Dashboard.jsx — 還原舊版儀表板：狀態區 + 8 張資訊卡片 (單欄)
+export default function Dashboard({
+  serverStatus, isOnline, activePlayers, maxPlayers, version,
+  cpuLoad, ramPercent, ramUsed, ramTotal,
+  diskPercent, diskUsed, diskTotal, netRx, netTx,
+  onStart, onStop, onRestart
+}) {
+  return (
+    <div className="flex flex-col gap-4">
+      {/* 伺服器狀態區 */}
+      <div className="glass-panel p-6 rounded-2xl flex flex-col items-center text-center gap-4">
+        <h2 className="text-xl font-bold text-white">伺服器狀態</h2>
+        <div className="flex gap-3">
+          {/* 玩家人數徽章 */}
+          <div className="status-badge">
+            <i className="fas fa-users text-[10px] text-text-sub"></i>
+            <span>{activePlayers} / {maxPlayers}</span>
           </div>
-          <div className="flex items-center gap-4">
-            <div className="relative w-16 h-16">
-              <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
-                <path className="text-white/10" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeWidth="3"></path>
-                <path className="text-secondary drop-shadow-[0_0_3px_rgba(244,114,182,0.8)]" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeDasharray={\`\${ramUsage}, 100\`} strokeLinecap="round" strokeWidth="3"></path>
-              </svg>
-              <div className="absolute inset-0 flex items-center justify-center flex-col">
-                <span className="text-sm font-bold text-white">{ramUsage}%</span>
-              </div>
-            </div>
-            <div className="flex flex-col">
-              <span className="text-sm font-medium text-slate-300">RAM Usage</span>
-              <span className="text-xs text-slate-500">23GB / 32GB</span>
-            </div>
-          </div >
-        </div >
-      </div >
-
-        {/* Action Buttons & Quick Stats */ }
-        < div className = "w-full xl:w-80 flex flex-col gap-4 shrink-0" >
-        <div className="glass-panel rounded-3xl p-4 flex gap-3 h-1/2 items-center justify-center">
-          <button onClick={onStart} className="group relative flex-1 h-full rounded-2xl bg-gradient-to-br from-green-500/20 to-emerald-600/20 border border-green-500/30 text-green-400 font-bold hover:scale-[1.02] active:scale-[0.98] transition-all flex flex-col items-center justify-center gap-2 shadow-[0_4px_20px_-5px_rgba(34,197,94,0.3)] min-h-[80px]">
-            <span className="material-symbols-outlined text-3xl drop-shadow-[0_0_10px_rgba(74,222,128,0.5)]">play_arrow</span>
-            Start
-          </button>
-          <button onClick={onStop} className="group relative flex-1 h-full rounded-2xl bg-gradient-to-br from-red-500/20 to-rose-600/20 border border-red-500/30 text-red-400 font-bold hover:scale-[1.02] active:scale-[0.98] transition-all flex flex-col items-center justify-center gap-2 shadow-[0_4px_20px_-5px_rgba(239,68,68,0.3)] min-h-[80px]">
-            <span className="material-symbols-outlined text-3xl drop-shadow-[0_0_10px_rgba(248,113,113,0.5)]">stop</span>
-            Stop
+          {/* 線上/離線徽章 */}
+          <div className="status-badge">
+            <div className={`status-dot ${isOnline ? 'status-dot-online' : 'status-dot-offline'}`}></div>
+            <span>{serverStatus}</span>
+          </div>
+        </div>
+        {/* 電源按鈕 */}
+        <div className="flex gap-4 mt-2">
+          {isOnline ? (
+            <button className="btn-power btn-power-stop" onClick={onStop}>
+              <i className="fas fa-power-off"></i>
+              <span className="ml-2">關閉</span>
+            </button>
+          ) : (
+            <button className="btn-power" onClick={onStart}>
+              <i className="fas fa-power-off"></i>
+              <span className="ml-2">啟動</span>
+            </button>
+          )}
+          <button className="btn-power btn-power-restart" onClick={onRestart}>
+            <i className="fas fa-sync-alt"></i>
+            <span className="ml-2">重啟</span>
           </button>
         </div>
-        <div className="glass-panel rounded-3xl p-4 h-1/2 flex items-center justify-between px-6 min-h-[80px]">
-          <div className="flex flex-col">
-            <span className="text-slate-400 text-sm font-medium">Active Players</span>
-            <span className="text-2xl font-bold text-white">{activePlayers} <span className="text-slate-500 text-lg">/ {maxPlayers}</span></span>
+      </div>
+
+      {/* 資訊卡片 Grid (單欄) */}
+      <div className="grid grid-cols-1 gap-4">
+        {/* 1. 加入伺服器連結 */}
+        <div className="glass-panel p-4 rounded-2xl flex items-center justify-between">
+          <div className="font-bold text-text-sub">
+            <i className="fas fa-share-alt mr-2"></i>加入伺服器連結
           </div>
-          <div className="flex -space-x-3">
-            <div className="w-10 h-10 rounded-full border-2 border-[#2a1a22] bg-primary/20 flex items-center justify-center text-xs font-bold text-white">+{activePlayers}</div>
+          <div className="flex items-center gap-2 flex-1 justify-end">
+            <span className="font-mono text-sm text-white/90 bg-black/30 px-3 py-2 rounded-md border border-white/10 truncate max-w-[400px] flex-1 shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)]">
+              {window.location.origin}/join.html
+            </span>
+            <button className="btn-action" onClick={() => navigator.clipboard.writeText(window.location.origin + '/join.html')}>
+              <i className="fas fa-copy"></i> 複製
+            </button>
+            <a className="btn-action" href="/join.html" target="_blank" rel="noreferrer">
+              <i className="fas fa-external-link-alt"></i> 開啟
+            </a>
           </div>
         </div>
-      </div >
-    </div >
+
+        {/* 2. 伺服器 IP */}
+        <div className="glass-panel p-4 rounded-2xl flex items-center justify-between">
+          <div className="font-bold text-text-sub">
+            <i className="fas fa-network-wired mr-2"></i>伺服器 IP (Address)
+          </div>
+          <span className="font-mono text-base text-white">34.81.50.240</span>
+        </div>
+
+        {/* 3. 連接埠 */}
+        <div className="glass-panel p-4 rounded-2xl flex items-center justify-between">
+          <div className="font-bold text-text-sub">
+            <i className="fas fa-door-open mr-2"></i>連接埠 (Port)
+          </div>
+          <span className="font-mono text-base text-primary">19132</span>
+        </div>
+
+        {/* 4. 軟體 */}
+        <div className="glass-panel p-4 rounded-2xl flex items-center justify-between">
+          <div className="font-bold text-text-sub">
+            <i className="fas fa-microchip mr-2"></i>軟體 (Software)
+          </div>
+          <span className="font-bold">Bedrock Dedicated Server</span>
+        </div>
+
+        {/* 5. 版本 */}
+        <div className="glass-panel p-4 rounded-2xl flex items-center justify-between">
+          <div className="font-bold text-text-sub">
+            <i className="fas fa-tag mr-2"></i>版本 (Version)
+          </div>
+          <span className="font-bold text-success">{version}</span>
+        </div>
+
+        {/* 6. CPU */}
+        <div className="glass-panel p-4 rounded-2xl">
+          <div className="flex items-center justify-between mb-1">
+            <div className="font-bold text-text-sub">
+              <i className="fas fa-microchip mr-2"></i>處理器
+            </div>
+            <span className="font-bold text-text-main">{cpuLoad}</span>
+          </div>
+          <div className="text-xs text-text-sub text-right">1min / 5min / 15min</div>
+        </div>
+
+        {/* 7. 記憶體 */}
+        <div className="glass-panel p-4 rounded-2xl">
+          <div className="flex items-center justify-between mb-1">
+            <div className="font-bold text-text-sub">
+              <i className="fas fa-memory mr-2"></i>記憶體
+            </div>
+            <span className="font-bold">{ramPercent}%</span>
+          </div>
+          <div className="flex justify-between text-xs text-text-sub mb-1">
+            <span>Usage</span>
+            <span>{ramUsed} / {ramTotal}</span>
+          </div>
+          <div className="progress-bar">
+            <div className="h-full bg-btn-blue rounded transition-all duration-500" style={{ width: `${ramPercent}%` }}></div>
+          </div>
+        </div>
+
+        {/* 8. 磁碟 */}
+        <div className="glass-panel p-4 rounded-2xl">
+          <div className="flex items-center justify-between mb-1">
+            <div className="font-bold text-text-sub">
+              <i className="fas fa-hdd mr-2"></i>Disk (Root)
+            </div>
+            <span className="font-bold">{diskPercent}%</span>
+          </div>
+          <div className="flex justify-between text-xs text-text-sub mb-1">
+            <span>Usage</span>
+            <span>{diskUsed} / {diskTotal}</span>
+          </div>
+          <div className="progress-bar">
+            <div className="h-full bg-btn-orange rounded transition-all duration-500" style={{ width: `${diskPercent}%` }}></div>
+          </div>
+        </div>
+
+        {/* 9. 網路 */}
+        <div className="glass-panel p-4 rounded-2xl flex items-center justify-between">
+          <div className="font-bold text-text-sub">
+            <i className="fas fa-network-wired mr-2"></i>Network
+          </div>
+          <div className="text-xs text-white/80">
+            <span className="ml-2"><i className="fas fa-arrow-down text-success"></i> {netRx}</span>
+            <span className="ml-3"><i className="fas fa-arrow-up text-btn-blue"></i> {netTx}</span>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }

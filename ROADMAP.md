@@ -1,6 +1,6 @@
 # 📅 專案開發計畫書 (Roadmap)
 
-最後更新時間: 2026-03-03
+最後更新時間: 2026-03-04
 
 ## 🔴 當前急迫事項 (Immediate Actions)
 *修正資安、架構升級與設定問題*
@@ -9,7 +9,11 @@
     - [ ] 替 `discord_bot` 與 `web_interface` 撰寫 Dockerfile
     - [ ] 建立專案層級的 `docker-compose.yml`
     - [ ] 設定 Volumes 將 `.db` 或設定檔掛載至外部
-- [ ] **根目錄清理與重構**
+- [x] **`web_interface/` 目錄清理與重構** (已完成)
+    - 舊版 HTML/JS 移至 `legacy/`
+    - 偵錯腳本移至 `scripts/`
+    - 測試用 `.dat` 檔案已刪除
+- [ ] **根目錄清理**
     - [ ] 將 `force_sync.py`, `test_main.sh` 等散落腳本移動至 `scripts/`
     - [ ] 將 `my_server.tar.gz` 等備份檔移至 `backups/`
 
@@ -23,9 +27,14 @@
 - [x] **Git 倉庫與記憶體整理** (已完成)
     - 移除敏感資訊 (Token)
     - 為 VM1 增加核心 Swap 空間防崩潰
-- [ ] **Web 介面優化**
-    - 套用 `admin.html` 毛玻璃設計與元件重構
-    - 將假資料 (Mock Data) 逐步替換為真實 API
+- [x] **Web 介面優化 (已完成)**
+    - [x] 轉型為 React/Vite 架構 (`web_interface/frontend/`)
+    - [x] 組件拆分 (TopNav, Dashboard, LiveConsole, ConsolePage, PlayersPage, FilesPage, SettingsPage)
+    - [x] 建立 API 通訊層 (`src/utils/api.js`)
+    - [x] 後端 `api.py` 模組化重構 (1012→238 行, 拆分為 `routes/` + `models.py`)
+    - [x] 完善 Players (白名單/權限) / Files (世界/模組) / Settings (設定編輯) 頁面
+    - [x] UI 重新設計：從側邊欄改為頂部導航、透明玻璃風格、Noto Sans TC 字體
+    - [ ] 將假資料 (Mock Data) 逐步替換為真實 API
 
 ## 🟡 暫緩開發 (On Hold)
 *目前僅保留原型，待未來評估*
