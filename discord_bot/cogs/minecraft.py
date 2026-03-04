@@ -270,9 +270,31 @@ class Minecraft(commands.Cog):
 
         # First send stop to screen nicely
         for inst in self.instances:
-            await self.send_command_to_instance(inst, "stop")
+            await self.send_command_to_instance(inst, "say Discord 機器人發起安全關機指令，系統執行存檔並準備斷電...\r")
+            await asyncio.sleep(1)
+            await self.send_command_to_instance(inst, "stop\r")
             
-        await asyncio.sleep(15) # Wait for safe save
+        # 智慧等待安全存檔完成 (最多等 60 秒)
+        for _ in range(30):
+            await asyncio.sleep(2)
+            try:
+                import sys
+                api_path = "/home/terraria/servers/web_interface"
+                if api_path not in sys.path: sys.path.append(api_path)
+                import proxy_helpers
+                status_res = proxy_helpers.proxy_to_agent("get_system_status")
+                
+                if status_res and status_res.get("status") == "success":
+                    active_screens = status_res.get("active_screens", [])
+                    all_stopped = True
+                    for inst in self.instances:
+                        if inst.get("screen_name") in active_screens:
+                            all_stopped = False
+                            break
+                    if all_stopped:
+                        break # 所有 Minecraft 皆已存檔結束
+            except Exception:
+                pass
         
         success = self.gcp_manager.stop_instance(vm_name)
         if success:
