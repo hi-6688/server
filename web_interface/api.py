@@ -111,7 +111,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                                 "Authorization": f"Bot {token}",
                                 "Content-Type": "application/json"
                             }
-                            data = {"content": "💤 **自動關機系統**：偵測到 VM2 遊戲伺服器閒置達 15 分鐘，已完成安全存檔並切斷主機電源。 (Event-Driven Timeout)"}
+                            data = {"content": "💤 **自動關機系統**：偵測到 VM2 遊戲伺服器閒置達 10 分鐘，已完成安全存檔並切斷主機電源。 (Event-Driven Timeout)"}
                             requests.post(f"https://discord.com/api/v10/channels/{channel_id}/messages", headers=headers, json=data)
                 except Exception as e:
                     print(f"[Webhook Error] {e}")

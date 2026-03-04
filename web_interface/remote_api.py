@@ -136,7 +136,7 @@ class AgentHandler(http.server.BaseHTTPRequestHandler):
 # ==========================================
 
 VM1_WEBHOOK_URL = "http://39.12.35.16:24445/webhook/shutdown_vm2?key=AdminKey123456"
-SHUTDOWN_DELAY_SECONDS = 900  # 15 分鐘 = 900 秒
+SHUTDOWN_DELAY_SECONDS = 600  # 10 分鐘 = 600 秒
 
 shutdown_timer = None
 shutdown_lock = threading.Lock()
@@ -155,7 +155,7 @@ def trigger_auto_shutdown():
                     screen_name = parts[1].strip()
                     active_screens.append(screen_name)
                     # 踢出可能卡住的玩家並執行安全存檔
-                    subprocess.run(["screen", "-S", screen_name, "-p", "0", "-X", "stuff", "say 伺服器閒置達 15 分鐘，正在執行自動安全存檔並關機...\r"])
+                    subprocess.run(["screen", "-S", screen_name, "-p", "0", "-X", "stuff", "say 伺服器閒置達 10 分鐘，正在執行自動安全存檔並關機...\r"])
                     time.sleep(1)
                     subprocess.run(["screen", "-S", screen_name, "-p", "0", "-X", "stuff", "stop\r"])
 
@@ -186,12 +186,12 @@ def trigger_auto_shutdown():
             shutdown_timer = None
 
 def reset_timer():
-    """重置或啟動 15 分鐘計時炸彈"""
+    """重置或啟動 10 分鐘計時炸彈"""
     global shutdown_timer
     with shutdown_lock:
         if shutdown_timer is not None:
             shutdown_timer.cancel()
-        print("[AutoShutdown] Server empty! Starting 15-minute countdown bomb...")
+        print("[AutoShutdown] Server empty! Starting 10-minute countdown bomb...")
         shutdown_timer = threading.Timer(SHUTDOWN_DELAY_SECONDS, trigger_auto_shutdown)
         shutdown_timer.start()
 
