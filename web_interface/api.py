@@ -7,6 +7,8 @@ import urllib.parse
 import os
 import json
 import sys
+import threading
+import requests
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import proxy_helpers
@@ -78,8 +80,47 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
 
         # === 路由分發 ===
 
+        # Webhook (VM2 自動關機觸發)
+        if parsed.path == '/webhook/shutdown_vm2':
+            if params.get('key') != API_KEY:
+                self._set_headers(403)
+                self.wfile.write(b'{"error":"Forbidden"}')
+                return
+
+            self._set_headers()
+            self.wfile.write(b'{"status":"shutting_down"}')
+
+            def do_shutdown():
+                # 加入 discord_bot 目錄以存取 GCPManager
+                sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '../discord_bot'))
+                try:
+                    from utils.gcp_manager import GCPManager
+                    # 與 minecraft.py 一致的設定
+                    gcp = GCPManager(project_id="project-ad2eecb1-dd0f-4cf4-b1a", zone="asia-east1-c")
+                    success = gcp.stop_instance("instance-20260220-174959")
+
+                    # 發送 Discord 通知
+                    if success:
+                        from dotenv import load_dotenv
+                        load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '../.env'))
+                        token = os.getenv('CONCH_TOKEN') 
+                        channel_id = os.getenv('DISCORD_LOG_CHANNEL_ID')
+                        
+                        if token and channel_id:
+                            headers = {
+                                "Authorization": f"Bot {token}",
+                                "Content-Type": "application/json"
+                            }
+                            data = {"content": "💤 **自動關機系統**：偵測到 VM2 遊戲伺服器閒置達 15 分鐘，已完成安全存檔並切斷主機電源。 (Event-Driven Timeout)"}
+                            requests.post(f"https://discord.com/api/v10/channels/{channel_id}/messages", headers=headers, json=data)
+                except Exception as e:
+                    print(f"[Webhook Error] {e}")
+
+            threading.Thread(target=do_shutdown, daemon=True).start()
+            return
+
         # 登入
-        if parsed.path == '/login':
+        elif parsed.path == '/login':
             auth.handle_login(self, params, current_instance)
 
         # 伺服器操作
