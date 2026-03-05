@@ -80,32 +80,45 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
 
         # === 路由分發 ===
 
-        # Webhook (VM2 自動關機觸發)
+        # Webhook (VM2 自動關機與手動關機回傳)
         if parsed.path == '/webhook/shutdown_vm2':
             if params.get('key') != API_KEY:
                 self._set_headers(403)
                 self.wfile.write(b'{"error":"Forbidden"}')
                 return
 
+            reason = params.get('reason', ['auto'])[0]
+            pending_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.pending_vm_shutdown')
+            
+            if reason != 'auto' and not os.path.exists(pending_file):
+                # 只是普通的伺服器關閉 (例如重啟指令)，忽略關閉 VM 的請求
+                self._set_headers()
+                self.wfile.write(b'{"status":"ignored"}')
+                return
+                
+            # 確定要關機了，刪除標記檔
+            if os.path.exists(pending_file):
+                with open(pending_file, 'r') as f:
+                    pending_source = f.read().strip()
+                os.remove(pending_file)
+            else:
+                pending_source = 'auto'
+
             self._set_headers()
             self.wfile.write(b'{"status":"shutting_down"}')
 
             def do_shutdown():
-                # 在斷電前先備份所有設定檔到 VM1 離線快取
                 try:
                     proxy_helpers.backup_all_instances_to_cache()
                 except Exception as e:
                     print(f"[Webhook] Backup before shutdown failed: {e}")
 
-                # 加入 discord_bot 目錄以存取 GCPManager
                 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '../discord_bot'))
                 try:
                     from utils.gcp_manager import GCPManager
-                    # 與 minecraft.py 一致的設定
                     gcp = GCPManager(project_id="project-ad2eecb1-dd0f-4cf4-b1a", zone="asia-east1-c")
                     success = gcp.stop_instance("instance-20260220-174959")
 
-                    # 發送 Discord 通知
                     if success:
                         from dotenv import load_dotenv
                         load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '../.env'))
@@ -117,7 +130,13 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                                 "Authorization": f"Bot {token}",
                                 "Content-Type": "application/json"
                             }
-                            data = {"content": "💤 **自動關機系統**：偵測到 VM2 遊戲伺服器閒置達 10 分鐘，已完成安全存檔並切斷主機電源。 (Event-Driven Timeout)"}
+                            
+                            if pending_source == 'auto':
+                                msg = "💤 **自動關機系統**：偵測到 VM2 遊戲伺服器閒置達 10 分鐘，已完成退出存檔並切斷主機電源。 (事件驅動)"
+                            else:
+                                msg = f"💤 **手動關機完成**：VM2 遊戲伺服器已完成退出存檔並切斷主機電源。 (來源: {pending_source})"
+                                
+                            data = {"content": msg}
                             requests.post(f"https://discord.com/api/v10/channels/{channel_id}/messages", headers=headers, json=data)
                 except Exception as e:
                     print(f"[Webhook Error] {e}")

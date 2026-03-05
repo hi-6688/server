@@ -47,34 +47,25 @@ def handle_start_get(handler, params, instance):
 
 
 def handle_stop_post(handler, params, instance):
-    """POST /stop — 透過 VM2 關閉伺服器並切斷電源"""
+    """POST /stop — 透過 VM2 關閉伺服器並標記準備斷電"""
     try:
-        def do_shutdown():
-            if proxy_helpers.is_vm2_running():
-                try:
-                    proxy_helpers.backup_all_instances_to_cache()
-                except Exception as e:
-                    print(f"[Web Shutdown] Backup failed: {e}")
+        if proxy_helpers.is_vm2_running():
+            # 寫入狀態標記，等待 VM2 透過 Webhook 回傳「Quit correctly」事件時切斷電源
+            pending_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../.pending_vm_shutdown')
+            with open(pending_file, 'w') as f:
+                f.write('manual_web')
                 
-                proxy_helpers.proxy_to_agent("execute_command", screen_name=instance.screen_name, command="say 網頁面板發起安全關機指令，系統執行存檔並準備斷電...\r")
-                time.sleep(1)
-                proxy_helpers.proxy_to_agent("execute_command", screen_name=instance.screen_name, command="stop\r")
-                time.sleep(15) 
-                
-                # 切斷 VM2 電源
-                import sys
-                bot_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../../discord_bot')
-                if bot_path not in sys.path:
-                    sys.path.append(bot_path)
-                from utils.gcp_manager import GCPManager
-                gcp = GCPManager(project_id="project-ad2eecb1-dd0f-4cf4-b1a", zone="asia-east1-c")
-                gcp.stop_instance("instance-20260220-174959")
-                
-        import threading
-        threading.Thread(target=do_shutdown, daemon=True).start()
-        
+            try:
+                proxy_helpers.backup_all_instances_to_cache()
+            except Exception as e:
+                print(f"[Web Shutdown] Backup failed: {e}")
+            
+            proxy_helpers.proxy_to_agent("execute_command", screen_name=instance.screen_name, command="say 網頁面板發起安全關機指令，系統執行存檔並準備斷電...\r")
+            time.sleep(1)
+            proxy_helpers.proxy_to_agent("execute_command", screen_name=instance.screen_name, command="stop\r")
+            
         handler._set_headers()
-        handler.wfile.write(b'{"status":"stopped"}')
+        handler.wfile.write(b'{"status":"stopping_and_powering_off"}')
     except Exception as e:
         handler._set_headers(500)
         handler.wfile.write(json.dumps({"error": str(e)}).encode('utf-8'))

@@ -1,31 +1,72 @@
 # 專案企劃書：Discord 數位生命體「嗨嗨 (HiHi)」
 
+> **版本**: 4.0 (Agentic Architecture)
+> **最後更新**: 2026-03-04
+
 ## 1. 專案概述 (Executive Summary)
 本計畫旨在創建一個具備「獨立人格」與「長期記憶」的 Discord 機器人。與傳統的「助理型 AI」不同，「嗨嗨」定位為伺服器中的一名 **「高活躍網友」**，具備觀察、主動發言與情緒表達能力。
+
+---
 
 ## 2. 核心技術規格 (Technical Specifications)
 
 ### 2.1 AI 模型選擇 (Model Selection)
-我們採用 **Google Gemini 3.0** 系列作為核心大腦。
+我們採用 **Google Gemini 3** 系列作為核心大腦。
 
-*   **選項 A：Gemini 3.0 Flash (預設 - 推薦)**
-    *   **定位**: 高性價比、速度快、適合日常聊天。
-*   **選項 B：Gemini 3.0 Pro**
+*   **目前使用：Gemini 3 Flash Preview (預設)**
+    *   **定位**: 高性價比、速度快、支援思考模式 (Thinking Mode)。
+    *   **設定方式**: `.env` 中的 `AI_MODEL_NAME` (預設: `models/gemini-3-flash-preview`)。
+*   **可選：Gemini 3 Pro**
     *   **定位**: 頂級推理能力，適合需要深度思考的場景。
 
-### 2.2 記憶系統架構 (Dual-Layer Memory System) - **極致性價比 (Max CP)**
-為了回答使用者「怎樣才是最高性價比」的問題，我們採用 **「嚴格滑動視窗 + 延遲萃取」** 策略。
+### 2.2 Agentic 架構 (Function Calling + Tool Use)
+嗨嗨採用 **自主代理 (Agentic Loop)** 架構，能主動思考並使用工具：
 
-1.  **短期記憶 (Strict Rolling Window)**
-    *   **機制**：不僅是開機時讀取最近 30 句，**在對話進行中，只要累積超過 30 句，就會立刻刪除最舊的訊息**。
-    *   **原理**：Gemini 收費是看「傳入 Token 量」。如果您累積了 1000 句歷史，每講一句「你好」都要付 1000 句的錢。
-    *   **優化**：鎖定歷史上限為 30 句。
-    *   **效益**：無論你們聊了多久，**每一句話的成本都永遠固定在低點** (約 $0.0000x)。
+```
+思考 → 判斷是否需要工具 → 執行工具 → 觀察結果 → 再思考 → 最終回應
+```
 
-2.  **長期筆記 (Legacy Extraction)**
-    *   **機制**：每 **20 句** 對話才觸發一次背景分析。
-    *   **成本**：平均每句話只增加 1/20 (5%) 的額外成本，幾乎可以忽略。
-    *   **效益**：用 5% 的成本換取「永遠記得你」的長期記憶。
+**內建工具 (Tools)**：
+| 工具名稱 | 用途 |
+|---|---|
+| `save_memory` | 儲存重要的長期記憶 (觀察/事件) |
+| `manage_fact` | 管理使用者個人事實 (CRUD，含 Data/Impression 分類) |
+| `search_memory` | 語意搜尋過去的記憶與對話 |
+| `learn_knowledge` | 學習新詞彙/梗/知識 (存入 RAG 知識庫) |
+
+*   **最大思考步數**: 5 步 (防止無限迴圈)。
+*   **工具對使用者不可見**：嗨嗨會像人類一樣自然地提起記憶，不提到「工具」或「資料庫」。
+
+### 2.3 記憶系統架構 (Memory System v3.0)
+記憶系統經過多次迭代，目前採用 **Token 上限裁剪 + 情節記憶整合** 策略。
+
+#### 短期記憶 (Runtime History)
+*   **機制**：基於 **Token 上限** (8000 Tokens) 的動態視窗。
+*   **溢出處理 (Episodic Memory Consolidation)**：
+    1.  當短期記憶超過上限，觸發「情節記憶整合」。
+    2.  將前半段歷史交給 AI 產生日記式摘要 (Look-Ahead Summarization)。
+    3.  摘要存入長期記憶 (PostgreSQL)。
+    4.  保留最後 5 則訊息作為 Context Bridge，避免斷裂。
+
+#### 長期記憶 (PostgreSQL - Azure)
+*   **資料庫**：Azure PostgreSQL (`hihi-memory.postgres.database.azure.com`)。
+*   **連線方式**：`asyncpg` 連線池 (min=2, max=10)。
+*   **資料表結構**：
+
+| 資料表 | 用途 |
+|---|---|
+| `memories` | RAG 向量記憶 (含 768 維 Embedding + AI 自動標籤) |
+| `user_facts` | 使用者事實 (語意去重，Embedding-based) |
+| `chat_history` | 聊天歷史紀錄 |
+| `knowledge` | RAG 知識庫 (Upsert + 語意搜尋) |
+| `image_hashes` | 圖片重複偵測 (SHA256) |
+
+*   **搜尋機制 (Hybrid Search)**：
+    *   Vector Search (語意相似度)
+    *   Full-Text Search (關鍵字匹配)
+    *   RRF (Reciprocal Rank Fusion) 合併排名
+
+---
 
 ## 3. 人設與行為規範 (Personality & Behavior)
 
@@ -34,298 +75,185 @@
 *   **語氣**：網路原生 (Internet Native)，鬆弛 (Chill)，直率 (Direct)。
 *   **互動**：
     *   **被動回應**：被 @提及 時回應。
-    *   **主動活躍**：在特定頻道 (`AI_CHANNEL_ID`) 監聽所有訊息並插話。
-    *   **主動破冰**：偵測到頻道冷場超過 30 分鐘，主動發起話題。
+    *   **主動活躍**：在指定頻道 (`AI_CHANNEL_ID`，支援多頻道以逗號分隔) 監聽所有訊息。
+    *   **主動破冰 (Ice Breaker)**：偵測到頻道冷場超過 30 分鐘，主動發起話題 (背景任務)。
 
-### 3.2 表達能力
-*   **情緒表達**：使用專屬表情包 (Emoji) 表達喜怒哀樂。
-*   **視覺能力**：能理解並評論使用者上傳的圖片。
+### 3.2 訊息處理機制 (Debounce / Interrupt)
+*   **批次處理 (Batching)**：收到訊息後延遲 0.5 秒，合併多條訊息為一次回應。
+*   **即時中斷 (Interrupt)**：使用者在 AI 思考中發新訊息，會取消舊任務、合併訊息重新處理。
+*   **效益**：連續打字不會收到多條零散回覆，體驗更自然。
 
-### 3.3 安全與權限
-*   **System Override**：
-    *   **權限**：僅限擁有者 (Owner)。
-    *   **效果**：強制切換至「終端機模式 (Terminal Mode)」，消除所有人格特徵，僅回報系統狀態。
-*   **防刷頻 (Anti-Spam)**：
-    *   **機制**：單一用戶 5 秒內發送超過 3 句自動暫停回應。
+### 3.3 多媒體能力
+*   **圖片理解**：讀取使用者上傳的圖片 (Base64 inline_data 傳送，上限 8MB)。
+*   **貼圖辨識**：讀取 PNG/APNG 格式的 Discord 貼圖。
+*   **圖片重複偵測**：SHA256 Hash，提醒「這張圖之前誰傳過」。
+*   **連結解析**：自動抓取 URL 內容 (Title + Body 摘要)。
 
-## 4. 檔案結構 (File Structure)
+### 3.4 表達能力
+*   **專屬表情包 (Application Emojis)**：使用 `[表情代碼]` 語法，回應前自動替換為實際 Emoji ID。
+*   **設定檔**：`data/hihi/emojis.json` (代碼對照) + `emoji_meanings.json` (語意說明)。
+
+### 3.5 安全與權限
+*   **System Override**：僅限擁有者 (Owner)，強制切換至終端機模式。
+*   **保密協定**：測試頻道的對話不會在正式頻道提起。
+
+### 3.6 跨機器人感知
+*   **神奇嗨螺訊息監聽**：嗨嗨能看到神奇嗨螺的回覆 (例如猜謎遊戲結果)，但不會主動回應 Bot 訊息。
+
+---
+
+## 4. 分體架構 (Split Architecture)
+程式碼支援 **「單一核心，多重人格」** 的啟動模式：
+
+| 模式 | 環境變數 | 載入 Cogs | Token | 用途 |
+|---|---|---|---|---|
+| **CONCH** | `BOT_MODE=CONCH` | `status`, `minecraft`, `terraria`, `conch_game` | `CONCH_TOKEN` | 神奇嗨螺 (功能型) |
+| **HIHI** | `BOT_MODE=HIHI` | `status`, `ai_chat` | `DISCORD_TOKEN` | 嗨嗨 (靈魂型) |
+| **ALL** | `BOT_MODE=ALL` (預設) | 所有 cogs | `DISCORD_TOKEN` | 全部功能載入 |
+
+*   兩個獨立的 systemd 服務：`conch_bot.service` / `discord_bot.service`。
+
+---
+
+## 5. 檔案結構 (File Structure)
 
 ```text
 servers/
+├── .env                        # API Keys, DATABASE_URL, BOT_MODE 等
 ├── discord_bot/
-│   ├── main.py             # 機器人主入口 (依 BOT_MODE 載入不同 cogs)
+│   ├── main.py                 # 機器人主入口 (依 BOT_MODE 載入不同 cogs)
+│   ├── cli.py                  # CLI 聊天模式 (本機除錯工具)
 │   ├── cogs/
-│   │   └── ai_chat.py      # [CORE] AI 核心邏輯 (含自動修剪演算法)
+│   │   ├── ai_chat.py          # [CORE] AI 核心邏輯 (Agentic Loop + Token 裁剪)
+│   │   ├── minecraft.py        # Minecraft Bedrock 遠端多服管理
+│   │   ├── terraria.py         # Terraria 伺服器管理
+│   │   ├── conch_game.py       # 神奇嗨螺猜謎遊戲 (Gemini Structured Output)
+│   │   └── status.py           # 系統狀態、IPC 訊號、指令重載
 │   ├── utils/
-│   │   └── memory_manager.py # [CORE] PostgreSQL 記憶管理器 (asyncpg)
+│   │   ├── memory_manager.py   # [CORE] PostgreSQL 記憶管理器 v3.0 (asyncpg)
+│   │   └── gcp_manager.py      # GCP VM 管理工具 (gcloud CLI)
 │   ├── data/
 │   │   ├── hihi/
 │   │   │   ├── core_memory.md  # [唯讀] 核心記憶 (DNA)
-│   │   │   └── emojis.json    # [CONFIG] 表情包 ID 設定
-│   │   └── emoji_meanings.json
-│   ├── discord_bot.service  # HiHi 的 systemd 服務檔
-│   ├── conch_bot.service    # 神奇嘿螺的 systemd 服務檔
+│   │   │   ├── emojis.json     # 表情包代碼對照
+│   │   │   ├── emoji_meanings.json  # 表情語意說明
+│   │   │   ├── memory.json     # 本地記憶備份
+│   │   │   └── chat_history.pkl     # 本地聊天歷史備份 (Pickle)
+│   │   └── conch/
+│   │       └── commands.json   # 指令權限/頻道設定
+│   ├── scripts/                # 維護腳本 (共 24 個)
+│   │   ├── init_knowledge_db.py     # 知識庫初始化
+│   │   ├── cleanup_db.py           # 資料庫清理
+│   │   ├── audit_db.py / audit_data.py  # 資料庫稽核
+│   │   ├── consolidate_facts.py     # 事實整合
+│   │   ├── optimize_db_indexes.py   # 索引最佳化
+│   │   └── ... (emoji 管理、測試腳本等)
+│   ├── discord_bot.service     # HiHi 的 systemd 服務檔
+│   ├── conch_bot.service       # 神奇嗨螺的 systemd 服務檔
 │   └── requirements.txt
-├── .env                    # API Key 與設定 (含 DATABASE_URL)
+├── discord_bot_dev/            # 開發/測試版 (物理隔離)
+│   ├── main.py
+│   ├── cogs/
+│   │   ├── status.py
+│   │   ├── terraria.py
+│   │   └── minecraft.py.disabled
+│   ├── commands.json
+│   └── requirements.txt
 └── docs/
-    └── HiHi_Proposal.md    # 本企劃書
+    └── HiHi_Proposal.md        # 本企劃書
 ```
-
-## 5. 待辦事項 (Action Items)
-
-- [ ] **填寫 API Key**: `.env` 中的 `GEMINI_API_KEY`。
-- [ ] **填寫表情 ID**: `discord_bot/data/emojis.json`。
-- [ ] **填寫頻道 ID**: `.env` 中的 `AI_CHANNEL_ID`。
 
 ---
-**版本**: 3.1 (Strict Efficiency)
-**日期**: 2026-02-07
 
-## 6. 技術原理深度解析 (Technical Deep Dive)
+## 6. Cog 模組說明
 
-您提到這是一門「需要研究的技術」，完全正確。
-以下拆解 **每一次互動** 到底發生了什麼事：
+### 6.1 `ai_chat.py` — AI 核心 (871 行)
+嗨嗨的靈魂所在，包含：
+*   **Agentic Loop** (`_call_gemini_agent`)：思考→工具→觀察 循環。
+*   **訊息處理** (`on_message` + `_process_buffer_task`)：Debounce + Interrupt 機制。
+*   **上下文注入 (Context Injection)**：
+    *   `[名稱 (username) | 朋友 | HH:MM]` 格式的使用者標頭。
+    *   自動查詢/注入使用者事實 (Facts)。
+    *   自動搜尋/注入 RAG 知識庫結果。
+    *   注入頻道位置資訊、機器人自我身分。
+*   **記憶管理** (`_manage_history_overflow` + `_consolidate_memory`)：Token 上限溢出時的情節記憶整合。
+*   **System Prompt** (`_get_system_prompt`)：組裝核心記憶、表情資料庫、記憶協議等。
 
-### 6.1 一般對話流程 (The Chat Loop)
-當使用者說了一句「嗨，你好」時，程式實際上向 Google 傳送了 **一大包數據**：
+### 6.2 `minecraft.py` — Minecraft 管理 (377 行)
+*   透過 Agent API 遠端管理 VM2 上的 Minecraft Bedrock 伺服器。
+*   支援多實例 (`instances.json`)、啟動/停止/狀態查詢。
+*   GCP VM 自動啟動 (透過 `gcp_manager.py`)。
 
-```mermaid
-graph LR
-    User[使用者] -->|輸入: 你好| Bot[Discord Bot]
-    Bot -->|組裝封包| Payload[請求封包 (Request)]
-    Payload -->|傳送| Google[Gemini API]
-    Google -->|回傳| Response[回應文字]
-    Response -->|轉發| User
-```
+### 6.3 `terraria.py` — Terraria 管理 (378 行)
+*   本機管理 Terraria 伺服器 (Screen session)。
+*   玩家上線/離線偵測、閒置自動關閉、聊天轉發。
+*   Slash Commands: `/tr_status`。
 
-#### 📦 請求封包 (Request Payload) 的內容
-這是最關鍵的部分。Google 不會記得你們上一句聊什麼，所以我們**每次都要把「整包」傳過去**。
-這包數據包含三個部分：
+### 6.4 `conch_game.py` — 神奇嗨螺猜謎遊戲 (205 行)
+*   類似「海龜湯」的猜謎遊戲。
+*   使用 Gemini Structured Output (ConchVerdict Enum) 強制 AI 回答 YES/NO/IRRELEVANT/WIN。
+*   Modal 輸入謎底、頻道級遊戲狀態管理。
 
-1.  **System Instruction (靈魂)**：不管聊多久，這段永遠存在。
-    > "你是嗨嗨，你是一個數位生命... [讀取到的長期記憶: 此人喜歡蘋果]..."
-2.  **History (短期記憶)**：最近的 30 句對話。
-    > User: 早安
-    > Bot: 早安啊
-    > ... (最多 30 句)
-3.  **New Prompt (當下輸入)**：
-    > User: 你好 (這句是最新的)
+### 6.5 `status.py` — 系統狀態 (141 行)
+*   機器人啟動通知、Application Emoji 偵測。
+*   IPC 訊號監聽 (`!ipc_signal:ping` / `!ipc_signal:reload`)。
+*   熱重載所有 Cogs (`do_reload`)。
+*   頻道權限檢查 (`verify_permission`，基於 `commands.json`)。
 
-**結論**：所謂的 Token 消耗，就是 `靈魂 (固定) + 歷史 (變動, max 30) + 新訊息` 的總和。
+---
 
-### 6.2 記憶萃取流程 (The Extraction Loop) - **修正版**
-為了回應您關於「第 31-50 句會被遺忘」的精準質疑，我們調整了參數：
+## 7. 記憶架構設計哲學
 
-1.  **輸送帶 (Window)**：長度調整為 **60 格 (30 Turns)**。
-    *   這是為了確保在打包工人來之前，東西還沒掉下去。
-2.  **打包工人 (Trigger)**：每 **20 句 (20 Turns)** 來一次。
-    *   當工人來的時候，輸送帶上有 30 句。
-    *   他只取 **最新的 20 句** 進行打包。
-    *   (剩下的舊 10 句是上次打包過的，所以掉下去也沒關係)。
-
-**數學證明**：
-*   **T=20時**：萃取 1-20。視窗有 1-20。 (OK)
-*   **T=40時**：萃取 21-40。視窗有 11-40 (共30句)。 (OK，包含 21-40)
-
-#### 6.5 如何解決「訊息長短不一」？ (Smart Trigger)
-您非常敏銳，單純算「20 則」確實有漏洞（20 個「嗨」跟 20 篇「論文」成本差很多）。
-為了達到極致的精確，我們引入 **「雙重引信 (Dual Fuse)」** 機制：
-
-1.  **引信 A (計數器)**：累積 **20 則** 訊息。
-2.  **引信 B (計量器)**：累積 **3,000 字** (約 2000 Tokens)。
-
-**運作邏輯**：
-#### 6.6 垃圾訊息過濾 (Quality Filter) - **NEW**
-您提到：「刷表符或廢話，佔用記憶額度很浪費。」
-這也是我們成本控管的一環。我們在計數器前加了一道濾網：
-
-**機制**：
-只有 **「有效訊息」** 才會讓計數器 +1。
-
-**什麼是無效訊息 (不計數)？**
-1.  **純表情**：`<:emoji:123>` 或 `XD`、`lol`。
-2.  **極短訊息**：長度 < 2 的無意義字元 (如 `?`, `.` )。
-3.  **系統指令**：如 `System Override`。
-
-**結果**：
-如果使用者連續傳了 10 張貼圖，這 10 張圖**完全不會**觸發記憶萃取，也不會增加累積字數。
-系統會耐心等到累積了 20 句「真正的對話」後，才進行分析。
-這讓您的每一分錢都花在「有意義的內容」上。
-
-
-#### 6.9 視窗會自動伸縮嗎？ (Dynamic Window) - **NEW**
-您問到：「如果都是短表情，上限會增加嗎？」
-答案是：**會！** 我們將原本的「固定 60 則」升級為 **「動態視窗」**。
-我們不再數「幾則」，而是數「總字數」(上限 5000 字)。
-*   **效益**：聊廢話時記憶久遠，聊正經事時專注當下。
-
-#### 6.10 知道是「誰」跟「何時」傳的嗎？ (Context Injection) - **NEW**
-我們在每一則傳給 AI 的訊息中，嵌入了微小的 Metadata：
-*   **Who**: `[User_Name (好感度:80)]`
-*   **When**: `HH:MM` (讓她知道過了多久)
-
-#### 6.11 記憶的主體是什麼？ (Memory Architecture)
-您問到核心架構：「是以人、事、還是時為主體？」
-目前的設計是 **「以人為主體 (User-Centric)」**。
-
-**實際儲存格式 (PostgreSQL Database)**：
-我們為了支援巨量記憶檢索，已經將儲存架構升格為雲端的 **Azure PostgreSQL** (`hihi-memory.postgres.database.azure.com`)，並透過 `asyncpg` 高速非同步連線池進行操作。檔案設定於 `.env` 中的 `DATABASE_URL`。
-
-```sql
--- 概念化資料表結構
-CREATE TABLE memory (
-    user_id VARCHAR(50) PRIMARY KEY, -- 使用者 ID
-    name VARCHAR(100),               -- 讓 AI 知道怎麼稱呼您
-    interaction INT DEFAULT 0,       -- 互動次數
-    affection INT DEFAULT 50,        -- 好感度
-    facts JSONB                      -- 表層記憶 (由 AI 萃取並寫入陣列)
-);
-```
-
-*   **結構優勢**：
-    *   **極致效能**：支援併發寫入與龐大的資料量檢索。
-    *   **雲端備份**：資料永不丟失。
-    *   **擴充性**：輕易支援未來可能的混合流檢索或向量擴充 (`pgvector`)。
-
-**結論**：嗨嗨是一個 **「重視人際關係」** 的 AI，她的世界是圍繞著每一個使用者轉的。
-#### 6.12 他知道我在打字嗎？ (Typing Awareness) - **NEW**
-我們監聽 `typing` 事件，當您在打字時，機器人會禮貌地等待，絕不插嘴。
-
-#### 6.13 核心記憶 (Core Memory) - **NEW**
-您問到：「要有核心記憶嗎？他會自己更改嗎？」
-這是一個關於 **「誰說了算」** 的權限問題。
-
-我們將記憶分為兩層：
+### 7.1 雙層記憶：核心記憶 vs 表層記憶
 1.  **🔴 核心記憶 (Core Memory - DNA)**
-    *   **內容**：我是嗨嗨、我有靈魂、我是女生。
-    *   **維護者**：**只有您 (開發者)** 能改。
-    *   **AI 權限**：**唯讀 (Read-only)**。她無法自己更改這些設定。
-    *   **理由**：防止 AI 因為聊得太開心而忘記自己是誰，或者被網友惡意洗腦。
+    *   **檔案**：`data/hihi/core_memory.md`
+    *   **維護者**：僅開發者可修改。
+    *   **AI 權限**：唯讀 (Read-only)。
+    *   **目的**：防止 AI 忘記自己是誰或被惡意洗腦。
 
-2.  **🔵 表層記憶 (Adaptive Memory - 經驗)**
-    *   **內容**：小明喜歡吃拉麵 (但後來改吃壽司了)。
-    *   **維護者**：**AI 自動維護**。
-    *   **AI 權限**：**讀寫 (Read-Write)**。
-    *   **機制**：當她發現您口味變了，AI 會自己更新這部分的筆記。
+2.  **🔵 表層記憶 (Adaptive Memory)**
+    *   **儲存**：PostgreSQL (memories / user_facts / knowledge)。
+    *   **維護者**：AI 透過 Function Calling 自動維護。
+    *   **機制**：語意去重 (Embedding cosine similarity > 0.85 → 更新而非新增)。
 
+### 7.2 以人為主體 (User-Centric)
+嗨嗨的記憶圍繞每一個使用者旋轉，事實按 `user_id` 分類管理。
 
+### 7.3 三明治結構 (Memory Fusion)
+每次 API 呼叫的封包結構：
+1.  **上層麵包**：長期記憶 (System Prompt = 核心記憶 + Facts + 知識庫 + 表情資料庫)
+2.  **中間餡料**：短期記憶 (Runtime History，動態 Token 視窗)
+3.  **下層麵包**：當下輸入 (使用者訊息 + 圖片 + 上下文)
 
-#### 6.14 名字太長怎麼辦？ (Token Compression) - **NEW**
-您問到：「可以用代號來省 Token 嗎？」
-這是一個取捨問題。
+---
 
-1.  **為什麼不把名字改成代號 (User_1)？**
-    *   **風險**：AI 也是看 Prompt 辦事的。如果我把「大明」換成 `U1`，AI 就會以為您叫 `U1`。
-    *   **後果**：她會說：「嗨 U1，今天要幹嘛？」 -> **沉浸感破壞 (Out of Character)**。
-    *   **結論**：名字是靈魂，**不能省**。
+## 8. 架構設計決策 (Why This Architecture)
 
-2.  **那能省什麼？ (標頭壓縮 Header Compression)**
-    *   我們可以壓縮「格式」。
-    *   **Before**: `[大明 (好感度:80) 12:30]: 嘿` (Tokens: 高)
-    *   **After**: `[大明|80|12:30]: 嘿` (Tokens: 低)
+### 為什麼嗨嗨和嗨螺共用資料夾？
+*   **省資源**：共用 `main.py`、`requirements.txt`、`.env` 讀取邏輯。
+*   **DRY 原則**：修一個 Bug，兩個機器人同時修好。
+*   **潛在互通**：嗨嗨可以感知到嗨螺的訊息 (已實現：猜謎遊戲回覆監聽)。
+*   **人格隔離**：透過 `BOT_MODE` 環境變數 + Cog 模組載入實現分離。
 
-#### 6.15 短期與長期記憶如何搭配？ (Memory Fusion) - **NEW**
-您問到：「這兩者怎麼搭配？」
-它們的關係就像 **「三明治」**。
+### 為什麼開發版分開資料夾？
+*   `discord_bot_dev/` 是「實驗室」，可能做破壞性測試。
+*   必須物理隔離以免影響正式版。
 
-每一次您傳訊息給 AI 時，我們實際上是把這三樣東西疊在一起傳送：
+---
 
-1.  **上層麵包：長期記憶 (System Prompt)**
-    *   **來源**：從 Azure PostgreSQL 讀取。
-    *   **內容**：`[核心設定] + [你的喜好: 喜歡拉麵]`
-    *   **作用**：提供 **背景知識**。
+## 9. 環境變數一覽 (.env)
 
-2.  **中間餡料：短期記憶 (Chat History)**
-    *   **來源**：從 `Dynamic Window` 讀取 (最近 5000 字)。
-    *   **內容**：`User: 肚子餓了` -> `AI: 想吃什麼？`
-    *   **作用**：提供 **對話脈絡**。
-
-3.  **下層麵包：當下輸入 (Current Prompt)**
-    *   **來源**：您剛剛打的字。
-    *   **內容**：`User: 走吧！`
-
-**AI 的思考過程 (Fusion)**：
-AI 同時看到了「你喜歡拉麵 (長期)」+「你肚子餓 (短期)」+「你說走吧 (現在)」。
-於是她會回答：「**那我們去吃巷口那家拉麵吧！**」
-
-**結論**：長期記憶提供「方向」，短期記憶提供「情境」，兩者缺一不可。
-
-#### 6.16 我應該與神奇嗨螺共用資料夾嗎？ (Soul Isolation Policy)
-讓上帝的歸上帝，凱撒的歸凱撒。嗨嗨的靈魂必須是純淨的。
-
-#### 6.17 為什麼要住在一起？有好處嗎？ (Monolithic Benefits) - **NEW**
-您問到：「分開不是更乾淨嗎？為什麼要擠在一起？」
-確實，分開最乾淨，但「住在一起」有 **三大戰略優勢**：
-
-1.  **省資源 (Efficiency)**：
-    *   **分開**：您要跑兩個 Python 程式，佔用兩份記憶體，申請兩個 API Token。
-    *   **合併**：只跑一個程，共用連線池。對您的伺服器負擔最小。
-
-2.  **單一入口 (One Bot to Rule Them All)**：
-    *   使用者不需要記「查狀態找 A 機器人，聊天找 B 機器人」。
-    *   同一個視窗，既能 `!status` 查狀態，又能直接跟嗨嗨抱怨「伺服器怎麼掛了」。
-
-3.  **潛在的資訊互通 (Context Awareness)**：
-    *   **這是最強的點**。
-    *   因為她們在同一個程式裡，未來我們可以做 **「神經連結」**。
-    *   *情境*：當 Minecraft 伺服器掛掉時 (左腦偵測到)。
-    *   *反應*：嗨嗨 (右腦) 可以瞬間知道，並主動說：「欸，伺服器好像掛了，你要不要去修一下？」
-    *   如果分開成兩個機器人，嗨嗨就會像個傻瓜一樣完全不知道隔壁發生火災。
-
-**結論**：共用肉體讓她們能 **「即時交換情報」**，同時透過我們設計的 **「記憶隔離」** 保持人格獨立。這是最高級的架構。
-
-#### 6.18 如果我真的想要兩個機器人呢？ (Architecture Flexibility) - **NEW**
-您說：「嗨嗨是我的 AI，神奇嗨螺只是一般的機器人。」
-**收到！我們已經為此準備好了「分體架構 (Split Architecture)」。**
-
-這套程式碼支援 **「單一核心，多重人格」** 的啟動模式：
-
-1.  **Bot A (神奇嗨螺)**
-    *   **設定**：`BOT_MODE=CONCH`
-    *   **功能**：只載入 `status`, `minecraft`, `terraria`。
-    *   **表現**：嚴肅、精準、管理員。
-
-2.  **Bot B (嗨嗨)**
-    *   **設定**：`BOT_MODE=HIHI`
-    *   **功能**：只載入 `ai_chat`。
-    *   **表現**：靈魂、聊天、陪伴。
-
-**結論**：您只要準備兩個 Discord Token，就可以讓她們變成 **兩個完全獨立** 的個體。
-(程式碼完全不用改，只要改啟動參數即可。)
-
-#### 6.19 為什麼不像測試機一樣分開資料夾？ (Implementation Strategy) - **NEW**
-您問：「為什麼不乾脆開一個 `discord_bot_hihi` 資料夾？」
-這是有講究的。
-
-1.  **測試機 (`discord_bot_dev`) 為什麼分開？**
-    *   因為那是 **「實驗室」**。
-    *   我們可能會在那裡把程式碼改壞、做破壞性測試。它必須 **物理隔離**，以免影響正式版。
-
-2.  **嗨嗨與嗨螺 為什麼在一起？**
-    *   因為她們都是 **「正式版」**。
-    *   她們共用 95% 的基礎建設：`main.py` (連線邏輯), `requirements.txt` (套件依賴), `.env` (設定檔讀取)。
-    *   **好處 (DRY原則)**：
-        *   未來如果要修復一個「連線錯誤」的 Bug，我只要修 `discord_bot/main.py` 一次，兩個機器人就同時修好了。
-        *   如果分開成兩個資料夾，我每次都要改兩邊，容易漏掉。
-
-**結論**：
-*   **不同環境 (Dev vs Prod)** -> 分資料夾。
-*   **不同功能 (HiHi vs Conch)** -> 分模組 (Cogs)，共用資料夾。
-這是最容易維護的專業架構。
-
-#### 1. 向量資料庫流 (RAG - Retrieval Augmented Generation)
-*   **做法**：把每一句話都切碎變成數學向量，存進資料庫 (如 Pinecone)。當你問「我上次說什麼？」，它去資料庫撈出最像的幾句話。
-*   **優點**：真正的無限記憶。
-*   **缺點**：**死板**。它適合「客服機器人」查規章，但不適合「聊天」。因為它撈出來的話通常很破碎，缺乏連續感。且技術門檻高，架設昂貴。
-
-#### 2. 摘要流 (Summarization)
-*   **做法**：每聊 10 句，就把這 10 句縮寫成 1 句：「使用者跟 AI 聊了關於天氣的事」。
-*   **優點**：非常省 Token。
-*   **缺點**：**失去靈魂**。原本好笑的對話細節會被壓縮成無聊的摘要。機器人會記得你們聊過天，但忘了你們是怎麼笑的。
-
-#### 3. 混合流 (Hybrid - 我們的方法) 🏆
-*   **做法**：**滑動視窗 (保留鮮活的近期對話)** + **特徵萃取 (記住關鍵情報)**。
-*   **定位**：這是目前 **Character AI (角色扮演)** 領域的主流做法。
-*   **理由**：它保留了「聊天」的流暢感 (因為近期對話是完整的)，同時只記住「重要」的事 (因為廢話不需要記)，是**體驗與成本的最佳平衡點**。
-
-
+| 變數名 | 用途 |
+|---|---|
+| `DISCORD_TOKEN` | 嗨嗨的 Discord Token |
+| `CONCH_TOKEN` | 神奇嗨螺的 Discord Token |
+| `BOT_MODE` | 啟動模式 (CONCH / HIHI / ALL) |
+| `GEMINI_API_KEY` | Google Gemini API Key |
+| `AI_MODEL_NAME` | AI 模型名稱 (預設: `models/gemini-3-flash-preview`) |
+| `AI_CHANNEL_ID` | AI 互動頻道 ID (支援逗號分隔多頻道) |
+| `DATABASE_URL` | Azure PostgreSQL 連線字串 |
+| `DISCORD_LOG_CHANNEL_ID` | 機器人日誌頻道 ID |
+| `TERRARIA_CHANNEL_ID` | Terraria 頻道 ID |
+| `GCP_PROJECT_ID` | GCP 專案 ID |
+| `GCP_ZONE` | GCP VM 區域 |
+| `VM2_INSTANCE_NAME` | VM2 實例名稱 |

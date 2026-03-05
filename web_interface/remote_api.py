@@ -140,10 +140,11 @@ SHUTDOWN_DELAY_SECONDS = 600  # 10 分鐘 = 600 秒
 
 shutdown_timer = None
 shutdown_lock = threading.Lock()
+auto_reason_flag = None
 
 def trigger_auto_shutdown():
-    """計時炸彈引爆，執行智慧安全關機並呼叫主機斷電"""
-    global shutdown_timer
+    """計時炸彈引爆，執行智慧安全關機"""
+    global shutdown_timer, auto_reason_flag
     try:
         # 1. 廣播關機警告並發送 stop 給所有 Minecraft 螢幕
         output = subprocess.check_output("screen -ls", shell=True, text=True, stderr=subprocess.STDOUT)
@@ -159,25 +160,8 @@ def trigger_auto_shutdown():
                     time.sleep(1)
                     subprocess.run(["screen", "-S", screen_name, "-p", "0", "-X", "stuff", "stop\r"])
 
-        # 2. 智慧監控行程：每 2 秒檢查一次 screen 是否完全結束
-        for _ in range(30):  # 最多等 60 秒 (2s * 30)
-            time.sleep(2)
-            try:
-                chk = subprocess.check_output("screen -ls", shell=True, text=True, stderr=subprocess.STDOUT)
-                still_running = False
-                for s in active_screens:
-                    if s in chk:
-                        still_running = True
-                        break
-                if not still_running:
-                    # 所有伺服器都消失了，代表 100% 存檔完畢並退出
-                    break
-            except subprocess.CalledProcessError:
-                break # screen -ls 回傳 1 通常代表沒有任何 screen 運行
-
-        # 3. 通知 VM1 切斷電源
-        req = urllib.request.Request(VM1_WEBHOOK_URL, method="POST")
-        urllib.request.urlopen(req, timeout=5)
+        # 標記為自動關機，等待 log_monitor_thread 捕捉到 Quit correctly 即可發送 webhook
+        auto_reason_flag = "auto"
 
     except Exception as e:
         print(f"[AutoShutdown] Error during shutdown sequence: {e}")
@@ -256,6 +240,18 @@ def log_monitor_thread():
             elif "Player disconnected:" in line or "PlayerLeave" in line:
                 trigger_server_list_cmd()
                 
+            # 偵測 Minecraft 伺服器順利結束存檔
+            elif "Quit correctly" in line:
+                global auto_reason_flag
+                reason = auto_reason_flag or "manual"
+                try:
+                    url = f"{VM1_WEBHOOK_URL}&reason={reason}"
+                    req = urllib.request.Request(url, method="POST")
+                    urllib.request.urlopen(req, timeout=5)
+                except Exception as e:
+                    print(f"Webhook error: {e}")
+                auto_reason_flag = None
+
             # 偵測 list 指令的回傳結果
             else:
                 m = list_pattern.search(line)

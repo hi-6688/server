@@ -254,53 +254,21 @@ class Minecraft(commands.Cog):
     @app_commands.command(name="mc關機", description="關閉 Minecraft 遠端雲端主機 (省錢)")
     @app_commands.checks.has_permissions(administrator=True)
     async def slash_mc_stop(self, interaction: discord.Interaction):
-        await interaction.response.send_message("🔴 正在備份設定檔並安全關閉伺服器...", ephemeral=False)
+        await interaction.response.send_message("🔴 伺服器正在執行安全存檔，完成後大約一分鐘內將自動切斷雲端主機電源。", ephemeral=False)
         
-        vm_name = "instance-20260220-174959"
-        
-        # 關機前先備份所有設定檔到 VM1 離線快取
+        # 關機前標記狀態，等待 VM2 透過 Webhook 回傳「Quit correctly」事件時切斷電源
         try:
-            import sys
-            api_path = "/home/terraria/servers/web_interface"
-            if api_path not in sys.path: sys.path.append(api_path)
-            import proxy_helpers
-            proxy_helpers.backup_all_instances_to_cache()
+            pending_file = '/home/terraria/servers/web_interface/.pending_vm_shutdown'
+            with open(pending_file, 'w') as f:
+                f.write('manual_discord')
         except Exception as e:
-            self.log_debug(f"Backup before shutdown failed: {e}")
+            self.log_debug(f"Failed to set pending shutdown flag: {e}")
 
-        # First send stop to screen nicely
+        # 發送停止指令給所有 Minecraft 螢幕
         for inst in self.instances:
             await self.send_command_to_instance(inst, "say Discord 機器人發起安全關機指令，系統執行存檔並準備斷電...\r")
             await asyncio.sleep(1)
             await self.send_command_to_instance(inst, "stop\r")
-            
-        # 智慧等待安全存檔完成 (最多等 60 秒)
-        for _ in range(30):
-            await asyncio.sleep(2)
-            try:
-                import sys
-                api_path = "/home/terraria/servers/web_interface"
-                if api_path not in sys.path: sys.path.append(api_path)
-                import proxy_helpers
-                status_res = proxy_helpers.proxy_to_agent("get_system_status")
-                
-                if status_res and status_res.get("status") == "success":
-                    active_screens = status_res.get("active_screens", [])
-                    all_stopped = True
-                    for inst in self.instances:
-                        if inst.get("screen_name") in active_screens:
-                            all_stopped = False
-                            break
-                    if all_stopped:
-                        break # 所有 Minecraft 皆已存檔結束
-            except Exception:
-                pass
-        
-        success = self.gcp_manager.stop_instance(vm_name)
-        if success:
-            await interaction.followup.send("💤 主機已安全關機斷電。")
-        else:
-            await interaction.followup.send("❌ 關機指令發送失敗。")
 
     async def read_log_loop(self, uuid, log_file):
         """Old local tail logic removed. Real-time log scraping is suspended in remote v1."""
