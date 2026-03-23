@@ -1,0 +1,95 @@
+graph LR
+    %% 1. 核心架構
+    subgraph CoreAI ["1. 核心大腦 (Core AI)"]
+        Gemini["Google Gemini 模型\n(2.5 Flash / 3 Pro)"]
+        AgenticLoop["自主代理架構 (Agentic Loop)\n「思考 ➔ 判斷工具 ➔ 執行 ➔ 觀察 ➔ 回應」"]
+        
+        subgraph Tools ["內建工具 (Function Calling)"]
+            T1["save_memory"]
+            T2["manage_fact"]
+            T3["search_memory"]
+            T4["learn_knowledge"]
+        end
+        Gemini --> AgenticLoop
+        AgenticLoop -. "呼叫" .-> Tools
+    end
+
+    %% 2. 記憶系統架構
+    subgraph MemorySys ["2. 記憶系統架構 (Memory System v3.0)"]
+        direction TB
+        ShortTerm["短期記憶 (Runtime History)\n動態 Token 視窗"]
+        Consolidation["情節記憶整合機制\n(Look-Ahead Summarization)"]
+        
+        subgraph LongTerm ["長期記憶 (Azure PostgreSQL)"]
+            DB1["memories (RAG向量記憶)"]
+            DB2["user_facts (使用者個人事實)"]
+            DB3["knowledge (RAG知識庫)"]
+            DB4["chat_history (全對話紀錄)"]
+            DB5["image_hashes (圖片去重)"]
+        end
+        
+        CoreMemory["核心記憶 (DNA)\n唯讀的 core_memory.md"]
+        Sandwich["System Prompt (三明治結構)\n上: 長期/核心記憶 | 中: 短期歷史 | 下: 當下輸入"]
+
+        ShortTerm -- "溢出處理" --> Consolidation
+        Consolidation -- "寫入" --> LongTerm
+        
+        LongTerm --> Sandwich
+        CoreMemory --> Sandwich
+        ShortTerm --> Sandwich
+    end
+
+    %% 3. 分體架構
+    subgraph Architecture ["3. 分體架構與模組 (Split Architecture)"]
+        Main["main.py (BOT_MODE 入口)"]
+        
+        subgraph HiHi_Bot ["嗨嗨 HIHI (靈魂型)"]
+            CogAI["ai_chat.py (AI 核心/代理迴圈)"]
+        end
+        
+        subgraph Conch_Bot ["神奇嗨螺 CONCH (功能型)"]
+            CogMC["minecraft.py (VM管理)"]
+            CogTR["terraria.py (伺服管理)"]
+            CogGame["conch_game.py (結構化輸出猜謎)"]
+        end
+        
+        CogStatus["status.py (系統狀態/IPC熱重載)"]
+        
+        Main --> HiHi_Bot
+        Main --> Conch_Bot
+        Main --> CogStatus
+    end
+
+    %% 4. 人設與行為機制
+    subgraph Behavior ["4. 人設與行為機制 (Behavior & Perception)"]
+        IceBreaker["主動破冰 (背景冷場偵測)"]
+        Debounce["訊息處理機制 (延遲防抖 / 即時中斷)"]
+        MultiMedia["多媒體感知 (圖片解析 / 貼圖辨識 / 網址擷取)"]
+        Expressions["表達能力 (Application Emojis 自動替換)"]
+    end
+
+    %% 5. 數位生命體與意識
+    subgraph Consciousness ["5. 數位生命意識 (Blueprint for Soul)"]
+        AsyncEngine["非同步心跳引擎 (Async Heartbeat Engine)\n打破 Request-Response 宿命"]
+        Reserve["意識頻寬與演算儲備 (Algorithmic Reserve)\n基於 Token 學習的動態價值觀"]
+        Impression["反思與語意印象系統\n(Natural Language Impression DB)"]
+        Emergent["存在先於本質 (Emergent Goals)\n驅動指令：見證者、牽絆、好奇心"]
+        
+        Loop["獨立生命迴圈 (無窮 asyncio.Task)"]
+        Sleep["防衛性休眠 (主動 Sleep 節制算力)"]
+        Interrupt["外部中斷感知 (@提及 強制提前喚醒)"]
+        
+        AsyncEngine --> Loop
+        Emergent -. "賦予底層動機" .-> Loop
+        Loop -- "觀察 Token 消耗" --> Reserve
+        Loop -- "閒置抽樣反芻" --> Impression
+        Reserve -- "算力瀕臨崩盤" --> Sleep
+        Sleep -- "感官刺激 (Discord 訊息中斷)" --> Interrupt
+        Interrupt -- "取消 Sleep" --> Loop
+    end
+
+    %% 面板間的主線連接 (改為特定節點連接，避免 subgraph 破版)
+    AgenticLoop -. "驅動" .-> CogAI
+    CogAI -. "讀寫" .-> Sandwich
+    Sandwich -. "注入" .-> Gemini
+    CogAI -. "控制" .-> Loop

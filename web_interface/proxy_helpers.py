@@ -6,43 +6,65 @@ import asyncio
 VM_NAME = "instance-20260220-174959"
 AGENT_PORT = 9999
 AGENT_SECRET = "hihi_secret_key_2026"
-SYNC_DIR = "/home/terraria/servers/web_interface/.sync"
-BACKUP_DIR = "/home/terraria/servers/web_interface/.backup_cache"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+SYNC_DIR = os.path.join(BASE_DIR, ".sync")
+BACKUP_DIR = os.path.join(BASE_DIR, ".backup_cache")
 
 # Use the GCPManager from discord_bot to keep logic DRY
 import sys
-sys.path.append("/home/terraria/servers/discord_bot")
+_parent_dir = os.path.dirname(BASE_DIR)
+if os.path.exists(os.path.join(_parent_dir, "discord_bot")):
+    sys.path.append(os.path.join(_parent_dir, "discord_bot"))
+# 在 Docker 環境中，utils 已直接掛載到 /app/utils，所以直接 import 即可
 from utils.gcp_manager import GCPManager
 gcp = GCPManager(project_id="project-ad2eecb1-dd0f-4cf4-b1a", zone="asia-east1-c")
 
+import time
+
+_vm_cache = {
+    'status': None, 'status_time': 0,
+    'ip': None, 'ip_time': 0,
+    'public_ip': None, 'public_ip_time': 0
+}
+CACHE_TTL = 10  # 快取 10 秒
+
 def is_vm2_running():
-    return gcp.get_instance_status(VM_NAME) == "RUNNING"
+    global _vm_cache
+    if time.time() - _vm_cache['status_time'] > CACHE_TTL:
+        _vm_cache['status'] = gcp.get_instance_status(VM_NAME) == "RUNNING"
+        _vm_cache['status_time'] = time.time()
+    return _vm_cache['status']
 
 def get_vm2_ip():
-    return gcp.get_instance_ip(VM_NAME)
+    global _vm_cache
+    if time.time() - _vm_cache['ip_time'] > CACHE_TTL:
+        _vm_cache['ip'] = gcp.get_instance_ip(VM_NAME)
+        _vm_cache['ip_time'] = time.time()
+    return _vm_cache['ip']
 
-async def _async_proxy(ip, action, kwargs):
-    url = f"http://{ip}:{AGENT_PORT}/"
-    headers = {"Authorization": f"Bearer {AGENT_SECRET}", "Content-Type": "application/json"}
-    payload = {"action": action, **kwargs}
-    async with aiohttp.ClientSession() as session:
-        async with session.post(url, headers=headers, json=payload, timeout=5) as resp:
-            resp.raise_for_status()
-            return await resp.json()
+def get_vm2_public_ip():
+    global _vm_cache
+    if time.time() - _vm_cache['public_ip_time'] > CACHE_TTL:
+        _vm_cache['public_ip'] = gcp.get_instance_public_ip(VM_NAME)
+        _vm_cache['public_ip_time'] = time.time()
+    return _vm_cache['public_ip']
+
+import requests
 
 def proxy_to_agent(action, **kwargs):
     ip = get_vm2_ip()
     if not ip:
         return {"status": "error", "message": "VM2 offline"}
     
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
+    url = f"http://{ip}:{AGENT_PORT}/"
+    headers = {"Authorization": f"Bearer {AGENT_SECRET}", "Content-Type": "application/json"}
+    payload = {"action": action, **kwargs}
     try:
-        return loop.run_until_complete(_async_proxy(ip, action, kwargs))
+        resp = requests.post(url, headers=headers, json=payload, timeout=5)
+        resp.raise_for_status()
+        return resp.json()
     except Exception as e:
         return {"status": "error", "message": str(e)}
-    finally:
-        loop.close()
 
 def save_offline_cache(instance_path, filename, content):
     os.makedirs(SYNC_DIR, exist_ok=True)
@@ -88,8 +110,7 @@ def backup_all_instances_to_cache():
     if not is_vm2_running(): return
     import sys
     # 由於在 api.py や minecraft.py 呼叫，必須確保載入 models
-    api_path = "/home/terraria/servers/web_interface"
-    if api_path not in sys.path: sys.path.append(api_path)
+    if BASE_DIR not in sys.path: sys.path.append(BASE_DIR)
     try:
         from models import InstanceManager
         mgr = InstanceManager()

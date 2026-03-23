@@ -11,7 +11,8 @@
 
 ```
 web_interface/
-├── api.py              ← 路由分發器 (入口, ~290 行)
+├── api.py              ← 路由分發器 (入口與 HTTP 伺服器, ~290 行)
+├── ws_server.py        ← WebSocket 廣播中樞，處理內部串流與外部長連線 (Port 24446)
 ├── models.py           ← 資料模型 (Instance + InstanceManager)
 ├── routes/
 │   ├── auth.py         ← /login
@@ -51,18 +52,24 @@ web_interface/
 *   `GET /server_status`: 檢查 UDP Port 佔用狀態與 `screen -ls` 以判定伺服器是否運行中。
 *   `GET /stats`: 回傳機器的系統負載狀態 (CPU, RAM, Disk, Net)。
 
-### 3.4 檔案與管理 (File Management)
+### 3.4 智慧型連線 (Smart Connection / WebSocket)
+*   **路由**: `ws://<VM1_IP>:24446/ws`
+*   **機制**: 負責與所有 Web 客戶端建立長連線。收到第一個連線時主動觸發 VM2 高頻推播模式，全部斷線時則停止推播以節省運算資源。
+*   **內部通訊**: 提供 `POST /internal_stream` 給 VM2 的 `remote_api.py`，用於接收即時 `console_log` 與伺服器即時負載狀態。
+
+### 3.5 檔案與管理 (File Management)
 *   `GET /read?file=...`: 讀取 `server.properties`, `allowlist.json` 等設定檔。
 *   `POST /write`: 覆寫設定檔內容。
 *   `POST /upload`: 支援 `multipart/form-data` 接收世界地圖包 (`.mcworld` / `.zip`) 並透過 Base64 proxy 至 Agent 端解壓縮。
 *   `POST /addon/upload`: 處理 Behavior / Resource packs 的上傳，並自動解析 `manifest.json` 寫入世界設定。
 
 ### 3.5 自動關機 Webhook (Auto-Shutdown)
-*   `POST /webhook/shutdown_vm2`: 接收 VM2 代理程式的關機請求。收到後執行：
-    1.  呼叫 `proxy_helpers.backup_all_instances_to_cache()` 備份所有設定檔至 VM1 離線快取。
-    2.  呼叫 `GCPManager.stop_instance()` 切斷 VM2 電源。
-    3.  透過 Discord Bot API 發送自動關機通知。
-*   **授權**: 必須在 Query 中攜帶 `key=API_KEY`。
+*   `POST /webhook/shutdown_vm2`: 接收 VM2 代理程式的關機請求。收到後執行相關檢查：
+    1.  如果傳入的 `reason` 不是 `auto`，但 VM1 上不存在 `.pending_vm_shutdown` 狀態標記檔，則視為普通的伺服器關機（如重啟指令）並忽略斷電要求。
+    2.  呼叫 `proxy_helpers.backup_all_instances_to_cache()` 備份所有設定檔至 VM1 離線快取。
+    3.  呼叫 `GCPManager.stop_instance()` 切斷 VM2 電源，並清除狀態標記。
+    4.  透過 Discord Bot API 發送自動或手動關機通知。
+*   **授權**: 必須在 Query 中攜帶 `key=API_KEY` 與選填參數 `reason` (auto | manual_web | manual_discord)。
 
 ## 4. 資料庫與持久化 (Persistence)
 *   **狀態與實例紀錄**: 使用本地端 `instances.json` 記錄 UUID。
@@ -74,5 +81,8 @@ web_interface/
 ## 5. 🚫 後端避坑指南 (Anti-Patterns)
 1. **禁止寫死伺服器路徑**: 必須透過 `current_instance.path` 來取得路徑，因為現在架構支援多實例 (Multi-instance)，寫死 `/home/terraria/servers/minecraft` 會導致呼叫錯誤的世界。
 2. **多重驗證機制注意**: 若要新增路由，務必確保判斷條件放在 Auth checking block 之下，避免產生無驗證即可呼叫的後門 API。
-3. **VM2 狀態檢查**: 後端依賴 `proxy_helpers` 來轉發請求，送出耗時/危險指令前，必須先以 `proxy_helpers.is_vm2_running()` 檢查目標主機是否在線。
+3. **VM2 狀態檢查與代理逾時 (Deadlock Prevention)**：
+    *   後端依賴 `proxy_helpers.py` 來轉發請求給 VM2。由於 Python `http.server` 使用多執行緒 (ThreadingTCPServer)，**絕對不要在裡面建立 `asyncio` 事件迴圈來打 API**，這會導致高頻請求時死鎖卡死。已全面改用同步的 `requests` 模組搭配 `timeout=5`。
+    *   為了防止前端在載入期間（例如 `/instances/list`）連續多次呼叫 `gcloud` 導致進程堵塞，必須使用 `is_vm2_running()` 和 `get_vm2_ip()` 中內建的 **10秒記憶體快取** (`_vm_cache`)。
 4. **新增路由時**: 在對應的 `routes/xxx.py` 中新增 handler 函式，然後在 `api.py` 的路由分發表中加入映射，不要直接在 `api.py` 中寫業務邏輯。
+5. **舊版相容性路由 (Legacy Fallback)**：`api.py` 設有特殊的邏輯處理舊版網頁（`/admin.html`），當接收到請求時會自動以 HTTP 302 重導向（Redirect）至新版 React APP（`/` 根目錄）。此外，若靜態檔案於新版不存在，會自動退回到 `legacy/` 目錄中尋找。

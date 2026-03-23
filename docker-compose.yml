@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  web-api:
+    build:
+      context: ./web_interface
+      dockerfile: Dockerfile
+    container_name: web-api
+    restart: unless-stopped
+    ports:
+      - "24445:24445" # 控制面板 HTTP API
+      - "24446:24446" # 即時日誌 WebSocket
+    volumes:
+      - ./web_interface:/app
+      - ./discord_bot/utils:/app/utils:ro # 共享 gcp_manager
+      - ./.env:/.env:ro # 確保 proxy_helpers 能向上找到 .env
+    env_file:
+      - .env
+
+  bot-hihi:
+    build:
+      context: ./discord_bot
+      dockerfile: Dockerfile
+    container_name: hihi-ai
+    restart: unless-stopped
+    environment:
+      - BOT_MODE=HIHI
+    env_file:
+      - .env
+    volumes:
+      - ./discord_bot:/app
+      - ./.env:/.env:ro # 確保 main.py 中 os.path.dirname(os.path.dirname(...)) 能找到 /.env
+    depends_on:
+      - web-api
+
+  bot-conch:
+    build:
+      context: ./discord_bot
+      dockerfile: Dockerfile
+    container_name: conch-tool
+    restart: unless-stopped
+    environment:
+      - BOT_MODE=CONCH
+    env_file:
+      - .env
+    volumes:
+      - ./discord_bot:/app
+      - ./.env:/.env:ro
+    depends_on:
+      - web-api

@@ -124,9 +124,19 @@ def handle_exec(handler, params, instance):
 
 
 def handle_server_status(handler, params, instance):
-    """GET /server_status — 查詢伺服器是否運行中"""
+    """GET /server_status — 查詢 VM2 虛擬機與遊戲伺服器的運行狀態"""
+    # vm2_online: GCP 虛擬機本身是否在跑 (不管遊戲有沒有開)
+    # running: Minecraft bedrock_server 進程是否啟動
+    vm2_online = proxy_helpers.is_vm2_running()
+    game_running = instance.is_running() if vm2_online else False
+    public_ip = proxy_helpers.get_vm2_public_ip() if vm2_online else None
+    
     handler._set_headers()
-    handler.wfile.write(json.dumps({"running": instance.is_running()}).encode('utf-8'))
+    handler.wfile.write(json.dumps({
+        "vm2_online": vm2_online,
+        "running": game_running,
+        "public_ip": public_ip
+    }).encode('utf-8'))
 
 
 def handle_stats(handler, params, instance):

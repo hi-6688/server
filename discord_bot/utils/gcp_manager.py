@@ -57,15 +57,37 @@ class GCPManager:
                 f'--zone={self.zone}',
                 '--format=value(status)'
             ]
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=5)
             status = result.stdout.strip()
             return status
+        except subprocess.TimeoutExpired as e:
+            logger.error(f"Timeout getting status for {instance_name}")
+            return None
         except subprocess.CalledProcessError as e:
             logger.error(f"Failed to get status for {instance_name}. Error: {e.stderr}")
             return None
     
     def get_instance_ip(self, instance_name: str) -> Optional[str]:
-         """Gets the external IP of a VM instance."""
+         """Gets the internal IP of a VM instance."""
+         try:
+             cmd = [
+                 'gcloud', 'compute', 'instances', 'describe', instance_name,
+                 f'--project={self.project_id}',
+                 f'--zone={self.zone}',
+                 '--format=value(networkInterfaces[0].networkIP)'
+             ]
+             result = subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=5)
+             ip = result.stdout.strip()
+             return ip
+         except subprocess.TimeoutExpired as e:
+             logger.error(f"Timeout getting IP for {instance_name}")
+             return None
+         except subprocess.CalledProcessError as e:
+             logger.error(f"Failed to get IP for {instance_name}. Error: {e.stderr}")
+             return None
+
+    def get_instance_public_ip(self, instance_name: str) -> Optional[str]:
+         """Gets the external public IP of a VM instance (For Discord Players)."""
          try:
              cmd = [
                  'gcloud', 'compute', 'instances', 'describe', instance_name,
@@ -73,9 +95,12 @@ class GCPManager:
                  f'--zone={self.zone}',
                  '--format=value(networkInterfaces[0].accessConfigs[0].natIP)'
              ]
-             result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+             result = subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=5)
              ip = result.stdout.strip()
              return ip
+         except subprocess.TimeoutExpired as e:
+             logger.error(f"Timeout getting Public IP for {instance_name}")
+             return None
          except subprocess.CalledProcessError as e:
-             logger.error(f"Failed to get IP for {instance_name}. Error: {e.stderr}")
+             logger.error(f"Failed to get Public IP for {instance_name}. Error: {e.stderr}")
              return None

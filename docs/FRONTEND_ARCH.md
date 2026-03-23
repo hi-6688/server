@@ -27,13 +27,15 @@ web_interface/
 ├── frontend/            ← React 前端
 │   ├── index.html       ← HTML 模板 (引入 Noto Sans TC + Font Awesome)
 │   └── src/
-│       ├── App.jsx              ← 主入口 (頂部導航 + 居中單欄佈局)
+│       ├── App.jsx              ← 主入口 (移除輪詢機制，依賴 ws_server 取代 HTTP)
 │       ├── index.css            ← 全域 Tailwind + 透明玻璃 CSS
 │       ├── main.jsx             ← React 掛載入口
+│       ├── hooks/               ← 客製化 Hooks
+│       │   └── useSmartSocket.js ← WebSocket 連線生命週期與斷線處理
 │       ├── components/
-│       │   ├── TopNav.jsx       ← 頂部雙層導航列 (取代舊版 Sidebar)
+│       │   ├── TopNav.jsx       ← 頂部雙層導航列 (取代舊版 Sidebar，包含連線狀態即時亮燈)
 │       │   ├── Dashboard.jsx    ← 狀態儀表板 (狀態區 + 9 張資訊卡片)
-│       │   ├── LiveConsole.jsx  ← 嵌入式即時終端機 (儀表板下方)
+│       │   ├── LiveConsole.jsx  ← 嵌入式即時終端機 (無延遲推播版本)
 │       │   ├── ConsolePage.jsx  ← 獨立全畫面終端機
 │       │   ├── PlayersPage.jsx  ← 白名單與權限管理
 │       │   ├── FilesPage.jsx    ← 世界地圖與模組管理
@@ -68,7 +70,7 @@ web_interface/
 
 ### 3.4 佈局結構 (Layout Structure)
 *   **頂部雙層導航 (TopNav)**: 固定於畫面頂部。
-    *   第一層：Logo + 伺服器名稱 + Tab 導航 (儀表板/設定/世界/規則/玩家)
+    *   第一層：圓角 Logo (含線上狀態指示燈) + 伺服器名稱 + Tab 導航 (儀表板/設定/世界/規則/玩家)
     *   第二層：伺服器列表 + 新增按鈕
     *   Active Tab 有底部亮線 indicator + 圖示發光效果
 *   **主內容區**: 居中單欄 (`max-w-7xl`)，根據 Tab 切換顯示不同頁面。

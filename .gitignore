@@ -91,3 +91,6 @@ export_presets.cfg
 # 離線快取 (VM2 設定檔備份)
 web_interface/.sync/
 web_interface/.backup_cache/
+
+.gemini/
+gha-creds-*.json

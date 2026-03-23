@@ -230,8 +230,9 @@ class Minecraft(commands.Cog):
         if success:
             await asyncio.sleep(5) # wait a bit for IP to populate
             ip = self.gcp_manager.get_instance_ip(vm_name)
+            public_ip = self.gcp_manager.get_instance_public_ip(vm_name)
             self.vm2_ip = ip # Update VM2 IP cache
-            
+
             # 從網頁介面載入代理工具並觸發離線同步
             try:
                 import sys
@@ -245,7 +246,7 @@ class Minecraft(commands.Cog):
             
             embed = discord.Embed(title="🟢 遊戲伺服器已開機通電", color=0x00FF00)
             embed.description = "**伺服器連線資訊:**"
-            embed.add_field(name="🌍 最新浮動 IP", value=f"`{ip}`", inline=False)
+            embed.add_field(name="🌍 最新浮動 IP", value=f"`{public_ip}`", inline=False)
             embed.add_field(name="⚠️ 提醒", value="目前 IP 為動態分配，請玩家於遊戲選單中更新此最新 IP 加入遊戲。", inline=False)
             await interaction.followup.send(embed=embed)
         else:
@@ -326,7 +327,8 @@ class Minecraft(commands.Cog):
         active_screens = res.get('screens', [])
         
         embed = discord.Embed(title="🧱 Minecraft 多重伺服器狀態", color=0x00FF00)
-        embed.description = f"🌍 主機 IP: `{vm_ip}`\n"
+        public_ip = self.gcp_manager.get_instance_public_ip(vm_name) or "嘗試獲取中..."
+        embed.description = f"🌍 主機 IP: `{public_ip}`\n"
         
         # 4. 針對每一個實例抓取詳細資料 (嘗試併發執行以節省時間)
         async def fetch_instance_status(inst):

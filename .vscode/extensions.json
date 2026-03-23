@@ -1,5 +1,6 @@
 {
     "recommendations": [
-        "cweijan.dbclient-jdbc"
+        "cweijan.dbclient-jdbc",
+        "github.copilot"
     ]
 }

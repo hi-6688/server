@@ -1,0 +1,5 @@
+requests
+aiohttp
+websockets
+google-api-python-client
+google-auth

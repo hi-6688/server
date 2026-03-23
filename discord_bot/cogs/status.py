@@ -31,6 +31,15 @@ class Status(commands.Cog):
         # Load Admin Channel ID for IPC Security
         admin_channel_str = FULL_CONFIG.get('channels', {}).get('後台管理頻道', '0')
         self.admin_channel_id = int(admin_channel_str) if admin_channel_str else 0
+        
+        # Determine Bot Name based on BOT_MODE
+        mode = os.getenv('BOT_MODE', 'ALL').upper()
+        if mode == 'HIHI':
+            self.bot_name = "嗨嗨"
+        elif mode == 'CONCH':
+            self.bot_name = "神奇嗨螺"
+        else:
+            self.bot_name = "機器人"
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -54,7 +63,7 @@ class Status(commands.Cog):
         self.log_channel = self.bot.get_channel(self.log_channel_id)
         if self.log_channel:
             # 發送啟動訊息
-            embed = discord.Embed(title="🤖 機器人已重啟", description="設定檔已重新載入！指令列表已更新。", color=0x00ff00)
+            embed = discord.Embed(title=f"🤖 {self.bot_name}已重啟", description="設定檔已重新載入！指令列表已更新。", color=0x00ff00)
             await self.log_channel.send(embed=embed)
 
     async def verify_permission(self, interaction: discord.Interaction, command_key: str) -> bool:
@@ -102,10 +111,10 @@ class Status(commands.Cog):
 
         if message.content == "!ipc_signal:ping":
             latency = round(self.bot.latency * 1000)
-            await message.channel.send(f"🤖 神奇嗨螺 Pong! ({latency}ms)")
+            await message.channel.send(f"🤖 {self.bot_name} Pong! ({latency}ms)")
             
         elif message.content == "!ipc_signal:reload":
-            await message.channel.send("🤖 神奇嗨螺收到更新訊號，開始重載...")
+            await message.channel.send(f"🤖 {self.bot_name}收到更新訊號，開始重載...")
             await self.do_reload(interaction=None, channel=message.channel)
 
     async def do_reload(self, interaction=None, channel=None):
@@ -132,8 +141,7 @@ class Status(commands.Cog):
         if interaction:
             await interaction.followup.send(result_text)
         elif channel:
-            await channel.send(f"🤖 神奇嗨螺重載完成！\n{result_text}")
-
+            await channel.send(f"🤖 {self.bot_name}重載完成！\n{result_text}")
 
 
 async def setup(bot):

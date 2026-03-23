@@ -13,6 +13,14 @@ import glob
 PORT = 9999
 API_KEY = "hihi_secret_key_2026"  # Simple security token
 
+# ==========================================
+# 智慧型串流全域變數 (Smart Connection)
+# ==========================================
+STREAM_URL = "http://39.12.35.16:24446/internal_stream?key=AdminKey123456"
+is_streaming = False
+stream_thread = None
+stream_log_process = None
+
 class AgentHandler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -120,6 +128,16 @@ class AgentHandler(http.server.BaseHTTPRequestHandler):
             except Exception as e:
                 self._send_json({"status": "error", "message": str(e)}, 500)
                 
+        elif action == "start_stream":
+            screen_name = data.get('screen_name', 'main')
+            filepath = f"/home/terraria/servers/instances/{screen_name}/bedrock_screen.log"
+            start_streaming_to_vm1(filepath)
+            self._send_json({"status": "success", "message": "Streaming started"})
+
+        elif action == "stop_stream":
+            stop_streaming_to_vm1()
+            self._send_json({"status": "success", "message": "Streaming stopped"})
+                
         else:
             self.send_response(400)
             self.end_headers()
@@ -132,10 +150,102 @@ class AgentHandler(http.server.BaseHTTPRequestHandler):
         self.wfile.write(json.dumps(data).encode())
 
 # ==========================================
+# 智慧型連線背景推播 (Smart Connection Streamer)
+# ==========================================
+
+import psutil # Ensure this is available
+
+def stream_worker(filepath):
+    global is_streaming, stream_log_process
+    print(f"[Streamer] Started pushing logs from {filepath} to VM1")
+    
+    # 開啟 tail -F 監控特定伺服器的 log
+    try:
+        stream_log_process = subprocess.Popen(["tail", "-n", "0", "-F", filepath], stdout=subprocess.PIPE, text=True)
+    except Exception as e:
+        print(f"[Streamer] Failed to start tail: {e}")
+        return
+
+    # 定期回報資源使用率的非阻塞檢查時間
+    last_status_time = time.time()
+
+    try:
+        # non-blocking 讀取，配合頻率控制
+        os.set_blocking(stream_log_process.stdout.fileno(), False)
+        
+        while is_streaming:
+            # 1. 發送日誌更新
+            log_batch = ""
+            for _ in range(50): # 一次最多處理 50 行避免卡住
+                line = stream_log_process.stdout.readline()
+                if not line:
+                    break
+                log_batch += line
+            
+            if log_batch:
+                payload = {
+                    "type": "console_log",
+                    "data": log_batch
+                }
+                _post_to_vm1_stream(payload)
+
+            # 2. 每秒發送一次 CPU/RAM 狀態
+            now = time.time()
+            if now - last_status_time >= 1.0:
+                mem = psutil.virtual_memory()
+                cpu_percent = psutil.cpu_percent(interval=None)
+                status_payload = {
+                    "type": "server_status",
+                    "data": {
+                        "system": {
+                            "cpu_percent": cpu_percent,
+                            "ram_used_mb": mem.used // (1024*1024),
+                            "ram_total_mb": mem.total // (1024*1024),
+                            "ram_percent": mem.percent
+                        },
+                        "timestamp": int(now * 1000)
+                    }
+                }
+                _post_to_vm1_stream(status_payload)
+                last_status_time = now
+
+            time.sleep(0.1) # 100ms cycle
+
+    except Exception as e:
+        print(f"[Streamer] Worker crashed: {e}")
+    finally:
+        if stream_log_process:
+            stream_log_process.kill()
+            stream_log_process = None
+        print("[Streamer] Stopped.")
+
+def _post_to_vm1_stream(payload):
+    try:
+        req = urllib.request.Request(STREAM_URL, method="POST")
+        req.add_header('Content-Type', 'application/json')
+        data = json.dumps(payload).encode('utf-8')
+        urllib.request.urlopen(req, data=data, timeout=1)
+    except Exception as e:
+        # 暫時忽略連線錯誤以防止阻塞
+        pass 
+
+def start_streaming_to_vm1(filepath):
+    global is_streaming, stream_thread
+    if is_streaming:
+        return
+    is_streaming = True
+    stream_thread = threading.Thread(target=stream_worker, args=(filepath,), daemon=True)
+    stream_thread.start()
+
+def stop_streaming_to_vm1():
+    global is_streaming
+    is_streaming = False
+
+# ==========================================
 # 背景事件驅動機制 (自動關機與智慧存檔偵測)
 # ==========================================
 
-VM1_WEBHOOK_URL = "http://39.12.35.16:24445/webhook/shutdown_vm2?key=AdminKey123456"
+VM1_WEBHOOK_URL = "http://10.140.0.2:24445/webhook/shutdown_vm2?key=AdminKey123456"
 SHUTDOWN_DELAY_SECONDS = 600  # 10 分鐘 = 600 秒
 
 shutdown_timer = None

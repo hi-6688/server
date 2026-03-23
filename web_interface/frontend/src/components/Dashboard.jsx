@@ -3,7 +3,7 @@ export default function Dashboard({
   serverStatus, isOnline, activePlayers, maxPlayers, version,
   cpuLoad, ramPercent, ramUsed, ramTotal,
   diskPercent, diskUsed, diskTotal, netRx, netTx,
-  onStart, onStop, onRestart
+  onStart, onStop, onRestart, publicIp
 }) {
   return (
     <div className="flex flex-col gap-4">
@@ -42,22 +42,22 @@ export default function Dashboard({
         </div>
       </div>
 
-      {/* 資訊卡片 Grid (單欄) */}
-      <div className="grid grid-cols-1 gap-4">
+      {/* 資訊卡片 Grid (手機單欄、平板以上雙欄) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* 1. 加入伺服器連結 */}
-        <div className="glass-panel p-4 rounded-2xl flex items-center justify-between">
+        <div className="glass-panel p-4 rounded-2xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           <div className="font-bold text-text-sub">
             <i className="fas fa-share-alt mr-2"></i>加入伺服器連結
           </div>
           <div className="flex items-center gap-2 flex-1 justify-end">
-            <span className="font-mono text-sm text-white/90 bg-black/30 px-3 py-2 rounded-md border border-white/10 truncate max-w-[400px] flex-1 shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)]">
+            <span className="font-mono text-xs sm:text-sm text-white/90 bg-black/30 px-3 py-2 rounded-md border border-white/10 truncate max-w-[200px] sm:max-w-[400px] flex-1 shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)]">
               {window.location.origin}/join.html
             </span>
             <button className="btn-action" onClick={() => navigator.clipboard.writeText(window.location.origin + '/join.html')}>
-              <i className="fas fa-copy"></i> 複製
+              <i className="fas fa-copy"></i> <span className="hidden sm:inline">複製</span>
             </button>
             <a className="btn-action" href="/join.html" target="_blank" rel="noreferrer">
-              <i className="fas fa-external-link-alt"></i> 開啟
+              <i className="fas fa-external-link-alt"></i> <span className="hidden sm:inline">開啟</span>
             </a>
           </div>
         </div>
@@ -67,7 +67,7 @@ export default function Dashboard({
           <div className="font-bold text-text-sub">
             <i className="fas fa-network-wired mr-2"></i>伺服器 IP (Address)
           </div>
-          <span className="font-mono text-base text-white">34.81.50.240</span>
+          <span className="font-mono text-base text-white">{publicIp || '載入中...'}</span>
         </div>
 
         {/* 3. 連接埠 */}

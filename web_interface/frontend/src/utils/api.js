@@ -5,18 +5,25 @@ var BASE_URL = '';
 var API_KEY = '';
 var CURRENT_INSTANCE = 'main';
 
+export const getCurrentInstance = () => CURRENT_INSTANCE;
+export const setCurrentInstance = (id) => { CURRENT_INSTANCE = id; };
+
 // 初始化 API Key
 export var initApi = async function () {
     try {
-        var configUrl = window.location.protocol + '//' + window.location.hostname + ':25564/admin_config.json';
-        var res = await fetch(configUrl);
-        if (res.ok) {
-            var data = await res.json();
-            API_KEY = data.apiKey || '';
-            console.log('API Key loaded successfully.');
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlKey = urlParams.get('key');
+
+        if (urlKey) {
+            API_KEY = urlKey;
+        } else {
+            // 提供暫時的預設開發用金鑰 (配合 api.py 中的設定)
+            API_KEY = 'AdminKey123456';
+            console.warn('未在 URL 找到 key 參數，使用預設金鑰');
         }
+        console.log('API Key is ready.');
     } catch (e) {
-        console.warn('Failed to load API config:', e);
+        console.error('API 初始化發生錯誤:', e);
     }
 };
 
@@ -49,6 +56,9 @@ var fetchApi = async function (endpoint, method, body) {
     return await res.json();
 };
 
+// ==================== 實例管理 ====================
+export var fetchInstances = function () { return fetchApi('/instances/list'); };
+
 // ==================== 伺服器操作 ====================
 
 // 取得伺服器狀態 (合併 server_status + stats)
@@ -58,7 +68,12 @@ export var fetchStatus = async function () {
         var statsRes = await fetchApi('/stats');
         return {
             status: 'success',
+            // VM2 虛擬機是否上線 (不管遊戲有沒有開)
+            vm2_online: statusRes.vm2_online || false,
+            // Minecraft 伺服器是否正在執行
             server_status: statusRes.running ? 'online' : 'offline',
+            // 最新浮動 IP
+            public_ip: statusRes.public_ip || window.location.hostname,
             stats: {
                 cpu: statsRes.cpu?.load_1 || 0,
                 mem: statsRes.memory?.percent || 0
@@ -66,7 +81,7 @@ export var fetchStatus = async function () {
             players_online: 0
         };
     } catch (e) {
-        return { status: 'error' };
+        return { status: 'error', vm2_online: false };
     }
 };
 

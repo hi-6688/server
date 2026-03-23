@@ -1,7 +1,7 @@
 // LiveConsole.jsx — 嵌入式即時日誌 (舊版配色)
 import { useEffect, useRef } from 'react';
 
-export default function LiveConsole({ logs, commandInput, setCommandInput, onSendCommand }) {
+export default function LiveConsole({ logs, commandInput, setCommandInput, onSendCommand, wsConnected = false }) {
   const logsContainerRef = useRef(null);
 
   // 只在日誌容器內部捲動，不影響整個頁面
@@ -29,9 +29,9 @@ export default function LiveConsole({ logs, commandInput, setCommandInput, onSen
       <div className="h-12 border-b border-white/10 flex items-center px-4 shrink-0">
         <i className="fas fa-terminal text-success mr-3"></i>
         <h3 className="text-white font-semibold text-sm">Live Console</h3>
-        <span className="ml-auto flex items-center gap-2 text-xs text-green-400">
-          <div className="status-dot status-dot-online"></div>
-          Connected
+        <span className={`ml-auto flex items-center gap-2 text-xs ${wsConnected ? 'text-green-400' : 'text-yellow-400'}`}>
+          <div className={`w-2 h-2 rounded-full ${wsConnected ? 'bg-green-400 shadow-[0_0_8px_rgba(74,222,128,0.5)] animate-pulse' : 'bg-yellow-400 shadow-[0_0_8px_rgba(250,204,21,0.5)] animate-ping'}`}></div>
+          {wsConnected ? 'Connected' : 'Reconnecting...'}
         </span>
       </div>
 

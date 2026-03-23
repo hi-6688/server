@@ -21,6 +21,9 @@ from routes import auth, server, instances, files, worlds, addons
 PORT = 24445
 API_KEY = "AdminKey123456"
 
+# 引入 WebSocket 服務
+from ws_server import start_ws_server
+
 # 初始化實例管理器
 instance_manager = InstanceManager()
 
@@ -32,12 +35,14 @@ class ReuseAddrTCPServer(socketserver.ThreadingTCPServer):
 class CustomHandler(http.server.SimpleHTTPRequestHandler):
     """路由分發處理器 — 根據路徑分派給對應的路由模組"""
 
-    def _set_headers(self, code=200, content_type='application/json'):
+    def _set_headers(self, code=200, content_type='application/json', cache_control=None):
         self.send_response(code)
         self.send_header('Content-Type', content_type)
         self.send_header('Access-Control-Allow-Origin', '*')
         self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        if cache_control:
+            self.send_header('Cache-Control', cache_control)
         self.end_headers()
 
     def do_OPTIONS(self):
@@ -82,12 +87,13 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
 
         # Webhook (VM2 自動關機與手動關機回傳)
         if parsed.path == '/webhook/shutdown_vm2':
-            if params.get('key') != API_KEY:
+            query_params = urllib.parse.parse_qs(parsed.query)
+            if query_params.get('key', [''])[0] != API_KEY:
                 self._set_headers(403)
                 self.wfile.write(b'{"error":"Forbidden"}')
                 return
 
-            reason = params.get('reason', ['auto'])[0]
+            reason = query_params.get('reason', ['auto'])[0]
             pending_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.pending_vm_shutdown')
             
             if reason != 'auto' and not os.path.exists(pending_file):
@@ -261,22 +267,44 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
 
             requested_path = parsed.path.lstrip('/')
 
-            # /admin.html → 重導向到新版首頁
+            # /admin.html → 重導向到新版首頁 (React UI)
             if requested_path == 'admin.html':
                 self.send_response(302)
                 self.send_header('Location', '/')
                 self.end_headers()
                 return
 
+            # legacy 靜態資源回退：若 frontend/dist 裡找不到，就嘗試 legacy/ 目錄
+            legacy_dir = os.path.join(base_dir, 'legacy')
+            legacy_path = os.path.join(legacy_dir, requested_path)
+            if os.path.exists(legacy_path) and os.path.isfile(legacy_path):
+                ctype = 'application/octet-stream'
+                if requested_path.endswith('.js'):
+                    ctype = 'application/javascript'
+                elif requested_path.endswith('.css'):
+                    ctype = 'text/css'
+                elif requested_path.endswith('.html'):
+                    ctype = 'text/html'
+                self._set_headers(200, ctype, 'no-cache')
+                with open(legacy_path, 'rb') as f:
+                    self.wfile.write(f.read())
+                return
+
             if not requested_path:
                 requested_path = 'index.html'
 
-            # 優先讀取 React build 目錄
+            # 如果是請求 index.html 也加上 no-cache
             dist_path = os.path.join(dist_dir, requested_path)
-            if os.path.exists(dist_path) and os.path.isfile(dist_path):
-                ctype = 'application/octet-stream'
+            if not os.path.exists(dist_path):
+                requested_path = 'index.html'
+                dist_path = os.path.join(dist_dir, 'index.html')
+
+            if os.path.exists(dist_path):
+                ctype = 'text/plain'
+                cache_policy = None
                 if requested_path.endswith('.html'):
                     ctype = 'text/html'
+                    cache_policy = 'no-cache, no-store, must-revalidate'
                 elif requested_path.endswith('.js'):
                     ctype = 'application/javascript'
                 elif requested_path.endswith('.css'):
@@ -287,7 +315,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                     ctype = 'image/png'
                 elif requested_path.endswith('.jpg') or requested_path.endswith('.jpeg'):
                     ctype = 'image/jpeg'
-                self._set_headers(200, ctype)
+                self._set_headers(200, ctype, cache_control=cache_policy)
                 with open(dist_path, 'rb') as f:
                     self.wfile.write(f.read())
                 return
@@ -295,14 +323,19 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             # SPA Fallback: 未知路徑一律回傳 index.html (React 前端處理路由)
             index_path = os.path.join(dist_dir, 'index.html')
             if os.path.exists(index_path):
-                self._set_headers(200, 'text/html')
+                self._set_headers(200, 'text/html', cache_control='no-cache, no-store, must-revalidate')
                 with open(index_path, 'rb') as f:
                     self.wfile.write(f.read())
             else:
                 self._set_headers(404)
                 self.wfile.write(b'Not Found')
 
+if __name__ == '__main__':
+    # 啟動 WebSocket 伺服器 (背景線程)
+    ws_thread = threading.Thread(target=start_ws_server, daemon=True)
+    ws_thread.start()
 
-with ReuseAddrTCPServer(("", PORT), CustomHandler) as httpd:
-    print("Server running on port %s" % PORT)
-    httpd.serve_forever()
+    # 啟動 HTTP 伺服器 (主線程)
+    with ReuseAddrTCPServer(("", PORT), CustomHandler) as httpd:
+        print("HTTP Server running on port %s" % PORT)
+        httpd.serve_forever()

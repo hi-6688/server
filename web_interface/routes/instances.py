@@ -4,13 +4,21 @@ import json
 
 def handle_list(handler, params, instance_manager):
     """GET /instances/list — 列出所有伺服器實例"""
+    print("handle_list: start")
     insts = []
+    print(f"handle_list: get_all_instances count={len(instance_manager.get_all_instances())}")
     for i in instance_manager.get_all_instances():
+        print(f"handle_list: processing instance {i.name}")
         d = i.to_dict()
+        print(f"handle_list: checking is_running for {i.name}")
         d['is_running'] = i.is_running()
+        print(f"handle_list: done checking {i.name}")
         insts.append(d)
+    print("handle_list: preparing headers")
     handler._set_headers()
+    print("handle_list: writing response")
     handler.wfile.write(json.dumps({"instances": insts}).encode('utf-8'))
+    print("handle_list: finish")
 
 
 def handle_create(handler, params, instance_manager):

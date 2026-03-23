@@ -9,7 +9,8 @@ import shutil
 import re
 
 # 設定常數
-INSTANCES_FILE = '/home/terraria/servers/web_interface/instances.json'
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+INSTANCES_FILE = os.path.join(BASE_DIR, 'instances.json')
 DEFAULT_SERVER_ROOT = '/home/terraria/servers/minecraft'
 
 
@@ -41,27 +42,22 @@ class Instance:
         return os.path.join(self.path, 'bedrock_screen.log')
 
     def is_running(self):
-        """透過 UDP port 佔用 + screen session 判斷伺服器是否運行中"""
-        # 1. 嘗試綁定 UDP port，如果失敗表示已被佔用 (運行中)
-        port_open = False
-        try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            sock.bind(('0.0.0.0', self.port))
-            sock.close()
-            port_open = True  # 綁定成功 = Port 空閒 = 未運行
-        except OSError:
-            port_open = False  # 綁定失敗 = Port 佔用 = 運行中
-
-        if port_open:
+        """判斷遠端伺服器是否運行中：優先查詢 VM2 Agent，超時時以 GCP 來確認 VM2 開機狀態"""
+        import proxy_helpers
+        # 第一層：GCP 機器是否開啟
+        if not proxy_helpers.is_vm2_running():
             return False
-
-        # 2. 確認 screen session 存在
+        # 第二層：嘗試向 VM2 Agent 查詢 screen 狀態
         try:
-            cmd = "screen -ls | grep -q '\\.%s\\s'" % self.screen_name
-            subprocess.check_call(cmd, shell=True)
-            return True
-        except subprocess.CalledProcessError:
-            return False
+            res = proxy_helpers.proxy_to_agent("get_system_status")
+            if isinstance(res, dict) and res.get("status") == "success":
+                screens = res.get("screens", [])
+                return self.screen_name in screens
+        except Exception:
+            pass
+        # Agent 超時或無回應時，VM2 機器確實做開著，僅代表 Agent 未就緒，
+        # 退而求其次回傳 True (反映「VM2 開機中」而非絕對離線)
+        return True
 
 
 class InstanceManager:

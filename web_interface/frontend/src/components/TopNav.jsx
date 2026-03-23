@@ -1,5 +1,13 @@
 // TopNav.jsx — 頂部雙層導航列 (還原舊版 admin.html 的頂部導航)
-export default function TopNav({ activeTab = 'dashboard', onTabChange = () => { }, isOnline = false }) {
+export default function TopNav({
+    activeTab = 'dashboard',
+    onTabChange = () => { },
+    isOnline = false,
+    wsConnected = false,
+    instances = [],
+    currentInstance = 'main',
+    onInstanceChange = () => { }
+}) {
     // 導航項目定義 (與舊版一致)
     const tabs = [
         { id: 'dashboard', icon: 'dashboard', label: '儀表板' },
@@ -55,20 +63,43 @@ export default function TopNav({ activeTab = 'dashboard', onTabChange = () => { 
                             </a>
                         ))}
                     </div>
+
+                    {/* 右側：WebSocket 狀態與設定 (或未來的使用者頭像) */}
+                    <div className="flex items-center gap-4">
+                        <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/40 border border-white/5 backdrop-blur-sm">
+                            <div className={`w-2 h-2 rounded-full ${wsConnected ? 'bg-green-400 shadow-[0_0_8px_rgba(74,222,128,0.5)] animate-pulse' : 'bg-red-400 shadow-[0_0_8px_rgba(248,113,113,0.5)]'}`}></div>
+                            <span className={`text-[10px] font-medium tracking-wide ${wsConnected ? 'text-green-400/90' : 'text-red-400/90'}`}>
+                                {wsConnected ? 'LIVE' : 'HTTP'}
+                            </span>
+                        </div>
+                    </div>
                 </div>
             </nav>
 
             {/* 第二層：伺服器列表 */}
             <div className="w-full transition-all duration-300 bg-black/30 border-b border-white/10">
                 <div className="max-w-7xl mx-auto w-full px-6 py-3 flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                        <div className="font-bold text-white uppercase tracking-widest whitespace-nowrap">伺服器列表</div>
+                    <div className="flex items-center gap-4 overflow-x-auto custom-scrollbar">
+                        <div className="font-bold text-white uppercase tracking-widest whitespace-nowrap hidden sm:block">伺服器列表</div>
+                        <div className="flex items-center gap-2">
+                            {instances.map(inst => (
+                                <button
+                                    key={inst.uuid}
+                                    onClick={() => onInstanceChange(inst.uuid)}
+                                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all whitespace-nowrap border ${currentInstance === inst.uuid ? 'bg-primary/20 border-primary text-white shadow-[0_0_10px_rgba(238,43,140,0.5)]' : 'bg-white/5 border-white/10 text-white/70 hover:bg-white/10 hover:text-white'}`}
+                                >
+                                    {inst.name}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                    <div className="shrink-0 ml-4 hidden md:block">
                         <button className="px-4 py-2 rounded-xl bg-green-500/20 border border-white/20 text-green-400 hover:bg-green-500/40 transition-colors whitespace-nowrap">
                             + 新增
                         </button>
                     </div>
-                </div>
-            </div>
-        </div>
+                </div >
+            </div >
+        </div >
     );
 }
