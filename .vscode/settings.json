@@ -39,5 +39,17 @@
             "icon": "sparkle",
             "color": "terminal.ansiCyan"
         }
-    }
+    },
+
+    // === Python 環境設定 ===
+    // 使用 discord_bot 的虛擬環境作為預設 interpreter
+    "python.defaultInterpreterPath": "${workspaceFolder}/discord_bot/.venv/bin/python",
+    // 讓 IDE 能解析各子專案之間的相對 import
+    "python.analysis.extraPaths": [
+        "${workspaceFolder}/web_interface",
+        "${workspaceFolder}/discord_bot",
+        "${workspaceFolder}"
+    ],
+    // 不自動啟動虛擬環境（因為有多個子專案各有自己的 venv）
+    "python.terminal.activateEnvironment": false
 }
