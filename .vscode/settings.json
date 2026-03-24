@@ -1,4 +1,6 @@
 {
+    // ⚠️ 注意：密碼請勿寫死在此檔案中！
+    // SQLTools 會在連線時提示輸入密碼，或使用 "askForPassword": true
     "sqltools.connections": [
         {
             "previewLimit": 50,
@@ -8,7 +10,7 @@
             "name": "HiHi Brain (SQLTools)",
             "database": "postgres",
             "username": "hi6688",
-            "password": "andy@950501",
+            "askForPassword": true,
             "pgOptions": {
                 "ssl": {
                     "rejectUnauthorized": false
@@ -23,11 +25,19 @@
             "host": "hihi-memory.postgres.database.azure.com",
             "port": 5432,
             "user": "hi6688",
-            "password": "andy@950501",
+            "password": "",
             "database": "postgres",
             "ssl": true,
             "timezone": "+00:00"
         }
     ],
-    "css.lint.unknownAtRules": "ignore"
+    "css.lint.unknownAtRules": "ignore",
+    "terminal.integrated.profiles.linux": {
+        "Gemini CLI": {
+            "path": "/bin/bash",
+            "args": ["-c", "gemini"],
+            "icon": "sparkle",
+            "color": "terminal.ansiCyan"
+        }
+    }
 }

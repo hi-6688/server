@@ -76,7 +76,7 @@ discord_bot/data/
 discord_bot/test_audio.wav
 
 # Caches, Venvs and Logs
-.agent/workflows/
+# .agent/workflows/ 需要被 Git 追蹤（已取消忽略）
 scripts/nbt_env/
 web_interface/api_log.out
 *.out
