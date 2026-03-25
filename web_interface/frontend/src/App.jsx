@@ -6,8 +6,15 @@ import LiveConsole from './components/LiveConsole';
 import ConsolePage from './components/ConsolePage';
 import PlayersPage from './components/PlayersPage';
 import FilesPage from './components/FilesPage';
+import WorldsPage from './components/WorldsPage';
+import AddonsPage from './components/AddonsPage';
+import GameRulesPage from './components/GameRulesPage';
 import SettingsPage from './components/SettingsPage';
-import { initApi, fetchStatus, sendPowerAction, sendCommandToConsole, fetchInstances, setCurrentInstance } from './utils/api';
+import InstanceModal from './components/InstanceModal';
+import { 
+    initApi, fetchStatus, sendPowerAction, sendCommandToConsole, 
+    fetchInstances, createInstance, deleteInstance, setCurrentInstance 
+} from './utils/api';
 import { useSmartSocket } from './hooks/useSmartSocket';
 
 function App() {
@@ -17,6 +24,7 @@ function App() {
   // 實例列表狀態
   const [instances, setInstances] = useState([]);
   const [currentInstance, setLocalCurrentInstance] = useState('main');
+  const [isInstanceModalOpen, setInstanceModalOpen] = useState(false);
 
   // === Dashboard 狀態 ===
   // 透過 WebSocket 取得最新的 log 陣列，不再寫死假資料
@@ -42,10 +50,7 @@ function App() {
   // === 智慧型連線 (Smart Connection) ===
   const { isConnected, serverState, logs: wsLogs, sendCommand } = useSmartSocket();
 
-  // 初始化 API 與拉取實例清單
-  useEffect(() => {
-    const setup = async () => {
-      await initApi();
+  const loadInstances = async () => {
       try {
         const res = await fetchInstances();
         if (res.instances) {
@@ -54,6 +59,13 @@ function App() {
       } catch (e) {
         console.warn('Failed to fetch instances:', e);
       }
+  };
+
+  // 初始化 API 與拉取實例清單
+  useEffect(() => {
+    const setup = async () => {
+      await initApi();
+      await loadInstances();
       setApiReady(true);
     };
     setup();
@@ -148,6 +160,26 @@ function App() {
     setRamPercent(0);
     // 重設其他狀態...
   };
+  
+  // 建立/刪除實例
+  const handleCreateInstance = async (name, port, channelId) => {
+      await createInstance(name, port, channelId);
+      await loadInstances(); // Refresh list
+  };
+  
+  const handleDeleteInstance = async (uuid) => {
+      if (uuid === 'main') {
+          alert('不可刪除主實例！');
+          return;
+      }
+      if (!window.confirm('確定要刪除此伺服器實例嗎？此操作無法復原。')) return;
+      await deleteInstance(uuid);
+      await loadInstances(); // Refresh list
+      // 如果刪除的是當前實例，切換回主實例
+      if (currentInstance === uuid) {
+          handleInstanceChange('main');
+      }
+  };
 
   // 電源控制
   const handleStart = async () => {
@@ -189,6 +221,9 @@ function App() {
       case 'console': return <ConsolePage />;
       case 'players': return <PlayersPage />;
       case 'files': return <FilesPage />;
+      case 'worlds': return <WorldsPage />;
+      case 'gamerules': return <GameRulesPage />;
+      case 'addons': return <AddonsPage />;
       case 'settings': return <SettingsPage />;
       case 'dashboard':
       default:
@@ -237,6 +272,14 @@ function App() {
         instances={instances}
         currentInstance={currentInstance}
         onInstanceChange={handleInstanceChange}
+        onDeleteInstance={handleDeleteInstance}
+        onOpenCreateModal={() => setInstanceModalOpen(true)}
+      />
+      
+      <InstanceModal 
+        isOpen={isInstanceModalOpen}
+        onClose={() => setInstanceModalOpen(false)}
+        onCreate={handleCreateInstance}
       />
 
       {/* 主內容區 (居中單欄) */}

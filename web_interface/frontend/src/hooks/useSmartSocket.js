@@ -1,11 +1,18 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 
-// 從網址推算 WS 伺服器位置 (假設 WS 跑在 24446)
+// 從網址推算 WS 伺服器位置 (現在與 API 統一使用 24445)
 const getWsUrl = () => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.hostname;
     const apiKey = new URLSearchParams(window.location.search).get('key') || '';
-    return `${protocol}//${host}:24446/ws?key=${apiKey}`;
+    
+    // 開發環境使用 24445，正式環境使用當前 Port (通常也是 24445)
+    let port = window.location.port;
+    if (port === '5173' || port === '5174' || !port) {
+        port = '24445';
+    }
+    
+    return `${protocol}//${host}:${port}/ws?key=${apiKey}`;
 };
 
 export function useSmartSocket() {
