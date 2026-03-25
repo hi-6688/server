@@ -59,14 +59,19 @@ npm run dev -- --host
 
 ### III. 📝 開發進度 (Dev Log)
 
-- [x] 導入 Vibecoding 架構，建立 `.agent/` 與 `docs/` 雙層大腦。
-- [x] Web 前端從 Vanilla HTML/JS 轉型為 **React + Vite** 架構。
-- [x] 後端 `api.py` 從單體重構為模組化架構 (`routes/` + `models.py`)。
-- [x] **GCP 雙 VM 架構遷移**：Minecraft 遷至 VM2，VM1 轉型為主控台。
-- [x] **事件驅動自動安全關機**：實作零空轉的精準關機系統。
-- [x] **嗨嗨 AI 模型升級**：完成 Gemini 2.5 Flash + Agentic Loop。
-- [x] **全域架構手冊建檔**：建立 `docs/GLOBAL_DEPLOYMENT.md`。
-- [⏳] **Docker 分體式遷移**：
+- [x] **Vibecoding 架構導入**: 建立 `.agent/` 與 `docs/` 雙層大腦，奠定 AI 協作基礎。
+- [x] **Web 介面後端深度重構**:
+    - [x] **雙核心架構**: 後端由 `api.py` (主 HTTP 伺服器) 和 `ws_server.py` (WebSocket 伺服器) 組成，分離長短連線。
+    - [x] **模組化路由**: API 從單體式重構，路由邏輯分散於 `routes/` 目錄 (如 `server.py`, `worlds.py`, `instances.py`)，提升可維護性。
+    - [x] **多實例管理 (`models.py`)**: 建立強大的伺服器「實例」管理系統，支援透過複製模板動態生成新伺服器，設定存於 `instances.json`。
+    - [x] **智慧連線 (Smart Connection)**: `ws_server.py` 作為智慧橋接，根據前端連線狀態，動態啟停對 VM2 的日誌串流，大幅節省資源。
+    - [x] **事件驅動自動化**: 整合 `/webhook/shutdown_vm2` 端點，實現 VM2 閒置時自動關機，並透過 Discord 發送通知。
+    - [x] **前端整合**: 後端直接服務 `frontend/dist` 目錄下編譯好的 React 前端檔案。
+- [x] **Web 前端框架升級**: 從 Vanilla HTML/JS 轉型為 **React + Vite** 架構。
+- [x] **GCP 雙 VM 架構遷移**: Minecraft 遷至 VM2，VM1 轉型為主控台。
+- [x] **嗨嗨 AI 模型升級**: 完成 Gemini 2.5 Flash + Agentic Loop。
+- [x] **全域架構手冊建檔**: 建立 `docs/GLOBAL_DEPLOYMENT.md`。
+- [⏳] **Docker 分體式遷移**:
     - [x] 撰寫 `web_interface/requirements.txt`。
     - [x] 撰寫 `discord_bot/requirements.txt`。
     - [ ] 撰寫 `docker-compose.yml` 統籌 `web-api` 與 `bot-hihi`。

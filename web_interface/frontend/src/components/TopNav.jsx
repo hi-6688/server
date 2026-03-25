@@ -6,16 +6,25 @@ export default function TopNav({
     wsConnected = false,
     instances = [],
     currentInstance = 'main',
-    onInstanceChange = () => { }
+    onInstanceChange = () => { },
+    onDeleteInstance = () => { },
+    onOpenCreateModal = () => { }
 }) {
     // 導航項目定義 (與舊版一致)
     const tabs = [
         { id: 'dashboard', icon: 'dashboard', label: '儀表板' },
         { id: 'settings', icon: 'settings', label: '設定' },
-        { id: 'files', icon: 'public', label: '世界' },
+        { id: 'worlds', icon: 'public', label: '世界' },
+        { id: 'files', icon: 'folder_open', label: '檔案' },
         { id: 'gamerules', icon: 'gavel', label: '規則' },
+        { id: 'addons', icon: 'extension', label: '模組' },
         { id: 'players', icon: 'group', label: '玩家' },
     ];
+
+    const handleDelete = (e, uuid) => {
+        e.stopPropagation();
+        onDeleteInstance(uuid);
+    };
 
     return (
         <div className="w-full fixed top-0 left-0 z-50 flex flex-col shadow-lg">
@@ -83,18 +92,30 @@ export default function TopNav({
                         <div className="font-bold text-white uppercase tracking-widest whitespace-nowrap hidden sm:block">伺服器列表</div>
                         <div className="flex items-center gap-2">
                             {instances.map(inst => (
-                                <button
-                                    key={inst.uuid}
-                                    onClick={() => onInstanceChange(inst.uuid)}
-                                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all whitespace-nowrap border ${currentInstance === inst.uuid ? 'bg-primary/20 border-primary text-white shadow-[0_0_10px_rgba(238,43,140,0.5)]' : 'bg-white/5 border-white/10 text-white/70 hover:bg-white/10 hover:text-white'}`}
-                                >
-                                    {inst.name}
-                                </button>
+                                <div key={inst.uuid} className="relative group">
+                                    <button
+                                        onClick={() => onInstanceChange(inst.uuid)}
+                                        className={`pl-3 pr-4 py-1.5 rounded-lg text-sm font-medium transition-all whitespace-nowrap border ${currentInstance === inst.uuid ? 'bg-primary/20 border-primary text-white shadow-[0_0_10px_rgba(238,43,140,0.5)]' : 'bg-white/5 border-white/10 text-white/70 hover:bg-white/10 hover:text-white'}`}
+                                    >
+                                        {inst.name}
+                                    </button>
+                                    {inst.uuid !== 'main' && (
+                                        <button 
+                                            onClick={(e) => handleDelete(e, inst.uuid)}
+                                            className="absolute -top-1 -right-1 w-5 h-5 bg-red-500/80 text-white rounded-full flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 hover:bg-red-500 transition-all"
+                                            title="刪除實例"
+                                        >
+                                            <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>close</span>
+                                        </button>
+                                    )}
+                                </div>
                             ))}
                         </div>
                     </div>
                     <div className="shrink-0 ml-4 hidden md:block">
-                        <button className="px-4 py-2 rounded-xl bg-green-500/20 border border-white/20 text-green-400 hover:bg-green-500/40 transition-colors whitespace-nowrap">
+                        <button
+                            onClick={onOpenCreateModal}
+                            className="px-4 py-2 rounded-xl bg-green-500/20 border border-white/20 text-green-400 hover:bg-green-500/40 transition-colors whitespace-nowrap">
                             + 新增
                         </button>
                     </div>

@@ -32,8 +32,8 @@ var fetchApi = async function (endpoint, method, body) {
     method = method || 'GET';
     body = body || null;
 
-    // 開發環境使用 25564 端口，正式環境使用同源
-    var devPort = 25564;
+    // 開發環境使用 24445 端口，正式環境使用同源
+    var devPort = 24445;
     var origin;
     if (window.location.port === '5173' || window.location.port === '5174') {
         origin = window.location.protocol + '//' + window.location.hostname + ':' + devPort;
@@ -58,6 +58,13 @@ var fetchApi = async function (endpoint, method, body) {
 
 // ==================== 實例管理 ====================
 export var fetchInstances = function () { return fetchApi('/instances/list'); };
+export var createInstance = function (name, port, discordChannelId) {
+    return fetchApi('/instances/create', 'POST', { name, port, discord_channel_id: discordChannelId });
+};
+export var deleteInstance = function (uuid) {
+    return fetchApi('/instances/delete', 'POST', { instance_id: uuid });
+};
+
 
 // ==================== 伺服器操作 ====================
 
@@ -107,6 +114,69 @@ export var writeFile = function (filename, content) {
     return fetchApi('/write', 'POST', { file: filename, content: content });
 };
 
+// ==================== 世界與模組的上傳與下載 ====================
+
+// 下載世界
+export const downloadWorld = () => {
+    var devPort = 24445;
+    var origin = (window.location.port === '5173' || window.location.port === '5174')
+        ? `${window.location.protocol}//${window.location.hostname}:${devPort}`
+        : window.location.origin;
+    const url = `${origin}/download?key=${API_KEY}&instance_id=${CURRENT_INSTANCE}`;
+    window.open(url, '_blank');
+};
+
+
+const uploadFile = (file, url, onProgress) => {
+    return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        const formData = new FormData();
+        formData.append('file', file);
+
+        xhr.open('POST', url, true);
+
+        xhr.upload.onprogress = (event) => {
+            if (event.lengthComputable) {
+                const percentComplete = (event.loaded / event.total) * 100;
+                onProgress(percentComplete);
+            }
+        };
+
+        xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+                resolve(JSON.parse(xhr.responseText));
+            } else {
+                reject(new Error(xhr.statusText));
+            }
+        };
+
+        xhr.onerror = () => reject(new Error('Network Error'));
+
+        xhr.send(formData);
+    });
+};
+
+// 上傳世界
+export const uploadWorld = (file, onProgress) => {
+    var devPort = 24445;
+    var origin = (window.location.port === '5173' || window.location.port === '5174')
+        ? `${window.location.protocol}//${window.location.hostname}:${devPort}`
+        : window.location.origin;
+    const url = `${origin}/upload?key=${API_KEY}&instance_id=${CURRENT_INSTANCE}`;
+    return uploadFile(file, url, onProgress);
+};
+
+// 上傳模組
+export const uploadAddon = (file, onProgress) => {
+    var devPort = 24445;
+    var origin = (window.location.port === '5173' || window.location.port === '5174')
+        ? `${window.location.protocol}//${window.location.hostname}:${devPort}`
+        : window.location.origin;
+    const url = `${origin}/addon/upload?key=${API_KEY}&instance_id=${CURRENT_INSTANCE}`;
+    return uploadFile(file, url, onProgress);
+};
+
+
 // ==================== 世界管理 ====================
 
 // 取得世界清單
@@ -131,6 +201,42 @@ export var fetchAddons = function () { return fetchApi('/addons'); };
 export var deleteAddon = function (addonName, addonType) {
     return fetchApi('/addon/delete', 'POST', { name: addonName, type: addonType || 'behavior_packs' });
 };
+
+// ==================== 遊戲規則管理 ====================
+
+// 取得所有遊戲規則 (placeholder)
+export const fetchGameRules = () => {
+    // In a real scenario, this would be a dedicated endpoint.
+    // For now, we simulate it with a command and known rules.
+    return Promise.resolve([
+        { name: 'commandblockoutput', value: 'true', type: 'boolean' },
+        { name: 'dodaylightcycle', value: 'true', type: 'boolean' },
+        { name: 'doentitydrops', value: 'true', type: 'boolean' },
+        { name: 'dofiretick', value: 'true', type: 'boolean' },
+        { name: 'domobloot', value: 'true', type: 'boolean' },
+        { name: 'domobspawning', value: 'true', type: 'boolean' },
+        { name: 'dotiledrops', value: 'true', type: 'boolean' },
+        { name: 'doweathercycle', value: 'true', type: 'boolean' },
+        { name: 'drowningdamage', value: 'true', type: 'boolean' },
+        { name: 'falldamage', value: 'true', type: 'boolean' },
+        { name: 'firedamage', value: 'true', type: 'boolean' },
+        { name: 'keepinventory', value: 'false', type: 'boolean' },
+        { name: 'mobgriefing', value: 'true', type: 'boolean' },
+        { name: 'pvp', value: 'true', type: 'boolean' },
+        { name: 'sendcommandfeedback', value: 'true', type: 'boolean' },
+        { name: 'showcoordinates', value: 'true', type: 'boolean' },
+        { name: 'randomtickspeed', value: '1', type: 'number' },
+        { name: 'spawnradius', value: '5', type: 'number' },
+        { name: 'maxcommandchainlength', value: '65536', type: 'number' },
+        { name: 'functioncommandlimit', value: '10000', type: 'number' },
+    ]);
+};
+
+// 更新遊戲規則
+export const updateGameRule = (rule, value) => {
+    return sendCommand(`gamerule ${rule} ${value}`);
+};
+
 
 // ==================== 伺服器資訊 ====================
 

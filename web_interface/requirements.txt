@@ -3,3 +3,6 @@ aiohttp
 websockets
 google-api-python-client
 google-auth
+fastapi
+uvicorn[standard]
+python-multipart
