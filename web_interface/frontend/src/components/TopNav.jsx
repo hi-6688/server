@@ -84,7 +84,7 @@ export default function TopNav({
             {/* 第二層：伺服器列表與控制 */}
             <div className="w-full transition-all duration-300 bg-black/30 border-b border-white/10">
                 <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 py-2 sm:py-3 flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex flex-wrap items-center gap-2 sm:gap-4 w-full sm:w-auto">
+                    <div className="flex flex-wrap items-center gap-2 sm:gap-4 flex-1">
                         <div className="font-bold text-white uppercase tracking-widest whitespace-nowrap hidden sm:block">伺服器列表</div>
                         <div className="flex items-center gap-2">
                             {instances.map(inst => (
