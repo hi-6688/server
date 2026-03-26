@@ -7,8 +7,7 @@ services:
       dockerfile: Dockerfile
     container_name: web-api
     restart: unless-stopped
-    ports:
-      - "24445:24445" # 控制面板 HTTP API 與 WebSocket
+    network_mode: host  # 使用主機網路，才能連到 GCP VPC 內網的 VM2 Agent
     volumes:
       - ./web_interface:/app
       - ./discord_bot/utils:/app/utils:ro # 共享 gcp_manager
