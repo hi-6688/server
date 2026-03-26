@@ -25,13 +25,30 @@ def get_instance(key: str, instance_id: str = "main"):
 def start_server_post(instance = Depends(get_instance)):
     """透過 VM2 啟動伺服器"""
     if not proxy_helpers.is_vm2_running():
-        raise HTTPException(status_code=409, detail="VM2 is offline. Please use /mc開機 to boot the server first.")
+        # 如果 VM2 離線，發起自動開機並等待
+        started = proxy_helpers.start_vm2_and_wait()
+        if not started:
+            raise HTTPException(status_code=500, detail="嘗試啟動 Google Cloud 虛擬主機失敗，請稍後再試。")
     
+    # 將離線編輯的檔案寫回伺服器
     proxy_helpers.flush_offline_cache()
+    
     try:
-        res = proxy_helpers.proxy_to_agent("execute_command", screen_name=instance.screen_name, command="")
+        # 重試等待伺服器內的 Proxy Agent 起床 (最多等待 30 秒)
+        agent_ready = False
+        for i in range(15):
+            res = proxy_helpers.proxy_to_agent("execute_command", screen_name=instance.screen_name, command="")
+            if res.get('status') == 'success':
+                agent_ready = True
+                break
+            time.sleep(2)
+            
+        if not agent_ready:
+            raise HTTPException(status_code=500, detail="已啟動 VM2，但無法連線至內部的管理代理程式。")
+            
+        # 執行開機腳本
+        res = proxy_helpers.proxy_to_agent("start_screen", screen_name=instance.screen_name, path=instance.path)
         if res.get('status') == 'success':
-            proxy_helpers.proxy_to_agent("start_screen", screen_name=instance.screen_name, path=instance.path)
             return {"status": "started"}
         else:
             raise HTTPException(status_code=500, detail=res.get("message"))
