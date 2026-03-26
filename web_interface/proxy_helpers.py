@@ -49,6 +49,28 @@ def get_vm2_public_ip():
         _vm_cache['public_ip_time'] = time.time()
     return _vm_cache['public_ip']
 
+def start_vm2_and_wait():
+    """發送開機指令並等待 VM 進入 RUNNING 狀態"""
+    global _vm_cache
+    if is_vm2_running(): return True
+    
+    # 送出開機請求
+    success = gcp.start_instance(VM_NAME)
+    if not success: return False
+    
+    # 輪詢等待 30 秒
+    for _ in range(15):
+        time.sleep(2)
+        status = gcp.get_instance_status(VM_NAME)
+        if status == "RUNNING":
+            # 強制清除快取，以取得新 IP
+            _vm_cache['status_time'] = 0
+            _vm_cache['ip_time'] = 0
+            _vm_cache['public_ip_time'] = 0
+            return True
+            
+    return False
+
 import requests
 
 def proxy_to_agent(action, **kwargs):

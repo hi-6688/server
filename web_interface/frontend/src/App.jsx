@@ -40,6 +40,7 @@ function App() {
   const [netTx, setNetTx] = useState('...');
   const [serverStatus, setServerStatus] = useState('離線');
   const [isOnline, setIsOnline] = useState(false);
+  const [vm2Online, setVm2Online] = useState(false);
   const [activePlayers, setActivePlayers] = useState(0);
   const [maxPlayers, setMaxPlayers] = useState(0);
   const [version, setVersion] = useState('Loading...');
@@ -78,8 +79,10 @@ function App() {
       try {
         const data = await fetchStatus();
         if (data && data.status === 'success') {
-          // isOnline = VM2 虛擬機是否上線 (綠紅燈)
-          setIsOnline(data.vm2_online);
+          // vm2Online = 獨立記錄主機是否上線
+          setVm2Online(data.vm2_online);
+          
+          setIsOnline(data.server_status === 'online');
           // serverStatus = 遊戲伺服器程式的狀態文字
           const gameOnline = data.server_status === 'online';
           setServerStatus(
@@ -262,12 +265,14 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen p-4 md:p-8 flex justify-center items-start overflow-y-auto custom-scrollbar pt-6 lg:pt-8 text-white font-display antialiased">
+    <div className="min-h-screen p-2 sm:p-4 md:p-8 flex justify-center items-start overflow-y-auto custom-scrollbar pt-6 lg:pt-8 text-white font-display antialiased">
       {/* 頂部導航 (固定) */}
       <TopNav
         activeTab={activeTab}
         onTabChange={setActiveTab}
+        serverStatus={serverStatus}
         isOnline={isOnline}
+        vm2Online={vm2Online}
         wsConnected={isConnected}
         instances={instances}
         currentInstance={currentInstance}
@@ -283,8 +288,8 @@ function App() {
       />
 
       {/* 主內容區 (居中單欄) */}
-      <div className="max-w-7xl w-full flex flex-col gap-6 pt-[120px]">
-        <main className="flex-1 flex flex-col gap-4 overflow-visible pb-20 w-full">
+      <div className="max-w-7xl w-full flex flex-col gap-4 sm:gap-6 pt-[165px] sm:pt-[130px] md:pt-[120px]">
+        <main className="flex-1 flex flex-col gap-3 sm:gap-4 overflow-visible pb-20 w-full">
           {renderContent()}
         </main>
       </div>
