@@ -9,6 +9,7 @@ services:
     restart: unless-stopped
     ports:
       - "24445:24445" # 控制面板 HTTP API 與 WebSocket
+    volumes:
       - ./web_interface:/app
       - ./discord_bot/utils:/app/utils:ro # 共享 gcp_manager
       - ./.env:/.env:ro # 確保 proxy_helpers 能向上找到 .env
