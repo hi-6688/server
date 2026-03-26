@@ -18,7 +18,7 @@ cd /home/terraria/servers && git diff --cached | grep -iE "(password|token|secre
 
 ### 3. 檢查 Python 語法
 ```bash
-cd /home/terraria/servers && python3 -m py_compile web_interface/api.py && echo "✅ api.py 語法正確"
+cd /home/terraria/servers && python3 -m py_compile web_interface/main.py && echo "✅ main.py 語法正確"
 ```
 
 ### 4. 確認文件是否需要同步
