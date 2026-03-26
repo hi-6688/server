@@ -82,8 +82,13 @@ export var fetchStatus = async function () {
             // 最新浮動 IP
             public_ip: statusRes.public_ip || window.location.hostname,
             stats: {
-                cpu: statsRes.cpu?.load_1 || 0,
-                mem: statsRes.memory?.percent || 0
+                cpu: statsRes.cpu_percent || 0,
+                mem: statsRes.ram_percent || 0,
+                disk_used_gb: statsRes.disk_used_gb || 0,
+                disk_total_gb: statsRes.disk_total_gb || 0,
+                disk_percent: statsRes.disk_percent || 0,
+                net_rx_mb: statsRes.net_rx_mb || 0,
+                net_tx_mb: statsRes.net_tx_mb || 0
             },
             players_online: 0
         };
