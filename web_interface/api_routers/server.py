@@ -148,24 +148,27 @@ def get_server_status(instance = Depends(get_instance)):
 
 @router.get("/stats")
 def get_stats(instance = Depends(get_instance)):
-    """查詢系統資源 (CPU/RAM)"""
-    try:
-        with open('/proc/loadavg', 'r') as f:
-            load = f.read().split()[0]
-        with open('/proc/meminfo', 'r') as f:
-            m = f.read()
-            tot = int(re.search(r'MemTotal:\s+(\d+)', m).group(1))
-            av = int(re.search(r'MemAvailable:\s+(\d+)', m).group(1))
-            used_gb = round((tot - av) / 1024 / 1024, 2)
-            tot_gb = round(tot / 1024 / 1024, 2)
-            perc = round(((tot - av) / tot) * 100, 1)
+    """查詢系統資源 (CPU/RAM/Disk/Network)"""
+    # 預設空值 (VM2 離線時的回傳)
+    default_stats = {
+        "cpu_percent": 0.0,
+        "ram_used_mb": 0,
+        "ram_total_mb": 0,
+        "ram_percent": 0.0,
+        "disk_used_gb": 0.0,
+        "disk_total_gb": 0.0,
+        "disk_percent": 0.0,
+        "net_rx_mb": 0.0,
+        "net_tx_mb": 0.0
+    }
 
-        return {
-            "cpu": {"load_1": float(load), "load_5": 0.0},
-            "memory": {"percent": perc, "used": f"{used_gb} GB", "total": f"{tot_gb} GB"},
-            "disk": {"percent": 0, "used": "0 GB", "total": "0 GB"},
-            "network": {"rx_gb": "0", "tx_gb": "0"}
-        }
+    try:
+        if proxy_helpers.is_vm2_running():
+            res = proxy_helpers.proxy_to_agent("get_stats")
+            if res.get("status") == "success" and "stats" in res:
+                return res["stats"]
+            
+        return default_stats
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

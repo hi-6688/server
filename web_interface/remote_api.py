@@ -88,6 +88,30 @@ class AgentHandler(http.server.BaseHTTPRequestHandler):
                             active_screens.append(screen_full)
             self._send_json({"status": "success", "screens": active_screens})
 
+        elif action == "get_stats":
+            import psutil
+            import shutil
+            try:
+                mem = psutil.virtual_memory()
+                cpu_percent = psutil.cpu_percent(interval=0.5)
+                disk = shutil.disk_usage("/")
+                net_io = psutil.net_io_counters()
+
+                stats = {
+                    "cpu_percent": cpu_percent,
+                    "ram_used_mb": mem.used // (1024*1024),
+                    "ram_total_mb": mem.total // (1024*1024),
+                    "ram_percent": mem.percent,
+                    "disk_used_gb": round(disk.used / (1024**3), 2),
+                    "disk_total_gb": round(disk.total / (1024**3), 2),
+                    "disk_percent": round((disk.used / disk.total) * 100, 1),
+                    "net_rx_mb": round(net_io.bytes_recv / (1024*1024), 2),
+                    "net_tx_mb": round(net_io.bytes_sent / (1024*1024), 2)
+                }
+                self._send_json({"status": "success", "stats": stats})
+            except Exception as e:
+                self._send_json({"status": "error", "message": str(e)}, 500)
+
         elif action == "read_log_tail":
             filepath = data.get('filepath')
             lines = data.get('lines', 50)

@@ -90,8 +90,15 @@ function App() {
               data.vm2_online ? '待機中 (Standby)' : '離線 (Offline)'
           );
           if (data.stats) {
-            setCpuLoad(data.stats.cpu || '...');
+            setCpuLoad((data.stats.cpu || 0).toFixed(1) + '%');
             setRamPercent(Math.round(data.stats.mem || 0));
+            
+            // 加入真正的磁碟與網路頻寬
+            setDiskPercent(Math.round(data.stats.disk_percent || 0));
+            setDiskUsed(`${data.stats.disk_used_gb} GB`);
+            setDiskTotal(`${data.stats.disk_total_gb} GB`);
+            setNetRx(`${data.stats.net_rx_mb} MB`);
+            setNetTx(`${data.stats.net_tx_mb} MB`);
           }
           if (data.public_ip) {
             setPublicIp(data.public_ip);
@@ -116,11 +123,21 @@ function App() {
 
       const stats = serverState.system;
       if (stats) {
-        setCpuLoad(stats.cpu_percent || '...');
+        setCpuLoad(stats.cpu_percent !== undefined ? stats.cpu_percent.toFixed(1) + '%' : '...');
         setRamPercent(stats.ram_percent || 0);
-        setRamUsed(stats.ram_used_mb ? stats.ram_used_mb + 'MB' : '...');
-        setRamTotal(stats.ram_total_mb ? stats.ram_total_mb + 'MB' : '...');
-        // 如果未來 VM2 提供磁碟與網路資訊再補上
+        setRamUsed(stats.ram_used_mb !== undefined ? stats.ram_used_mb + 'MB' : '...');
+        setRamTotal(stats.ram_total_mb !== undefined ? stats.ram_total_mb + 'MB' : '...');
+        
+        // WebSocket 也同步更新磁碟與網路 (若有提供)
+        if (stats.disk_percent !== undefined) {
+          setDiskPercent(Math.round(stats.disk_percent));
+          setDiskUsed(`${stats.disk_used_gb} GB`);
+          setDiskTotal(`${stats.disk_total_gb} GB`);
+        }
+        if (stats.net_rx_mb !== undefined) {
+          setNetRx(`${stats.net_rx_mb} MB`);
+          setNetTx(`${stats.net_tx_mb} MB`);
+        }
       }
       if (serverState.activePlayers !== undefined) setActivePlayers(serverState.activePlayers);
       if (serverState.maxPlayers !== undefined) setMaxPlayers(serverState.maxPlayers);
