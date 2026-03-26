@@ -70,6 +70,27 @@ class AgentHandler(http.server.BaseHTTPRequestHandler):
             except Exception as e:
                 self._send_json({"status": "error", "message": str(e)}, 500)
 
+        elif action == "start_server":
+            screen_name = data.get('screen_name')
+            target_path = data.get('path')
+            if not screen_name or not target_path:
+                self.send_response(400)
+                self.end_headers()
+                self.wfile.write(b"Missing screen_name or path")
+                return
+
+            try:
+                # 建立 screen 並直接執行程式，同時將輸出即時導向至 bedrock_screen.log
+                # 使用 stdbuf 或直接靠 tee 來處理，Bedrock 需要 LD_LIBRARY_PATH
+                cmd = f"cd {target_path} && LD_LIBRARY_PATH=. ./bedrock_server 2>&1 | tee bedrock_screen.log"
+                subprocess.run(
+                    ["screen", "-dmS", screen_name, "bash", "-c", cmd],
+                    check=True
+                )
+                self._send_json({"status": "success"})
+            except Exception as e:
+                self._send_json({"status": "error", "message": str(e)}, 500)
+
         elif action == "get_system_status":
             try:
                 output = subprocess.check_output("screen -ls", shell=True, text=True, stderr=subprocess.STDOUT)
@@ -111,6 +132,22 @@ class AgentHandler(http.server.BaseHTTPRequestHandler):
                 self._send_json({"status": "success", "stats": stats})
             except Exception as e:
                 self._send_json({"status": "error", "message": str(e)}, 500)
+
+        elif action == "get_version":
+            filepath = data.get('filepath')
+            version = "Unknown"
+            if filepath and os.path.exists(filepath):
+                try:
+                    with open(filepath, 'r', encoding='utf-8', errors='replace') as f:
+                        for line in f:
+                            if 'Version:' in line:
+                                match = re.search(r'Version:\s*(\S+)', line)
+                                if match:
+                                    version = match.group(1)
+                                    break
+                except:
+                    pass
+            self._send_json({"status": "success", "version": version})
 
         elif action == "read_log_tail":
             filepath = data.get('filepath')

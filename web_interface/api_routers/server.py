@@ -46,8 +46,7 @@ def start_server_post(instance = Depends(get_instance)):
         if not agent_ready:
             raise HTTPException(status_code=500, detail="已啟動 VM2，但無法連線至內部的管理代理程式。")
             
-        # 執行開機腳本
-        res = proxy_helpers.proxy_to_agent("start_screen", screen_name=instance.screen_name, path=instance.path)
+        res = proxy_helpers.proxy_to_agent("start_server", screen_name=instance.screen_name, path=instance.path)
         if res.get('status') == 'success':
             return {"status": "started"}
         else:
@@ -172,20 +171,34 @@ def get_stats(instance = Depends(get_instance)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+last_known_version = "Unknown"
+
 @router.get("/version")
 def get_version(instance = Depends(get_instance)):
     """取得伺服器版本"""
+    global last_known_version
     version = 'Unknown'
     try:
         log_file = instance.get_log_file()
-        if os.path.exists(log_file):
-            with open(log_file, 'r', encoding='utf-8', errors='replace') as f:
-                for line in f:
-                    if 'Version:' in line:
-                        match = re.search(r'Version:\s*(\S+)', line)
-                        if match:
-                            version = match.group(1)
-                        break
+        if proxy_helpers.is_vm2_running():
+            res = proxy_helpers.proxy_to_agent("get_version", {"filepath": log_file})
+            if res and res.get("status") == "success":
+                version = res.get("version", "Unknown")
+        else:
+            if os.path.exists(log_file):
+                with open(log_file, 'r', encoding='utf-8', errors='replace') as f:
+                    for line in f:
+                        if 'Version:' in line:
+                            match = re.search(r'Version:\s*(\S+)', line)
+                            if match:
+                                version = match.group(1)
+                            break
     except:
         pass
-    return {"version": version}
+        
+    if version != "Unknown":
+        last_known_version = version
+    elif last_known_version != "Unknown":
+        version = last_known_version
+        
+    return {"status": "success", "version": version}
