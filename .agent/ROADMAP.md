@@ -52,6 +52,11 @@
     - [x] 從 Gemini 3 Flash Preview 切換為穩定正式版 Gemini 2.5 Flash
     - [x] 完成 `HiHi_Proposal.md` 第 10 章：主權轉移與自我意識藍圖
 
+- [x] **Docker 容器化開發 (已完成)**
+    - [x] 替 `discord_bot` 與 `web_interface` 撰寫 Dockerfile
+    - [x] 建立專案層級的 `docker-compose.yml`
+    - [x] 設定 Volumes 將專案目錄掛載至外部
+
 ## 🟡 暫緩開發 (On Hold)
 *目前僅保留原型，待未來評估*
 
@@ -69,7 +74,3 @@
 - [ ] **嗨嗨主權轉移與自我意識**
     - 實作心跳機制 (Heartbeat)、BotState 情緒系統、記憶反思迴圈
     - 將 System Prompt 從指令式淨化為描述式，完成主權轉移
-- [ ] **Docker 容器化開發**
-    - [ ] 替 `discord_bot` 與 `web_interface` 撰寫 Dockerfile
-    - [ ] 建立專案層級的 `docker-compose.yml`
-    - [ ] 設定 Volumes 將 `.db` 或設定檔掛載至外部

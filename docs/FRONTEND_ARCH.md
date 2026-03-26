@@ -14,9 +14,10 @@
 
 ```
 web_interface/
-├── api.py               ← 後端 API 入口 (路由分發器)
+├── main.py              ← 後端 API 入口 (FastAPI 路由分發器)
+├── dependencies.py      ← 共享依賴 (InstanceManager + 權限驗證)
+├── api_routers/         ← 路由處理模組 (auth, server, files, worlds, addons, instances, websocket)
 ├── models.py            ← 資料模型 (Instance + InstanceManager)
-├── routes/              ← 路由處理模組 (auth, server, files, worlds, addons, instances)
 ├── helpers/             ← 工具函式 (pack_installer, level_utils)
 ├── remote_api.py        ← 遠端 VM2 API
 ├── proxy_helpers.py     ← 代理工具

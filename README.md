@@ -32,7 +32,7 @@ servers/
 ├── scripts/                    # 工具箱：收納所有的 Python 維護腳本
 ├── terraria/                   # 🌳 Terraria 遊戲伺服器核心
 ├── web_interface/              # 🌐 網頁管理介面前後端 (React + Python API)
-├── docker-compose.yml          # [IN PROGRESS] 容器化調度清單
+├── docker-compose.yml          # 容器化調度清單
 └── README.md                   # 專案主要的標準說明書
 ```
 
@@ -61,7 +61,7 @@ npm run dev -- --host
 
 - [x] **Vibecoding 架構導入**: 建立 `.agent/` 與 `docs/` 雙層大腦，奠定 AI 協作基礎。
 - [x] **Web 介面後端深度重構 (FastAPI 遷移)**:
-    - [x] **單核心架構**: 後端已全面由 `main.py` (FastAPI) 統籌，移除 `api.py` 與 `ws_server.py`。
+    - [x] **單核心架構**: 後端已全面由 `main.py` (FastAPI) 統籌，已棄用舊版 `api.py` 與 `ws_server.py`（待清理）。
     - [x] **模組化路由 (Routers)**: API 路由全面結構化，存放於 `api_routers/` 目錄。
     - [x] **WebSocket 整合**: 將 WebSocket 日誌功能整合至主 Port (24445)，提升連線穩定性。
     - [x] **依賴去角質**: GCPManager 移除 `gcloud` 指令依賴，改用 Python Native SDK。

@@ -151,14 +151,6 @@ servers/
 │   ├── discord_bot.service     # HiHi 的 systemd 服務檔
 │   ├── conch_bot.service       # 神奇嗨螺的 systemd 服務檔
 │   └── requirements.txt
-├── discord_bot_dev/            # 開發/測試版 (物理隔離)
-│   ├── main.py
-│   ├── cogs/
-│   │   ├── status.py
-│   │   ├── terraria.py
-│   │   └── minecraft.py.disabled
-│   ├── commands.json
-│   └── requirements.txt
 └── docs/
     └── HiHi_Proposal.md        # 本企劃書
 ```
@@ -235,11 +227,7 @@ servers/
 *   **潛在互通**：嗨嗨可以感知到嗨螺的訊息 (已實現：猜謎遊戲回覆監聽)。
 *   **人格隔離**：透過 `BOT_MODE` 環境變數 + Cog 模組載入實現分離。
 
-### 為什麼開發版分開資料夾？
-*   `discord_bot_dev/` 是「實驗室」，可能做破壞性測試。
-*   必須物理隔離以免影響正式版。
 
----
 
 ## 9. 環境變數一覽 (.env)
 
