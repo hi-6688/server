@@ -106,7 +106,9 @@ export default function Dashboard({
             </div>
             <span className="font-bold text-text-main">{cpuLoad}</span>
           </div>
-          <div className="text-xs text-text-sub text-right">1min / 5min / 15min</div>
+          <div className="progress-bar mt-2">
+            <div className="h-full bg-success rounded transition-all duration-500" style={{ width: cpuLoad === '...' ? '0%' : cpuLoad }}></div>
+          </div>
         </div>
 
         {/* 7. 記憶體 */}

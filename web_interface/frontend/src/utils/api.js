@@ -84,6 +84,8 @@ export var fetchStatus = async function () {
             stats: {
                 cpu: statsRes.cpu_percent || 0,
                 mem: statsRes.ram_percent || 0,
+                ram_used_mb: statsRes.ram_used_mb || 0,
+                ram_total_mb: statsRes.ram_total_mb || 0,
                 disk_used_gb: statsRes.disk_used_gb || 0,
                 disk_total_gb: statsRes.disk_total_gb || 0,
                 disk_percent: statsRes.disk_percent || 0,

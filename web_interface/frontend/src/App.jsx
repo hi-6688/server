@@ -92,6 +92,8 @@ function App() {
           if (data.stats) {
             setCpuLoad((data.stats.cpu || 0).toFixed(1) + '%');
             setRamPercent(Math.round(data.stats.mem || 0));
+            setRamUsed(data.stats.ram_used_mb ? data.stats.ram_used_mb + 'MB' : '...');
+            setRamTotal(data.stats.ram_total_mb ? data.stats.ram_total_mb + 'MB' : '...');
             
             // 加入真正的磁碟與網路頻寬
             setDiskPercent(Math.round(data.stats.disk_percent || 0));
