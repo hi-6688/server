@@ -1,54 +1,49 @@
 // ConsolePage.jsx — 即時終端機頁面 (獨立全畫面版本，舊版配色)
 import { useState, useEffect, useRef } from 'react';
-import { readFile, sendCommand } from '../utils/api';
+import { readFile } from '../utils/api';
 
-export default function ConsolePage() {
-    const [logs, setLogs] = useState([]);
+export default function ConsolePage({ logs, sendCommand, isConnected }) {
+    const [historyLogs, setHistoryLogs] = useState([]);
     const [commandInput, setCommandInput] = useState('');
     const logsEndRef = useRef(null);
 
-    // 每 3 秒自動拉取最新日誌
+    // 首次載入時拉取最後 50 行歷史日誌
     useEffect(() => {
-        const pullLogs = async () => {
+        const pullHistory = async () => {
             try {
                 const data = await readFile('bedrock_screen.log', 50);
                 if (data && data.content) {
                     const lines = data.content.split('\n').filter(l => l.trim()).map((line, i) => ({
-                        id: i,
+                        id: `hist-${i}`,
                         time: '',
                         level: 'INFO',
                         message: line
                     }));
-                    setLogs(lines);
+                    setHistoryLogs(lines);
                 }
             } catch (_) { /* 靜默 */ }
         };
-
-        pullLogs();
-        const interval = setInterval(pullLogs, 3000);
-        return () => clearInterval(interval);
+        pullHistory();
     }, []);
+
+    // 合併歷史日誌與最新的 WebSocket 日誌
+    const displayLogs = [...historyLogs, ...logs.map((L, i) => ({ ...L, id: `ws-${i}` }))];
 
     // 自動捲動到底部
     useEffect(() => {
         logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [logs]);
+    }, [displayLogs]);
 
     // 發送指令
     const handleSend = async () => {
         if (!commandInput.trim()) return;
         const cmd = commandInput;
         setCommandInput('');
-
-        const now = new Date();
-        const pad = (n) => String(n).padStart(2, '0');
-        const timeStr = pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
-        setLogs(prev => [...prev, { id: Date.now(), time: timeStr, level: 'CMD', message: '> ' + cmd }]);
-
-        try {
-            await sendCommand(cmd);
-        } catch (e) {
-            setLogs(prev => [...prev, { id: Date.now(), time: timeStr, level: 'ERROR', message: 'Failed: ' + e.message }]);
+        
+        // 呼叫 App 傳遞進來的 sendCommand，它可以區分 HTTP 或 WS
+        if (sendCommand) {
+             // App 會有自己的暫存 logs 陣列處理機制
+             sendCommand(cmd);
         }
     };
 
@@ -57,20 +52,26 @@ export default function ConsolePage() {
             {/* 標題列 */}
             <div className="h-14 border-b border-white/10 flex items-center px-6 shrink-0">
                 <i className="fas fa-terminal text-success mr-3"></i>
-                <h2 className="text-white font-semibold">伺服器終端機</h2>
-                <span className="ml-auto text-xs text-text-sub">每 3 秒自動刷新</span>
+                <h2 className="text-white font-semibold flex items-center gap-3">
+                    伺服器終端機
+                    {isConnected ? (
+                        <span className="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full border border-green-500/30">即時同步中</span>
+                    ) : (
+                        <span className="text-xs bg-yellow-500/20 text-yellow-400 px-2 py-0.5 rounded-full border border-yellow-500/30">中斷連線</span>
+                    )}
+                </h2>
             </div>
 
             {/* 日誌區 */}
             <div className="flex-1 overflow-y-auto p-4 font-mono text-sm space-y-1 custom-scrollbar bg-black/20">
-                {logs.map((log) => (
+                {displayLogs.map((log) => (
                     <div key={log.id} className="flex gap-2">
                         {log.time && <span className="text-slate-600 shrink-0">[{log.time}]</span>}
                         <span className={
                             log.level === 'CMD' ? 'text-cyan-400' :
                                 log.level === 'ERROR' ? 'text-red-400' :
                                     'text-slate-300'
-                        }>{log.message}</span>
+                        } dangerouslySetInnerHTML={{ __html: log.message }} />
                     </div>
                 ))}
                 <div ref={logsEndRef} />

@@ -24,9 +24,18 @@ import time
 _vm_cache = {
     'status': None, 'status_time': 0,
     'ip': None, 'ip_time': 0,
-    'public_ip': None, 'public_ip_time': 0
+    'public_ip': None, 'public_ip_time': 0,
+    'boot_progress': 'offline' # offline, vm_starting, agent_waiting, server_starting, online
 }
 CACHE_TTL = 10  # 快取 10 秒
+
+def set_boot_progress(progress: str):
+    global _vm_cache
+    _vm_cache['boot_progress'] = progress
+
+def get_boot_progress():
+    global _vm_cache
+    return _vm_cache.get('boot_progress', 'offline')
 
 def is_vm2_running():
     global _vm_cache

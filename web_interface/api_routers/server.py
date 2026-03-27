@@ -1,15 +1,19 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 import subprocess
 import time
 import re
 import os
 import sys
+import asyncio
+import json
+import functools
 
 # 確保可以 import 上層目錄的模組
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/..")
 import proxy_helpers
 from dependencies import get_instance_or_404, verify_key
+from api_routers.websocket_router import manager
 
 router = APIRouter(tags=["server"])
 
@@ -21,38 +25,67 @@ def get_instance(key: str, instance_id: str = "main"):
     verify_key(key)
     return get_instance_or_404(instance_id)
 
-@router.post("/start")
-def start_server_post(instance = Depends(get_instance)):
-    """透過 VM2 啟動伺服器"""
-    if not proxy_helpers.is_vm2_running():
-        # 如果 VM2 離線，發起自動開機並等待
-        started = proxy_helpers.start_vm2_and_wait()
+class StartSequence:
+    @staticmethod
+    async def run(instance):
+        loop = asyncio.get_running_loop()
+        
+        proxy_helpers.set_boot_progress("vm_starting")
+        await manager.broadcast(json.dumps({"type": "boot_progress", "data": "vm_starting", "message": "正在呼叫 Google Cloud 起床..."}))
+        
+        started = await loop.run_in_executor(None, proxy_helpers.start_vm2_and_wait)
         if not started:
-            raise HTTPException(status_code=500, detail="嘗試啟動 Google Cloud 虛擬主機失敗，請稍後再試。")
-    
-    # 將離線編輯的檔案寫回伺服器
-    proxy_helpers.flush_offline_cache()
-    
-    try:
-        # 重試等待伺服器內的 Proxy Agent 起床 (最多等待 30 秒)
+            proxy_helpers.set_boot_progress("offline")
+            await manager.broadcast(json.dumps({"type": "boot_progress", "data": "offline", "message": "嘗試啟動虛擬主機失敗，請稍後再試。"}))
+            return
+            
+        proxy_helpers.set_boot_progress("agent_waiting")
+        await manager.broadcast(json.dumps({"type": "boot_progress", "data": "agent_waiting", "message": "等待本機代理程式連線..."}))
+        await loop.run_in_executor(None, proxy_helpers.flush_offline_cache)
+        
         agent_ready = False
         for i in range(15):
-            res = proxy_helpers.proxy_to_agent("execute_command", screen_name=instance.screen_name, command="")
-            if res.get('status') == 'success':
-                agent_ready = True
-                break
-            time.sleep(2)
+            call_agent = functools.partial(proxy_helpers.proxy_to_agent, "get_system_status")
+            try:
+                res = await loop.run_in_executor(None, call_agent)
+                if isinstance(res, dict) and res.get('status') == 'success':
+                    agent_ready = True
+                    break
+            except Exception:
+                pass
+            await asyncio.sleep(2)
             
         if not agent_ready:
-            raise HTTPException(status_code=500, detail="已啟動 VM2，但無法連線至內部的管理代理程式。")
+            proxy_helpers.set_boot_progress("offline")
+            await manager.broadcast(json.dumps({"type": "boot_progress", "data": "offline", "message": "無法連線至內部的管理代理程式。"}))
+            return
             
-        res = proxy_helpers.proxy_to_agent("start_server", screen_name=instance.screen_name, path=instance.path)
-        if res.get('status') == 'success':
-            return {"status": "started"}
-        else:
-            raise HTTPException(status_code=500, detail=res.get("message"))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        proxy_helpers.set_boot_progress("server_starting")
+        await manager.broadcast(json.dumps({"type": "boot_progress", "data": "server_starting", "message": "正在啟動 Minecraft 遊戲伺服器..."}))
+        
+        call_start = functools.partial(proxy_helpers.proxy_to_agent, "start_server", screen_name=instance.screen_name, path=instance.path)
+        try:
+            res = await loop.run_in_executor(None, call_start)
+            if isinstance(res, dict) and res.get('status') == 'success':
+                proxy_helpers.set_boot_progress("online")
+                await manager.broadcast(json.dumps({"type": "boot_progress", "data": "online", "message": "伺服器已全面上線！"}))
+            else:
+                proxy_helpers.set_boot_progress("offline")
+                err = res.get("message") if isinstance(res, dict) else "啟動未知錯誤"
+                await manager.broadcast(json.dumps({"type": "boot_progress", "data": "offline", "message": err}))
+        except Exception as e:
+            proxy_helpers.set_boot_progress("offline")
+            await manager.broadcast(json.dumps({"type": "boot_progress", "data": "offline", "message": str(e)}))
+
+@router.post("/start")
+async def start_server_post(background_tasks: BackgroundTasks, instance = Depends(get_instance)):
+    """透過 VM2 啟動伺服器 (背景非同步執行)"""
+    prog = proxy_helpers.get_boot_progress()
+    if prog != "offline" and prog != "online":
+        return {"status": "starting", "message": "開機程序已經在進行中"}
+        
+    background_tasks.add_task(StartSequence.run, instance)
+    return {"status": "starting", "message": "已受理啟動請求，正在背景執行"}
 
 @router.get("/start")
 def start_server_get(instance = Depends(get_instance)):
@@ -136,13 +169,22 @@ def exec_command(req: CommandRequest, instance = Depends(get_instance)):
 def get_server_status(instance = Depends(get_instance)):
     """查詢 VM2 虛擬機與遊戲伺服器的運行狀態"""
     vm2_online = proxy_helpers.is_vm2_running()
-    game_running = instance.is_running() if vm2_online else False
+    
+    # 如果 vm2_online 是 False，但 _boot_progress 不是 offline（代表剛開機還沒抓到狀態）
+    # 或是雖然 vm2 上線了，但還在 agent_waiting 階段，此時向 agent 查詢運行狀態會超時
+    boot_progress = proxy_helpers.get_boot_progress()
+    game_running = False
+    
+    if vm2_online and boot_progress in ['online', 'offline']:
+        game_running = instance.is_running()
+        
     public_ip = proxy_helpers.get_vm2_public_ip() if vm2_online else None
     
     return {
         "vm2_online": vm2_online,
         "running": game_running,
-        "public_ip": public_ip
+        "public_ip": public_ip,
+        "boot_progress": boot_progress
     }
 
 @router.get("/stats")

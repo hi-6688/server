@@ -8,7 +8,7 @@ import datetime
 import json
 import logging
 from dotenv import load_dotenv
-from discord_bot.utils.gcp_manager import GCPManager
+from utils.gcp_manager import GCPManager
 import aiohttp
 
 logger = logging.getLogger('hihi_bot')
@@ -221,55 +221,41 @@ class Minecraft(commands.Cog):
     @app_commands.command(name="mc開機", description="啟動 Minecraft 遠端雲端主機")
     @app_commands.checks.has_permissions(administrator=True)
     async def slash_mc_start(self, interaction: discord.Interaction):
-        await interaction.response.send_message("⚙️ 正在向 Google 機房發送通電啟動指令，請稍候約 10 秒...", ephemeral=False)
+        await interaction.response.send_message("⚙️ 正在向管理面板發送開機請求...", ephemeral=False)
         
-        # Hardcoded for now based on migration plan
-        vm_name = "instance-20260220-174959"
+        api_key = os.getenv("API_KEY", "dev_secret_123")
+        url = f"http://127.0.0.1:24445/api/v1/server/start?key={api_key}"
         
-        success = self.gcp_manager.start_instance(vm_name)
-        if success:
-            await asyncio.sleep(5) # wait a bit for IP to populate
-            ip = self.gcp_manager.get_instance_ip(vm_name)
-            public_ip = self.gcp_manager.get_instance_public_ip(vm_name)
-            self.vm2_ip = ip # Update VM2 IP cache
-
-            # 從網頁介面載入代理工具並觸發離線同步
-            try:
-                import sys
-                import os
-                api_path = "/home/terraria/servers/web_interface"
-                if api_path not in sys.path: sys.path.append(api_path)
-                import proxy_helpers
-                proxy_helpers.flush_offline_cache()
-            except Exception as e:
-                self.log_debug(f"Failed to flush offline cache: {e}")
-            
-            embed = discord.Embed(title="🟢 遊戲伺服器已開機通電", color=0x00FF00)
-            embed.description = "**伺服器連線資訊:**"
-            embed.add_field(name="🌍 最新浮動 IP", value=f"`{public_ip}`", inline=False)
-            embed.add_field(name="⚠️ 提醒", value="目前 IP 為動態分配，請玩家於遊戲選單中更新此最新 IP 加入遊戲。", inline=False)
-            await interaction.followup.send(embed=embed)
-        else:
-            await interaction.followup.send("❌ 啟動失敗，請檢查 GCP 設定。")
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(url, json={"action": "start"}, timeout=5) as resp:
+                    data = await resp.json()
+                    
+                    if resp.status == 200:
+                        # 成功觸發面板的啟動程序，後續狀態會由 WebSocket 推播通知
+                        pass
+                    else:
+                        await interaction.followup.send(f"❌ 面板開機請求失敗: {data.get('detail', 'Unknown error')}")
+        except Exception as e:
+            await interaction.followup.send(f"❌ 無法連線至面板 API: {e}")
             
     @app_commands.command(name="mc關機", description="關閉 Minecraft 遠端雲端主機 (省錢)")
     @app_commands.checks.has_permissions(administrator=True)
     async def slash_mc_stop(self, interaction: discord.Interaction):
-        await interaction.response.send_message("🔴 伺服器正在執行安全存檔，完成後大約一分鐘內將自動切斷雲端主機電源。", ephemeral=False)
+        await interaction.response.send_message("🔴 正在向管理面板發送安全關機請求...", ephemeral=False)
         
-        # 關機前標記狀態，等待 VM2 透過 Webhook 回傳「Quit correctly」事件時切斷電源
+        api_key = os.getenv("API_KEY", "dev_secret_123")
+        url = f"http://127.0.0.1:24445/api/v1/server/stop?key={api_key}"
+        
         try:
-            pending_file = '/home/terraria/servers/web_interface/.pending_vm_shutdown'
-            with open(pending_file, 'w') as f:
-                f.write('manual_discord')
+            async with aiohttp.ClientSession() as session:
+                # web-api 內部的 /server/stop 會發送關機與倒數的指令給所有的伺服器
+                async with session.post(url, json={"action": "stop"}, timeout=5) as resp:
+                    data = await resp.json()
+                    if resp.status != 200:
+                        await interaction.followup.send(f"❌ 面板關機請求失敗: {data.get('detail', 'Unknown error')}")
         except Exception as e:
-            self.log_debug(f"Failed to set pending shutdown flag: {e}")
-
-        # 發送停止指令給所有 Minecraft 螢幕
-        for inst in self.instances:
-            await self.send_command_to_instance(inst, "say Discord 機器人發起安全關機指令，系統執行存檔並準備斷電...\r")
-            await asyncio.sleep(1)
-            await self.send_command_to_instance(inst, "stop\r")
+            await interaction.followup.send(f"❌ 無法連線至面板 API: {e}")
 
     async def read_log_loop(self, uuid, log_file):
         """Old local tail logic removed. Real-time log scraping is suspended in remote v1."""

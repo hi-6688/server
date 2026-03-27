@@ -16,7 +16,7 @@ API_KEY = "hihi_secret_key_2026"  # Simple security token
 # ==========================================
 # 智慧型串流全域變數 (Smart Connection)
 # ==========================================
-STREAM_URL = "http://39.12.35.16:24446/internal_stream?key=AdminKey123456"
+STREAM_URL = "http://10.140.0.2:24445/internal_stream?key=AdminKey123456"
 is_streaming = False
 stream_thread = None
 stream_log_process = None

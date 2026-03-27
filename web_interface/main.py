@@ -47,6 +47,15 @@ app.include_router(files_router.router)
 app.include_router(worlds_router.router)
 app.include_router(addons_router.router)
 
+import asyncio
+
+@app.on_event("startup")
+async def startup_event():
+    # 啟動 WebSocket 的狀態推播背景任務
+    from api_routers.websocket_router import stats_broadcaster_loop
+    asyncio.create_task(stats_broadcaster_loop())
+    print("[Main] Started stats_broadcaster_loop background task.")
+
 # === 靜態檔案伺服器與 SPA Fallback (低優先級) ===
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DIST_DIR = os.path.join(BASE_DIR, 'frontend', 'dist')

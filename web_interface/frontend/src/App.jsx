@@ -47,9 +47,11 @@ function App() {
   const [commandInput, setCommandInput] = useState('');
   const [apiReady, setApiReady] = useState(false);
   const [publicIp, setPublicIp] = useState(window.location.hostname);
+  const [gameRunning, setGameRunning] = useState(false);
+  const [bootError, setBootError] = useState(null); // 開機失敗時的內嵌式錯誤訊息
 
   // === 智慧型連線 (Smart Connection) ===
-  const { isConnected, serverState, logs: wsLogs, sendCommand } = useSmartSocket();
+  const { isConnected, serverState, logs: wsLogs, bootProgress, sendCommand } = useSmartSocket();
 
   const loadInstances = async () => {
       try {
@@ -83,12 +85,21 @@ function App() {
           setVm2Online(data.vm2_online);
           
           setIsOnline(data.server_status === 'online');
-          // serverStatus = 遊戲伺服器程式的狀態文字
           const gameOnline = data.server_status === 'online';
-          setServerStatus(
-            gameOnline ? '線上 (Online)' :
-              data.vm2_online ? '待機中 (Standby)' : '離線 (Offline)'
-          );
+          
+          if (data.boot_progress && data.boot_progress !== 'offline' && data.boot_progress !== 'online') {
+            const bp = data.boot_progress;
+            setServerStatus(
+              bp === 'vm_starting' ? '啟動 VM 中...' :
+              bp === 'agent_waiting' ? '等待代理連線...' :
+              bp === 'server_starting' ? '啟動麥塊中...' : '開機中...'
+            );
+          } else {
+            setServerStatus(
+              gameOnline ? '線上 (Online)' :
+                data.vm2_online ? '待機中 (Standby)' : '離線 (Offline)'
+            );
+          }
           if (data.stats) {
             setCpuLoad((data.stats.cpu || 0).toFixed(1) + '%');
             setRamPercent(Math.round(data.stats.mem || 0));
@@ -118,10 +129,20 @@ function App() {
     if (serverState) {
       const online = serverState.status === 'online';
       setIsOnline(online);
-      setServerStatus(
-        online ? '線上 (Online)' :
-          serverState.status === 'starting' ? '啟動中...' : '離線 (Offline)'
-      );
+
+      // 從 WebSocket 推播中分別同步 VM2 與遊戲實例狀態
+      if (serverState.vm2_online !== undefined) setVm2Online(serverState.vm2_online);
+      if (serverState.game_running !== undefined) setGameRunning(serverState.game_running);
+
+      // 若後端推播中有 boot_progress 且正在開機中途，不覆蓋精確的開機進度文字
+      const bp = serverState.boot_progress;
+      const isBootingNow = bp && bp !== 'offline' && bp !== 'online';
+      if (!isBootingNow) {
+        setServerStatus(
+          online ? '線上 (Online)' :
+            serverState.status === 'starting' ? '啟動中...' : '離線 (Offline)'
+        );
+      }
 
       const stats = serverState.system;
       if (stats) {
@@ -129,8 +150,6 @@ function App() {
         setRamPercent(stats.ram_percent || 0);
         setRamUsed(stats.ram_used_mb !== undefined ? stats.ram_used_mb + 'MB' : '...');
         setRamTotal(stats.ram_total_mb !== undefined ? stats.ram_total_mb + 'MB' : '...');
-        
-        // WebSocket 也同步更新磁碟與網路 (若有提供)
         if (stats.disk_percent !== undefined) {
           setDiskPercent(Math.round(stats.disk_percent));
           setDiskUsed(`${stats.disk_used_gb} GB`);
@@ -146,6 +165,39 @@ function App() {
       if (serverState.version) setVersion(serverState.version);
     }
   }, [serverState]);
+
+  // 監聯開機進度推播，動態更新顯示字串
+  useEffect(() => {
+    if (bootProgress && bootProgress.progress !== 'offline') {
+      setBootError(null); // 清除先前的錯誤
+      const bp = bootProgress.progress;
+      if (bp === 'vm_starting') {
+        setServerStatus('啟動 VM 中...');
+        setIsOnline(false);
+        setVm2Online(false);
+      } else if (bp === 'agent_waiting') {
+        setServerStatus('等待代理...');
+        setIsOnline(false);
+        setVm2Online(true); // VM 已啟動，等待代理
+      } else if (bp === 'server_starting') {
+        setServerStatus('啟動麥塊中...');
+        setIsOnline(false);
+        setVm2Online(true);
+      } else if (bp === 'online') {
+        setServerStatus('線上 (Online)');
+        setIsOnline(true);
+        setVm2Online(true);
+        setGameRunning(true);
+      }
+    } else if (bootProgress && bootProgress.progress === 'offline' && bootProgress.message) {
+      // 改用內嵌式錯誤提示，不再使用 alert()
+      setBootError(bootProgress.message);
+      setServerStatus('離線 (Offline)');
+      setIsOnline(false);
+      // 5 秒後自動清除錯誤訊息
+      setTimeout(() => setBootError(null), 8000);
+    }
+  }, [bootProgress]);
 
   // 接收 WebSocket 的 Log 串流
   useEffect(() => {
@@ -203,9 +255,12 @@ function App() {
       }
   };
 
+  // 判斷是否正在開機中 (用於停用按鈕)
+  const isBooting = bootProgress && bootProgress.progress !== 'offline' && bootProgress.progress !== 'online';
+
   // 電源控制
   const handleStart = async () => {
-    setServerStatus('啟動中...');
+    setServerStatus('呼叫 API 中...');
     try { await sendPowerAction('start'); } catch (e) { console.error(e); setServerStatus('離線 (Offline)'); }
   };
   const handleStop = async () => {
@@ -240,7 +295,7 @@ function App() {
   // 根據 Tab 渲染內容
   const renderContent = () => {
     switch (activeTab) {
-      case 'console': return <ConsolePage />;
+      case 'console': return <ConsolePage logs={logs} sendCommand={sendCommand} isConnected={isConnected} />;
       case 'players': return <PlayersPage />;
       case 'files': return <FilesPage />;
       case 'worlds': return <WorldsPage />;
@@ -254,6 +309,11 @@ function App() {
             <Dashboard
               serverStatus={serverStatus}
               isOnline={isOnline}
+              isBooting={isBooting}
+              bootProgress={bootProgress}
+              bootError={bootError}
+              vm2Online={vm2Online}
+              gameRunning={gameRunning}
               activePlayers={activePlayers}
               maxPlayers={maxPlayers}
               version={version}

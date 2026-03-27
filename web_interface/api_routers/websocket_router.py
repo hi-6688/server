@@ -9,6 +9,7 @@ import sys
 # 確保可以 import 上層目錄的模組
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/..")
 from dependencies import API_KEY
+import proxy_helpers
 
 router = APIRouter(tags=["websocket"])
 
@@ -51,18 +52,13 @@ class ConnectionManager:
 
     def notify_vm2(self, action: str):
         """發送控制指令給遠端的 VM2 代理"""
-        # 注意：這裡的 IP 應與原本 ws_server.py 中的設定一致
-        # 在 Vibe Coding 中，我們可以將這些改為環境變數，但現在我們先保留現狀以確保功能正確。
         try:
-            # 這裡我們開一個線程或是使用 non-blocking 方式避免阻塞主程式
+            # 開一個線程以避免阻塞主程式
             def do_post():
                 try:
-                    requests.post(
-                        "http://39.12.35.16:9999/", 
-                        json={"action": action, "screen_name": "main"}, 
-                        headers={"Authorization": "Bearer hihi_secret_key_2026"}, 
-                        timeout=2
-                    )
+                    res = proxy_helpers.proxy_to_agent(action, screen_name="main")
+                    if isinstance(res, dict) and res.get("status") == "error":
+                        print(f"[WS] Failed to notify VM2 ({action}): {res.get('message')}")
                 except Exception as e:
                     print(f"[WS] Failed to notify VM2 ({action}): {e}")
             
@@ -72,6 +68,68 @@ class ConnectionManager:
             pass
 
 manager = ConnectionManager()
+
+async def stats_broadcaster_loop():
+    """背景輪詢迴圈：定期取得資源狀態並廣播"""
+    while True:
+        try:
+            if not manager.active_connections:
+                # 若無人連線，休息久一點
+                await asyncio.sleep(5)
+                continue
+
+            bp = proxy_helpers.get_boot_progress()
+            vm2_online = await asyncio.to_thread(proxy_helpers.is_vm2_running)
+
+            game_running = False
+            active_players = 0
+            max_players = 0
+            version = ""
+            system_stats = {}
+
+            # 只有在 VM2 上線且不在開機中途時才向 Agent 查詢
+            if vm2_online and bp in ("online", "offline"):
+                # 使用既有的 proxy_to_agent (POST 協定) 查詢系統狀態
+                status_res = await asyncio.to_thread(proxy_helpers.proxy_to_agent, "get_system_status")
+                stats_res = await asyncio.to_thread(proxy_helpers.proxy_to_agent, "get_stats")
+
+                if isinstance(status_res, dict) and status_res.get("status") == "success":
+                    screens = status_res.get("screens", [])
+                    # 判斷遊戲是否有在跑：如果有任何 screen 存在即視為運行
+                    game_running = len(screens) > 0
+
+                if isinstance(stats_res, dict) and stats_res.get("status") == "success":
+                    system_stats = stats_res.get("stats", {})
+
+            # 組裝狀態字串
+            status_str = "offline"
+            if game_running:
+                status_str = "online"
+            elif bp not in ("offline", "none", "", None):
+                status_str = "starting"
+
+            payload = {
+                "type": "server_status",
+                "data": {
+                    "status": status_str,
+                    "vm2_online": vm2_online,
+                    "game_running": game_running,
+                    "system": system_stats,
+                    "activePlayers": active_players,
+                    "maxPlayers": max_players,
+                    "version": version,
+                    "boot_progress": bp
+                }
+            }
+
+            await manager.broadcast(json.dumps(payload))
+
+        except Exception as e:
+            print(f"[StatsBroadcaster] Error: {e}")
+
+        # 固定間隔推播
+        await asyncio.sleep(4)
+
 
 @router.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket, key: str = "none"):

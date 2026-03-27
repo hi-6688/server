@@ -21,6 +21,7 @@ services:
       dockerfile: Dockerfile
     container_name: hihi-ai
     restart: unless-stopped
+    network_mode: host
     environment:
       - BOT_MODE=HIHI
     env_file:
@@ -37,6 +38,7 @@ services:
       dockerfile: Dockerfile
     container_name: conch-tool
     restart: unless-stopped
+    network_mode: host
     environment:
       - BOT_MODE=CONCH
     env_file:

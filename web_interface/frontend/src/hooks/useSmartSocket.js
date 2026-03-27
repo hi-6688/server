@@ -4,7 +4,8 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 const getWsUrl = () => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.hostname;
-    const apiKey = new URLSearchParams(window.location.search).get('key') || '';
+    // 重現 api.js 內的行爲，若 URL 中沒有給 key，預設帶入開發用金鑰
+    const apiKey = new URLSearchParams(window.location.search).get('key') || 'AdminKey123456';
     
     // 開發環境使用 24445，正式環境使用當前 Port (通常也是 24445)
     let port = window.location.port;
@@ -19,6 +20,7 @@ export function useSmartSocket() {
     const [isConnected, setIsConnected] = useState(false);
     const [serverState, setServerState] = useState(null);
     const [logs, setLogs] = useState([]);
+    const [bootProgress, setBootProgress] = useState({ progress: 'offline', message: '' });
 
     const wsRef = useRef(null);
     const reconnectTimeoutRef = useRef(null);
@@ -55,6 +57,9 @@ export function useSmartSocket() {
 
                 if (message.type === 'server_status') {
                     setServerState(message.data);
+                }
+                else if (message.type === 'boot_progress') {
+                    setBootProgress({ progress: message.data, message: message.message || '' });
                 }
                 else if (message.type === 'console_log') {
                     // 新增收到的 log
@@ -114,6 +119,7 @@ export function useSmartSocket() {
         isConnected,
         serverState,
         logs,
+        bootProgress,
         sendCommand
     };
 }
