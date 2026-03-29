@@ -1,8 +1,8 @@
-// ConsolePage.jsx — 即時終端機頁面 (獨立全畫面版本，舊版配色)
+// ConsolePage.jsx — 即時終端機頁面 (獨立全畫面版本，舊版配色，WebSocket 版)
 import { useState, useEffect, useRef } from 'react';
-import { readFile } from '../utils/api';
+import { readFile, sendCommand as sendCommandToConsole } from '../utils/api';
 
-export default function ConsolePage({ logs, sendCommand, isConnected }) {
+export default function ConsolePage({ logs, setLogs, isConnected, sendCommand }) {
     const [historyLogs, setHistoryLogs] = useState([]);
     const [commandInput, setCommandInput] = useState('');
     const logsEndRef = useRef(null);
@@ -28,7 +28,6 @@ export default function ConsolePage({ logs, sendCommand, isConnected }) {
 
     // 合併歷史日誌與最新的 WebSocket 日誌
     const displayLogs = [...historyLogs, ...logs.map((L, i) => ({ ...L, id: `ws-${i}` }))];
-
     // 自動捲動到底部
     useEffect(() => {
         logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -39,11 +38,22 @@ export default function ConsolePage({ logs, sendCommand, isConnected }) {
         if (!commandInput.trim()) return;
         const cmd = commandInput;
         setCommandInput('');
-        
-        // 呼叫 App 傳遞進來的 sendCommand，它可以區分 HTTP 或 WS
-        if (sendCommand) {
-             // App 會有自己的暫存 logs 陣列處理機制
+        const now = new Date();
+        const pad = (n) => String(n).padStart(2, '0');
+        const timeStr = pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
+
+        // 優先使用 WebSocket 發送，若不通則 fallback HTTP
+        if (isConnected && sendCommand) {
              sendCommand(cmd);
+             // 樂觀更新 UI
+             setLogs(prev => [...prev, { id: Date.now(), time: timeStr, level: 'CMD', message: '> ' + cmd }]);
+        } else {
+             setLogs(prev => [...prev, { id: Date.now(), time: timeStr, level: 'CMD', message: '> ' + cmd }]);
+             try {
+                 await sendCommandToConsole(cmd);
+             } catch (e) {
+                 setLogs(prev => [...prev, { id: Date.now(), time: timeStr, level: 'ERROR', message: 'Failed: ' + e.message }]);
+             }
         }
     };
 
@@ -52,20 +62,17 @@ export default function ConsolePage({ logs, sendCommand, isConnected }) {
             {/* 標題列 */}
             <div className="h-14 border-b border-white/10 flex items-center px-6 shrink-0">
                 <i className="fas fa-terminal text-success mr-3"></i>
-                <h2 className="text-white font-semibold flex items-center gap-3">
-                    伺服器終端機
-                    {isConnected ? (
-                        <span className="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full border border-green-500/30">即時同步中</span>
-                    ) : (
-                        <span className="text-xs bg-yellow-500/20 text-yellow-400 px-2 py-0.5 rounded-full border border-yellow-500/30">中斷連線</span>
-                    )}
-                </h2>
+                <h2 className="text-white font-semibold">伺服器終端機</h2>
+                <div className="ml-auto flex items-center gap-2">
+                    <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-success shadow-[0_0_8px_#4ade80]' : 'bg-red-500 shadow-[0_0_8px_#ef4444]'}`}></div>
+                    <span className="text-xs text-text-sub">{isConnected ? '即時連線中' : '連線中斷'}</span>
+                </div>
             </div>
 
             {/* 日誌區 */}
             <div className="flex-1 overflow-y-auto p-4 font-mono text-sm space-y-1 custom-scrollbar bg-black/20">
-                {displayLogs.map((log) => (
-                    <div key={log.id} className="flex gap-2">
+                {displayLogs.map((log, index) => (
+                    <div key={log.id || index} className="flex gap-2 hover:bg-white/5 px-1 rounded transition-colors">
                         {log.time && <span className="text-slate-600 shrink-0">[{log.time}]</span>}
                         <span className={
                             log.level === 'CMD' ? 'text-cyan-400' :
