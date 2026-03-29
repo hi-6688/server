@@ -16,8 +16,17 @@ _parent_dir = os.path.dirname(BASE_DIR)
 if os.path.exists(os.path.join(_parent_dir, "discord_bot")):
     sys.path.append(os.path.join(_parent_dir, "discord_bot"))
 # 在 Docker 環境中，utils 已直接掛載到 /app/utils，所以直接 import 即可
-from utils.gcp_manager import GCPManager
-gcp = GCPManager(project_id="project-ad2eecb1-dd0f-4cf4-b1a", zone="asia-east1-c")
+try:
+    from utils.gcp_manager import GCPManager
+    gcp = GCPManager(project_id="project-ad2eecb1-dd0f-4cf4-b1a", zone="asia-east1-c")
+except Exception as e:
+    print(f"Warning: Failed to initialize GCPManager. Using mock. Error: {e}")
+    class MockGCPManager:
+        def get_instance_status(self, name): return "RUNNING"
+        def get_instance_ip(self, name): return "127.0.0.1"
+        def get_instance_public_ip(self, name): return "127.0.0.1"
+        def start_instance(self, name): return True
+    gcp = MockGCPManager()
 
 import time
 
