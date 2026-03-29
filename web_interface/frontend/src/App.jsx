@@ -239,8 +239,12 @@ function App() {
 
   // 根據 Tab 渲染內容
   const renderContent = () => {
+    const currentInstanceData = instances.find(inst => inst.uuid === currentInstance) || {};
+    const port = currentInstanceData.port || 19132;
+
     switch (activeTab) {
-      case 'console': return <ConsolePage />;
+      case 'console':
+        return <ConsolePage logs={logs} setLogs={setLogs} isConnected={isConnected} sendCommand={sendCommand} />;
       case 'players': return <PlayersPage />;
       case 'files': return <FilesPage />;
       case 'worlds': return <WorldsPage />;
@@ -270,6 +274,7 @@ function App() {
               onStop={handleStop}
               onRestart={handleRestart}
               publicIp={publicIp}
+              port={port}
             />
             <LiveConsole
               logs={logs}

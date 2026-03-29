@@ -1,33 +1,10 @@
-// ConsolePage.jsx — 即時終端機頁面 (獨立全畫面版本，舊版配色)
+// ConsolePage.jsx — 即時終端機頁面 (獨立全畫面版本，舊版配色，WebSocket 版)
 import { useState, useEffect, useRef } from 'react';
-import { readFile, sendCommand } from '../utils/api';
+import { sendCommand as sendCommandToConsole } from '../utils/api';
 
-export default function ConsolePage() {
-    const [logs, setLogs] = useState([]);
+export default function ConsolePage({ logs, setLogs, isConnected, sendCommand }) {
     const [commandInput, setCommandInput] = useState('');
     const logsEndRef = useRef(null);
-
-    // 每 3 秒自動拉取最新日誌
-    useEffect(() => {
-        const pullLogs = async () => {
-            try {
-                const data = await readFile('bedrock_screen.log', 50);
-                if (data && data.content) {
-                    const lines = data.content.split('\n').filter(l => l.trim()).map((line, i) => ({
-                        id: i,
-                        time: '',
-                        level: 'INFO',
-                        message: line
-                    }));
-                    setLogs(lines);
-                }
-            } catch (_) { /* 靜默 */ }
-        };
-
-        pullLogs();
-        const interval = setInterval(pullLogs, 3000);
-        return () => clearInterval(interval);
-    }, []);
 
     // 自動捲動到底部
     useEffect(() => {
@@ -43,12 +20,19 @@ export default function ConsolePage() {
         const now = new Date();
         const pad = (n) => String(n).padStart(2, '0');
         const timeStr = pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
-        setLogs(prev => [...prev, { id: Date.now(), time: timeStr, level: 'CMD', message: '> ' + cmd }]);
 
-        try {
-            await sendCommand(cmd);
-        } catch (e) {
-            setLogs(prev => [...prev, { id: Date.now(), time: timeStr, level: 'ERROR', message: 'Failed: ' + e.message }]);
+        // 優先使用 WebSocket 發送，若不通則 fallback HTTP
+        if (isConnected && sendCommand) {
+             sendCommand(cmd);
+             // 樂觀更新 UI
+             setLogs(prev => [...prev, { id: Date.now(), time: timeStr, level: 'CMD', message: '> ' + cmd }]);
+        } else {
+             setLogs(prev => [...prev, { id: Date.now(), time: timeStr, level: 'CMD', message: '> ' + cmd }]);
+             try {
+                 await sendCommandToConsole(cmd);
+             } catch (e) {
+                 setLogs(prev => [...prev, { id: Date.now(), time: timeStr, level: 'ERROR', message: 'Failed: ' + e.message }]);
+             }
         }
     };
 
@@ -58,13 +42,16 @@ export default function ConsolePage() {
             <div className="h-14 border-b border-white/10 flex items-center px-6 shrink-0">
                 <i className="fas fa-terminal text-success mr-3"></i>
                 <h2 className="text-white font-semibold">伺服器終端機</h2>
-                <span className="ml-auto text-xs text-text-sub">每 3 秒自動刷新</span>
+                <div className="ml-auto flex items-center gap-2">
+                    <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-success shadow-[0_0_8px_#4ade80]' : 'bg-red-500 shadow-[0_0_8px_#ef4444]'}`}></div>
+                    <span className="text-xs text-text-sub">{isConnected ? '即時連線中' : '連線中斷'}</span>
+                </div>
             </div>
 
             {/* 日誌區 */}
             <div className="flex-1 overflow-y-auto p-4 font-mono text-sm space-y-1 custom-scrollbar bg-black/20">
-                {logs.map((log) => (
-                    <div key={log.id} className="flex gap-2">
+                {logs.map((log, index) => (
+                    <div key={log.id || index} className="flex gap-2 hover:bg-white/5 px-1 rounded transition-colors">
                         {log.time && <span className="text-slate-600 shrink-0">[{log.time}]</span>}
                         <span className={
                             log.level === 'CMD' ? 'text-cyan-400' :

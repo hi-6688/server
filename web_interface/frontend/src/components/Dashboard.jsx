@@ -3,7 +3,7 @@ export default function Dashboard({
   serverStatus, isOnline, activePlayers, maxPlayers, version,
   cpuLoad, ramPercent, ramUsed, ramTotal,
   diskPercent, diskUsed, diskTotal, netRx, netTx,
-  onStart, onStop, onRestart, publicIp
+  onStart, onStop, onRestart, publicIp, port
 }) {
   return (
     <div className="flex flex-col gap-4">
@@ -79,7 +79,7 @@ export default function Dashboard({
           <div className="font-bold text-text-sub">
             <i className="fas fa-door-open mr-2"></i>連接埠 (Port)
           </div>
-          <span className="font-mono text-base text-primary">19132</span>
+          <span className="font-mono text-base text-primary">{port || 19132}</span>
         </div>
 
         {/* 4. 軟體 */}
