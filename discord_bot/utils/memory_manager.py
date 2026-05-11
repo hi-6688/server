@@ -19,11 +19,12 @@ import datetime
 import json
 
 class MemoryManager:
-    def __init__(self, db_url: str, google_api_key: str):
+    def __init__(self, db_url: str, google_api_key: str, api_quota_callback=None):
         self.db_url = db_url
         self.client = genai.Client(api_key=google_api_key)
-        self.embedding_model = "gemini-embedding-001"
-        self.tagging_model = "gemini-3-flash-preview"
+        self.embedding_model = "gemini-embedding-2"
+        self.tagging_model = "gemini-3.1-flash-lite"
+        self.api_quota_callback = api_quota_callback
         # 連線池 (初始化時為 None，需要呼叫 init_pool)
         self.pool: Optional[asyncpg.Pool] = None
 
@@ -73,9 +74,10 @@ class MemoryManager:
     async def get_embedding(self, text: str) -> List[float]:
         """
         將文字轉換為 768 維向量 (Gemini Embedding)。
+        使用非同步 API 避免阻塞。
         """
         try:
-            response = self.client.models.embed_content(
+            response = await self.client.aio.models.embed_content(
                 model=self.embedding_model,
                 contents=text,
                 config=types.EmbedContentConfig(
@@ -130,7 +132,11 @@ class MemoryManager:
         """
         使用 Gemini Flash 分析內容，回傳結構化 metadata。
         """
+        
         try:
+            if self.api_quota_callback and not self.api_quota_callback():
+                print("⚠️ [Memory] API Quota reached. Skip tagging.")
+                return None
             prompt = f"""
             分析以下記憶內容，萃取結構化 metadata (JSON 格式)。
             內容: "{content}"
@@ -147,7 +153,7 @@ class MemoryManager:
             只回傳 JSON 物件。
             """
 
-            response = self.client.models.generate_content(
+            response = await self.client.aio.models.generate_content(
                 model=self.tagging_model,
                 contents=prompt,
                 config=types.GenerateContentConfig(response_mime_type="application/json")
@@ -157,16 +163,14 @@ class MemoryManager:
             print(f"⚠️ 內容分析錯誤: {e}")
             return None
 
-    async def search_memory(self, query: str, limit: int = 3) -> List[Dict[str, Any]]:
+    async def search_memory(self, query: str, limit: int = 3, include_context: bool = True) -> List[Dict[str, Any]]:
         """
-        混合搜尋 (Hybrid Search)：
-        1. Vector Search (語意相似度)
-        2. Full-Text Search (關鍵字匹配)
-        3. RRF (Reciprocal Rank Fusion) 合併排名
+        Reference-based RAG (Parent-Child Retrieval):
+        混合搜尋 (Hybrid Search) + 動態調閱原文 (Context Retrieval)
         """
         # 生成查詢向量
         try:
-            response = self.client.models.embed_content(
+            response = await self.client.aio.models.embed_content(
                 model=self.embedding_model,
                 contents=query,
                 config=types.EmbedContentConfig(
@@ -212,14 +216,36 @@ class MemoryManager:
                     meta = row['metadata']
                     if isinstance(meta, str):
                         meta = json.loads(meta) if meta else {}
-                    memories.append({
+                        
+                    mem_obj = {
                         "content": row['content'],
                         "user_name": row['user_name'],
                         "importance": row['importance'],
                         "created_at": row['created_at'],
                         "metadata": meta if meta else {},
                         "similarity": row['similarity']
-                    })
+                    }
+                    
+                    # 💡 重點：調閱原文 (Reference-based Context)
+                    if include_context:
+                        # 找尋這個記憶時間點「之前」的 10 句原始對話
+                        ctx_rows = await conn.fetch("""
+                            SELECT role, content
+                            FROM chat_history
+                            WHERE timestamp <= $1
+                            ORDER BY timestamp DESC
+                            LIMIT 10
+                        """, row['created_at'])
+                        
+                        raw_context = []
+                        for cr in reversed(ctx_rows):  # 翻轉回正序
+                            # 簡單格式化
+                            role_name = "User" if cr['role'] == "user" else "HiHi"
+                            raw_context.append(f"[{role_name}] {cr['content']}")
+                        
+                        mem_obj['raw_context'] = raw_context
+
+                    memories.append(mem_obj)
             except Exception as e:
                 print(f"❌ 記憶搜尋錯誤: {e}")
 
@@ -357,7 +383,7 @@ class MemoryManager:
         例如：「誰喜歡遊戲？」→ 回傳所有相關使用者的事實。
         """
         try:
-            response = self.client.models.embed_content(
+            response = await self.client.aio.models.embed_content(
                 model=self.embedding_model,
                 contents=query,
                 config=types.EmbedContentConfig(
@@ -463,7 +489,7 @@ class MemoryManager:
         回傳格式化字串供 System Prompt 注入。
         """
         try:
-            response = self.client.models.embed_content(
+            response = await self.client.aio.models.embed_content(
                 model=self.embedding_model,
                 contents=query,
                 config=types.EmbedContentConfig(
