@@ -34,7 +34,7 @@ class MemoryManager:
 
     async def init_pool(self, min_size: int = 2, max_size: int = 10):
         """
-        初始化連線池。應在 Bot 啟動時呼叫。
+        初始化連線池與背景任務佇列。應在 Bot 啟動時呼叫。
         min_size: 最小保持連線數
         max_size: 最大連線數
         """
@@ -47,12 +47,27 @@ class MemoryManager:
             max_size=max_size,
             command_timeout=30
         )
-        print(f"🔌 [DB] 連線池已建立 (min={min_size}, max={max_size})")
+        
+        # 初始化非同步記憶寫入佇列 (Asynchronous Queue)
+        self.memory_queue = asyncio.Queue()
+        # 建立背景佇列處理器的協程任務 (Background Task)
+        self.queue_processor_task = asyncio.create_task(self._process_memory_queue())
+        
+        print(f"🔌 [DB] 連線池已建立 (min={min_size}, max={max_size}) 且背景記憶處理器已啟動")
 
     async def close_pool(self):
         """
-        關閉連線池。應在 Bot 關閉時呼叫。
+        關閉連線池與背景任務。應在 Bot 關閉時呼叫。
         """
+        # 安全取消背景佇列處理器任務 (Cancel Background Task)
+        if hasattr(self, 'queue_processor_task') and self.queue_processor_task:
+            self.queue_processor_task.cancel()
+            try:
+                await self.queue_processor_task
+            except asyncio.CancelledError:
+                pass
+            print("🔌 [DB] 背景記憶處理器已關閉")
+
         if self.pool:
             await self.pool.close()
             self.pool = None
@@ -71,6 +86,17 @@ class MemoryManager:
     # 🧬 Embedding 生成
     # =========================================================================
 
+    def _normalize_vector(self, vector: List[float]) -> List[float]:
+        """手動對截斷後的向量進行 L2 歸一化，防止餘弦相似度失真"""
+        if not vector:
+            return vector
+        import math
+        sq_sum = sum(x ** 2 for x in vector)
+        norm = math.sqrt(sq_sum)
+        if norm == 0:
+            return vector
+        return [x / norm for x in vector]
+
     async def get_embedding(self, text: str) -> List[float]:
         """
         將文字轉換為 768 維向量 (Gemini Embedding)。
@@ -81,11 +107,11 @@ class MemoryManager:
                 model=self.embedding_model,
                 contents=text,
                 config=types.EmbedContentConfig(
-                    task_type="RETRIEVAL_DOCUMENT",
                     output_dimensionality=768
                 )
             )
-            return response.embeddings[0].values
+            raw_vector = response.embeddings[0].values
+            return self._normalize_vector(raw_vector)
         except Exception as e:
             print(f"❌ Embedding 錯誤: {e}")
             return []
@@ -96,37 +122,71 @@ class MemoryManager:
 
     async def add_memory(self, user_name: str, content: str, importance: int = 1, type: str = "observation", metadata: Dict[str, Any] = None):
         """
-        儲存新記憶到 PostgreSQL (memories 表)。
-        自動進行 AI 標籤分析 + 向量嵌入。
+        將新記憶放入非同步佇列 (Queue)，立即回傳。
         """
-        # 1. AI 自動標籤
-        try:
-            ai_meta = await self._analyze_content(content)
-            if ai_meta:
-                if metadata is None:
-                    metadata = {}
-                metadata.update(ai_meta)
-                print(f"🧠 [Memory] AI 標籤: {ai_meta}")
-        except Exception as e:
-            print(f"⚠️ AI 標籤失敗 (不影響儲存): {e}")
+        await self.memory_queue.put({
+            "user_name": user_name,
+            "content": content,
+            "importance": importance,
+            "type": type,
+            "metadata": metadata
+        })
+        print(f"✅ 記憶已排入背景佇列: {user_name} - {content[:30]}...")
 
-        # 2. 生成 Embedding
-        vector = await self.get_embedding(content)
-        if not vector:
-            print("❌ 無法生成 Embedding，跳過儲存。")
-            return
-
-        # 3. 寫入資料庫
-        meta_json = json.dumps(metadata, ensure_ascii=False) if metadata else "{}"
-        async with self.pool.acquire() as conn:
+    async def _process_memory_queue(self):
+        """
+        背景無窮迴圈，從佇列取出記憶並處理 (AI 標籤 + 向量嵌入 + 寫入資料庫)。
+        """
+        while True:
             try:
-                await conn.execute("""
-                    INSERT INTO memories (user_name, content, importance, type, embedding, metadata)
-                    VALUES ($1, $2, $3, $4, $5, $6)
-                """, user_name, content, importance, type, str(vector), meta_json)
-                print(f"✅ 記憶已儲存: {user_name} - {content[:30]}... (重要度: {importance})")
+                task_data = await self.memory_queue.get()
+                user_name = task_data["user_name"]
+                content = task_data["content"]
+                importance = task_data["importance"]
+                mem_type = task_data["type"]
+                metadata = task_data["metadata"]
+
+                # 1. AI 自動標籤
+                try:
+                    ai_meta = await self._analyze_content(content)
+                    if ai_meta:
+                        if metadata is None:
+                            metadata = {}
+                        metadata.update(ai_meta)
+                        print(f"🧠 [Memory Queue] AI 標籤完成: {ai_meta}")
+                except Exception as e:
+                    print(f"⚠️ [Memory Queue] AI 標籤失敗 (不影響儲存): {e}")
+
+                # 2. 生成 Embedding
+                vector = await self.get_embedding(content)
+                if not vector:
+                    print("❌ [Memory Queue] 無法生成 Embedding，跳過儲存。")
+                    self.memory_queue.task_done()
+                    continue
+
+                # 3. 寫入資料庫
+                meta_json = json.dumps(metadata, ensure_ascii=False) if metadata else "{}"
+                if self.pool:
+                    async with self.pool.acquire() as conn:
+                        try:
+                            await conn.execute("""
+                                INSERT INTO memories (user_name, content, importance, type, embedding, metadata)
+                                VALUES ($1, $2, $3, $4, $5, $6)
+                            """, user_name, content, importance, mem_type, str(vector), meta_json)
+                            print(f"💾 [Memory Queue] 記憶已寫入資料庫: {user_name}")
+                        except Exception as e:
+                            print(f"❌ [Memory Queue] 記憶寫入錯誤: {e}")
+                
+                self.memory_queue.task_done()
+                
+                # 稍微休息，避免連續呼叫 API 造成 Rate Limit
+                await asyncio.sleep(1)
+
+            except asyncio.CancelledError:
+                break
             except Exception as e:
-                print(f"❌ 記憶寫入錯誤: {e}")
+                print(f"❌ [Memory Queue] 背景處理器發生未預期錯誤: {e}")
+                await asyncio.sleep(2)
 
     async def _analyze_content(self, content: str) -> Optional[Dict[str, Any]]:
         """
@@ -140,16 +200,17 @@ class MemoryManager:
             prompt = f"""
             分析以下記憶內容，萃取結構化 metadata (JSON 格式)。
             內容: "{content}"
-            
+
+            【已知實體白名單 (請優先從中挑選或參考)】：
+            "嗨嗨", "Hi6688", "心", "Minecraft", "伺服器", "梗圖", "鐵槌", "豬豬"
+
             JSON Schema:
             {{
                 "topics": ["主題1", "主題2"],
-                "entities": ["人物/物品1", "人物/物品2"],
-                "sentiment": "positive" | "negative" | "neutral",
+                "entities": ["實體1", "實體2"],
                 "category": "FACT" | "OPINION" | "EVENT" | "KNOWLEDGE",
                 "keywords": ["關鍵字1", "關鍵字2"]
-            }}
-            
+            }}            
             只回傳 JSON 物件。
             """
 
@@ -169,18 +230,8 @@ class MemoryManager:
         混合搜尋 (Hybrid Search) + 動態調閱原文 (Context Retrieval)
         """
         # 生成查詢向量
-        try:
-            response = await self.client.aio.models.embed_content(
-                model=self.embedding_model,
-                contents=query,
-                config=types.EmbedContentConfig(
-                    task_type="RETRIEVAL_QUERY",
-                    output_dimensionality=768
-                )
-            )
-            query_vector = response.embeddings[0].values
-        except Exception as e:
-            print(f"❌ 查詢 Embedding 錯誤: {e}")
+        query_vector = await self.get_embedding(query)
+        if not query_vector:
             return []
 
         async with self.pool.acquire() as conn:
@@ -382,18 +433,8 @@ class MemoryManager:
         語意搜尋事實 (跨使用者)。
         例如：「誰喜歡遊戲？」→ 回傳所有相關使用者的事實。
         """
-        try:
-            response = await self.client.aio.models.embed_content(
-                model=self.embedding_model,
-                contents=query,
-                config=types.EmbedContentConfig(
-                    task_type="RETRIEVAL_QUERY",
-                    output_dimensionality=768
-                )
-            )
-            query_vector = response.embeddings[0].values
-        except Exception as e:
-            print(f"❌ 事實搜尋 Embedding 錯誤: {e}")
+        query_vector = await self.get_embedding(query)
+        if not query_vector:
             return []
 
         async with self.pool.acquire() as conn:
@@ -488,18 +529,8 @@ class MemoryManager:
         混合搜尋知識庫：Vector + 關鍵字。
         回傳格式化字串供 System Prompt 注入。
         """
-        try:
-            response = await self.client.aio.models.embed_content(
-                model=self.embedding_model,
-                contents=query,
-                config=types.EmbedContentConfig(
-                    task_type="RETRIEVAL_QUERY",
-                    output_dimensionality=768
-                )
-            )
-            query_vector = response.embeddings[0].values
-        except Exception as e:
-            print(f"❌ 知識搜尋 Embedding 錯誤: {e}")
+        query_vector = await self.get_embedding(query)
+        if not query_vector:
             return ""
 
         async with self.pool.acquire() as conn:
@@ -562,7 +593,9 @@ class MemoryManager:
 # 單元測試
 if __name__ == "__main__":
     from dotenv import load_dotenv
-    load_dotenv("/home/terraria/servers/.env")
+    # 動態讀取專案根目錄的 .env 檔案
+    env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), '.env')
+    load_dotenv(env_path)
 
     async def main():
         db_url = os.getenv("DATABASE_URL")
@@ -578,6 +611,9 @@ if __name__ == "__main__":
         # 測試 1: 新增記憶
         print("💾 儲存記憶中...")
         await manager.add_memory("TestUser", "我喜歡吃拉麵，但不喜歡加蔥。", importance=8)
+        # 等待背景任務處理完畢 (Wait for background queue task to complete)
+        print("⏳ 等待背景佇列處理與 Embedding 計算中...")
+        await asyncio.sleep(4)
 
         # 測試 2: 搜尋記憶
         print("\n🔍 搜尋: '喜歡吃什麼？'")
