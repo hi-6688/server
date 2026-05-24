@@ -740,6 +740,9 @@ class AIChat(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, message):
+        # 🔍 偵測收到的所有訊息以供排查
+        print(f"📥 [on_message] 收到來自 {message.author.name} (Bot: {message.author.bot}) 在頻道 {message.channel.id} (名稱: {getattr(message.channel, 'name', 'DM')}) 的訊息: {message.content[:50]}")
+        
         # 1. Guards (允許神奇嗨螺的訊息進入 buffer，讓嗨嗨能看到猜謎遊戲的回覆)
         CONCH_BOT_ID = 1381482872845635614
         if message.author.bot and message.author.id != CONCH_BOT_ID: return
@@ -1071,7 +1074,8 @@ class AIChat(commands.Cog):
                             location_info = f"- 伺服器 (Server): {channel.guild.name if channel.guild else '私人訊息 (Private)'}\n- 頻道 (Channel): {channel.name}"
 
                             async with channel.typing():
-                                response_text = await self._call_gemini_agent(api_messages, system_instruction=base_prompt, location_info=location_info)
+                                # 修正心跳引擎呼叫，正確解構 tuple 回傳值 (包含對話 ID)
+                                response_text, interaction_id = await self._call_gemini_agent(api_messages, system_instruction=base_prompt, location_info=location_info)
                                 
                                 if response_text and response_text.strip() and not response_text.startswith("😵"):
                                     final_response = response_text
@@ -1081,7 +1085,7 @@ class AIChat(commands.Cog):
                                     await channel.send(final_response)
                                     
                                     if self.memory_manager:
-                                        await self.memory_manager.log_chat(role="model", content=response_text, session_id=f"discord_{channel.id}")
+                                        await self.memory_manager.log_chat(role="model", content=response_text, session_id=f"discord_{channel.id}", interaction_id=interaction_id)
                                 else:
                                     print(f"😴 [Heartbeat] AI 決定繼續裝死不講話。")
                                     
