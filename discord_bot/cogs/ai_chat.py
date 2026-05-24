@@ -492,33 +492,40 @@ class AIChat(commands.Cog):
 
         # 手動 Tool 執行迴圈
         while interaction1 and interaction1.status == "requires_action":
-            # 尋找 function_call 步驟 (在 outputs 中)
+            # 尋找所有 function_call 步驟 (在 outputs 中)
             function_calls = [o for o in interaction1.outputs if o.type == "function_call"]
             if not function_calls:
                 print("⚠️ [LogicRouter] 狀態為 requires_action 但找不到 function_call。")
                 break
                 
-            fc_step = function_calls[0]
-            print(f"🔧 [LogicRouter Tool] 執行工具: {fc_step.name} 參數: {fc_step.arguments}")
+            # 並行執行所有被觸發的工具呼叫
+            tasks = []
+            for fc in function_calls:
+                print(f"🔧 [LogicRouter Tool] 安排執行工具: {fc.name} 參數: {fc.arguments}")
+                tasks.append(self.execute_tool(fc.name, fc.arguments))
+                
+            # 實時發送中繼狀態遙測 (把所有工具名稱串聯起來)
+            tool_names_str = ", ".join([f"`[{fc.name}]`" for fc in function_calls])
+            await self._emit_telemetry_live(f"🔧 執行工具: {tool_names_str}")
             
-            # 發射中繼遙測播報
-            await self._emit_telemetry_live(f"🔧 執行工具: `[{fc_step.name}]` 參數: `{fc_step.arguments}`")
+            # 非同步並行等待所有工具執行結果
+            results_str = await asyncio.gather(*tasks)
             
-            # 本地執行 Python 函數
-            result_str = await self.execute_tool(fc_step.name, fc_step.arguments)
+            # 打包所有工具呼叫的結果
+            tool_results_input = []
+            for fc, res_str in zip(function_calls, results_str):
+                tool_results_input.append({
+                    "type": "function_result",
+                    "call_id": fc.id,
+                    "name": fc.name,
+                    "result": [{"type": "text", "text": res_str}]
+                })
             
-            # 繼續下一輪互動 (使用 previous_interaction_id 延續)
+            # 繼續下一輪互動 (將所有結果以一個陣列傳回大腦)
             interaction1 = await self._call_interaction_api(
                 model=self.model_name,
                 previous_interaction_id=interaction1.id,
-                input=[
-                    {
-                        "type": "function_result",
-                        "call_id": fc_step.id,
-                        "name": fc_step.name,
-                        "result": [{"type": "text", "text": result_str}]
-                    }
-                ]
+                input=tool_results_input
             )
 
         if not interaction1:
