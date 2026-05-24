@@ -1,7 +1,7 @@
 # 專案企劃書：Discord 數位生命體「嗨嗨 (HiHi)」
 
 > **版本**: 6.0 (Two-Stage Unified Pipeline & Semantic Windows)
-> **最後更新**: 2026-05-07
+> **最後更新**: 2026-05-23
 
 ## 1. 專案概述 (Executive Summary)
 本計畫旨在創建一個具備「獨立人格」與「長期記憶」的 Discord 機器人。與傳統的「助理型 AI」不同，「嗨嗨」定位為伺服器中的一名 **「數位生命體」**，具備觀察、主動發言、時間感知與情緒表達能力，並受限於真實的物理算力極限。
@@ -26,21 +26,10 @@
 Discord 訊息 → 階段一：LogicRouter (邏輯決策器) → 階段二：ChatGenerator (對話生成器) → 最終輸出
 ```
 
-> 💡 **實作現狀備註**：
-> 目前專案已完整實作此雙階段管線。由階段一 `LogicRouter` 搭配 SDK 原生 `tools` 自動執行工具呼叫並產出 `MemoryState`；隨後若判定需回覆，則調用階段二 `ChatGenerator` 進行角色扮演並輸出 `PersonaResponse`。
+*   **【階段一】LogicRouter (邏輯決策器)**：呼叫 SDK 原生 Tools 並輸出 `MemoryState` JSON，專注處理決策與資料庫更新。
+*   **【階段二】ChatGenerator (對話生成器)**：若判定需要回覆，則啟動第二階段，進行「擬態角色扮演」並輸出 `PersonaResponse`。
 
-
-**【階段一】LogicRouter (邏輯決策器)**：
-呼叫 SDK 原生 Tools 並輸出 `MemoryState` JSON，專注處理決策與資料庫更新。
-*   `needs_reply`：判斷是否需要發言 (發言阻斷器，節省額度)。
-*   `current_goal`：目前的工作目標或要處理的實體。
-*   `suggested_sleep_seconds`：決定接下來要主動休眠多久（秒）。
-*   `sleep_intent`：休眠醒來後要做什麼的備忘錄。
-
-**【階段二】ChatGenerator (對話生成器)**：
-如果階段一判定 `needs_reply = True`，則啟動階段二。此階段模型不再處理工具調用，而是專注於「擬態角色扮演」。
-*   **輸入**：階段一整理好的 RAG 背景記憶 + `current_goal` 等決策上下文。
-*   **輸出**：符合 `PersonaResponse` 結構的 `situation_analysis`、`internal_thought` 與最終的 `final_speech`。
+> 💡 關於此兩階段管線的詳細 Pydantic 欄位定義與 Tool 調用細節，請參閱 [TECHNICAL_SPEC.md](file:///home/hi6688/servers/docs/TECHNICAL_SPEC.md#1-兩階段認知管線-two-stage-cognitive-pipeline)。
 
 **內建工具 (Tools)**：
 | 工具名稱 | 用途 |
@@ -104,9 +93,9 @@ Discord 訊息 → 階段一：LogicRouter (邏輯決策器) → 階段二：Cha
 *   Harness 內建全域監控網，攔截所有前台發言與後台打標籤的 API 呼叫，精準計算每日配額。計步器自動同步美國太平洋時間 (America/Los_Angeles)，完美相容夏/冬令時間的跨日重置。
 
 ### 4.2 內心世界觀測台 (Two-Stage Telemetry Mirror)
-*   設立僅造物主可見的專屬 Discord 頻道 (`INNER_WORLD_CHANNEL_ID`)。配合兩階段管線，遙測系統將分段發射字卡：
-    *   **[階段一完成時]**：印出 `[前額葉判定]` (是否需要情感中樞介入) 與 `[記憶操作]` (白板更新了什麼？釘選了哪句話？)。
-    *   **[階段二完成時]**：印出 `[嗨嗨 OS]` (內心真實想法) 與 `[最終行動]` (發言內容或工具呼叫)。
+*   設立僅造物主可見的專屬 Discord 頻道 (`INNER_WORLD_CHANNEL_ID`)。配合雙階段管線，遙測系統將分段發射字卡：
+    *   **[階段一完成時]**：印出 `[LogicRouter 邏輯決策]` (包含當前任務目標、是否需要回覆、預估休眠秒數與已觸發執行的工具)。
+    *   **[階段二完成時]**：印出 `[ChatGenerator 情感 OS]` (內心氣氛分析、私密 OS) 與 `[物理行動輸出]` (最終要在 Discord 說出口的發言內容)。
 
 ### 4.3 自主生理時鐘與鬧鐘排程 (Advanced Scheduler)
 *   賦予 AI 真正的「時間感知」與「未來規劃」能力。AI 可透過 `suggested_sleep_seconds` 與 `sleep_intent` 決定自己下一次醒來的時間與目的。

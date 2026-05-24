@@ -462,34 +462,38 @@ class MemoryManager:
     # 📜 聊天記錄 (Chat History)
     # =========================================================================
 
-    async def log_chat(self, role: str, content: str, session_id: str = "global"):
+    async def log_chat(self, role: str, content: str, session_id: str = "global", interaction_id: str = None):
         """
-        記錄聊天訊息 (chat_history 表)。
+        記錄聊天訊息 (chat_history 表)，支援寫入 interaction_id。
         """
         async with self.pool.acquire() as conn:
             try:
                 await conn.execute("""
-                    INSERT INTO chat_history (role, content, session_id)
-                    VALUES ($1, $2, $3)
-                """, role, content, session_id)
+                    INSERT INTO chat_history (role, content, session_id, interaction_id)
+                    VALUES ($1, $2, $3, $4)
+                """, role, content, session_id, interaction_id)
             except Exception as e:
                 print(f"❌ 聊天記錄錯誤: {e}")
 
-    async def get_recent_chat_history(self, limit: int = 10) -> List[Dict[str, str]]:
+    async def get_recent_chat_history(self, limit: int = 10) -> List[Dict[str, Any]]:
         """
-        取得近期聊天記錄 (按時間正序)。
+        取得近期聊天記錄 (按時間正序)，包含 interaction_id。
         """
         async with self.pool.acquire() as conn:
             history = []
             try:
                 rows = await conn.fetch("""
-                    SELECT role, content FROM chat_history
+                    SELECT role, content, interaction_id FROM chat_history
                     ORDER BY timestamp DESC
                     LIMIT $1
                 """, limit)
                 # 反轉為時間正序
                 for row in reversed(rows):
-                    history.append({"role": row['role'], "content": row['content']})
+                    history.append({
+                        "role": row['role'],
+                        "content": row['content'],
+                        "interaction_id": row['interaction_id']
+                    })
             except Exception as e:
                 print(f"❌ 聊天記錄查詢錯誤: {e}")
             return history

@@ -88,7 +88,8 @@ class AIChat(commands.Cog):
 
         # 💓 心跳引擎 (Async Heartbeat Engine)
         self.heartbeat_task: Optional[asyncio.Task] = None
-        self.wake_event = asyncio.Event()
+        self.sensory_interrupt_event = asyncio.Event()
+        self.schedule_update_event = asyncio.Event()
         self.next_sleep_duration = 3600
         self.sleep_intent = None
 
@@ -303,22 +304,83 @@ class AIChat(commands.Cog):
         except Exception as e:
             print(f"⚠️ 遙測發送失敗: {e}")
 
-    async def _generate_with_retry(self, contents, config, max_retries=3, retry_delay=2):
-        """API 指數退避重試輔助函數，避免 Preview 模型隨機過載 (503) 崩潰"""
+    def _convert_tools(self, tools_list):
+        """
+        將 Python 函數列表轉換為 Interactions API 規格的字典列表。
+        """
+        converted = []
+        for func in tools_list:
+            decl = types.FunctionDeclaration.from_callable(
+                client=self.client._api_client,
+                callable=func
+            )
+            decl_dict = decl.model_dump()
+            converted.append({
+                "type": "function",
+                "name": decl_dict.get("name"),
+                "description": decl_dict.get("description"),
+                "parameters": decl_dict.get("parameters")
+            })
+        return converted
+
+    def _convert_history(self, history_messages):
+        """
+        將舊版 contents 格式的對話歷史，轉換為 Interactions API 的 input 格式 (支援多模態)。
+        """
+        converted = []
+        for msg in history_messages:
+            role = msg.get("role")
+            api_role = "assistant" if role in ["model", "assistant"] else "user"
+            
+            parts = msg.get("parts", [])
+            content_list = []
+            
+            for p in parts:
+                if isinstance(p, dict):
+                    if "text" in p:
+                        content_list.append({"type": "text", "text": p["text"]})
+                    elif "inline_data" in p:
+                        content_list.append({
+                            "type": "image",
+                            "mime_type": p["inline_data"].get("mime_type"),
+                            "data": p["inline_data"].get("data")
+                        })
+                elif hasattr(p, "text") and p.text:
+                    content_list.append({"type": "text", "text": p.text})
+                elif hasattr(p, "inline_data") and p.inline_data:
+                    content_list.append({
+                        "type": "image" if p.inline_data.mime_type.startswith("image") else "document",
+                        "mime_type": p.inline_data.mime_type,
+                        "data": p.inline_data.data
+                    })
+            
+            if len(content_list) == 1 and content_list[0]["type"] == "text":
+                content_val = content_list[0]["text"]
+            else:
+                content_val = content_list
+                
+            converted.append({
+                "role": api_role,
+                "content": content_val
+            })
+        return converted
+
+    async def _call_interaction_api(self, **kwargs):
+        """
+        Interactions API 呼叫的退避重試包裝器，避免隨機 503 崩潰。
+        """
+        max_retries = 3
+        retry_delay = 2
         for attempt in range(max_retries):
             try:
                 if not self._increment_usage():
                     print("⚠️ [Global Ledger] 今日發言額度已達上限，暫停生成。")
                     return None
                 
-                response = await self.client.aio.models.generate_content(
-                    model=self.model_name,
-                    contents=contents,
-                    config=config
-                )
-                return response
+                interaction = await self.client.aio.interactions.create(**kwargs)
+                return interaction
             except Exception as api_err:
-                print(f"⚠️ [API] 模型呼叫失敗 (Attempt {attempt+1}/{max_retries}): {api_err}")
+                print(f"⚠️ [API] Interactions 呼叫失敗 (Attempt {attempt+1}/{max_retries}): {api_err}")
                 if attempt < max_retries - 1:
                     print(f"⏳ 等待 {retry_delay} 秒後重試...")
                     await asyncio.sleep(retry_delay)
@@ -327,23 +389,84 @@ class AIChat(commands.Cog):
                     raise api_err
         return None
 
+    async def execute_tool(self, name: str, arguments: dict) -> str:
+        """
+        手動解構並執行對應的工具函數，回傳執行結果字串。
+        """
+        try:
+            if name == "save_memory":
+                user_name = arguments.get("user_name", "Unknown")
+                content = arguments.get("content", "")
+                importance = int(arguments.get("importance", 5))
+                return await self.save_memory(user_name=user_name, content=content, importance=importance)
+                
+            elif name == "manage_fact":
+                action = arguments.get("action", "add")
+                user_id = arguments.get("user_id", "Unknown")
+                content = arguments.get("content", "")
+                category = arguments.get("category", "Data")
+                return await self.manage_fact(action=action, user_id=user_id, content=content, category=category)
+                
+            elif name == "search_memory":
+                query = arguments.get("query", "")
+                return await self.search_memory(query=query)
+                
+            elif name == "learn_knowledge":
+                term = arguments.get("term", "")
+                definition = arguments.get("definition", "")
+                category = arguments.get("category", "General")
+                return await self.learn_knowledge(term=term, definition=definition, category=category)
+                
+            else:
+                return f"錯誤：找不到名為 {name} 的工具。"
+        except Exception as e:
+            return f"執行工具 {name} 錯誤: {e}"
+
+    async def _emit_telemetry_live(self, text: str):
+        """
+        發送實時中繼狀態遙測至內心世界頻道。
+        """
+        if not self.inner_world_channel_id:
+            return
+        channel = self.bot.get_channel(self.inner_world_channel_id)
+        if not channel:
+            try:
+                channel = await self.bot.fetch_channel(self.inner_world_channel_id)
+            except Exception as e:
+                print(f"⚠️ 即時遙測失敗：找不到頻道 ({self.inner_world_channel_id}): {e}")
+                return
+        try:
+            embed = discord.Embed(
+                description=text,
+                color=discord.Color.dark_gold(),
+                timestamp=datetime.now(timezone(timedelta(hours=8)))
+            )
+            embed.set_author(name="🧠 嗨嗨腦內動態播報")
+            await channel.send(embed=embed)
+        except Exception as e:
+            print(f"⚠️ 即時遙測發送失敗: {e}")
+
     async def _call_gemini_agent(self, history_messages, system_instruction, location_info=""):
         """
-        雙階段 Function Calling 原生化重構大腦管線
-        - 階段一：LogicRouter (邏輯決策器) -> 原生 tools 自動執行 -> 輸出 MemoryState
-        - 階段二：ChatGenerator (對話生成器) -> 純文字擬態發言 -> 輸出 PersonaResponse
+        使用 Interactions API 重構雙階段大腦管線
+        - 階段一：LogicRouter (邏輯決策器) -> 手動 tools 迴圈 -> 輸出 MemoryState JSON
+        - 階段二：ChatGenerator (對話生成器) -> 純文字擬態發言 -> 輸出 PersonaResponse JSON
         """
-        if not self.client: return "😵 (AI Client Not Initialized)"
+        if not self.client: return "😵 (AI Client Not Initialized)", None
 
         # 初始化本次的工具紀錄與暫存狀態
-        self._last_search_results = []
         self._last_executed_tools = []
+        self._last_search_results = []
         self._current_location_info = location_info
+
+        # 轉換歷史紀錄格式
+        input_history = self._convert_history(history_messages)
 
         # ---------------------------------------------------------------------
         # 🚀 階段一：LogicRouter (邏輯決策)
         # ---------------------------------------------------------------------
         tools = [self.save_memory, self.manage_fact, self.search_memory, self.learn_knowledge]
+        interaction_tools = self._convert_tools(tools)
         
         sys_prompt_stage1 = f"""
 {system_instruction}
@@ -356,23 +479,61 @@ class AIChat(commands.Cog):
 在所有工具執行完畢後，妳必須且只能輸出一個符合 `MemoryState` 欄位定義的 JSON。
 """
 
-        config_stage1 = types.GenerateContentConfig(
-            temperature=0.7, # 決策層面採用較低溫度以確保穩定
+        # 呼叫第一階段 (注意：有 tools 時不可啟用 response_format 以防 API 400 報錯)
+        interaction1 = await self._call_interaction_api(
+            model=self.model_name,
+            input=input_history,
             system_instruction=sys_prompt_stage1,
-            tools=tools, # 傳入實體函數以啟用 SDK 原生自動工具呼叫
-            response_mime_type="application/json",
-            response_schema=MemoryState
+            tools=interaction_tools,
+            generation_config=types.GenerateContentConfig(
+                temperature=0.7,
+            )
         )
 
-        try:
-            print("🧠 [LogicRouter] 啟動邏輯決策與工具評估...")
-            response_stage1 = await self._generate_with_retry(history_messages, config_stage1)
+        # 手動 Tool 執行迴圈
+        while interaction1 and interaction1.status == "requires_action":
+            # 尋找 function_call 步驟 (在 outputs 中)
+            function_calls = [o for o in interaction1.outputs if o.type == "function_call"]
+            if not function_calls:
+                print("⚠️ [LogicRouter] 狀態為 requires_action 但找不到 function_call。")
+                break
+                
+            fc_step = function_calls[0]
+            print(f"🔧 [LogicRouter Tool] 執行工具: {fc_step.name} 參數: {fc_step.arguments}")
             
-            if not response_stage1 or not response_stage1.text:
-                return "😵 (今天累了，我先休息囉)"
+            # 發射中繼遙測播報
+            await self._emit_telemetry_live(f"🔧 執行工具: `[{fc_step.name}]` 參數: `{fc_step.arguments}`")
+            
+            # 本地執行 Python 函數
+            result_str = await self.execute_tool(fc_step.name, fc_step.arguments)
+            
+            # 繼續下一輪互動 (使用 previous_interaction_id 延續)
+            interaction1 = await self._call_interaction_api(
+                model=self.model_name,
+                previous_interaction_id=interaction1.id,
+                input=[
+                    {
+                        "type": "function_result",
+                        "call_id": fc_step.id,
+                        "name": fc_step.name,
+                        "result": [{"type": "text", "text": result_str}]
+                    }
+                ]
+            )
+
+        if not interaction1:
+            return "😵 (今天累了，我先休息囉)", None
+
+        # 從 outputs 提取最終 text 內容
+        stage1_text = next((o.text for o in interaction1.outputs if o.type == "text" and hasattr(o, 'text')), None)
+
+        try:
+            print(f"🧠 [LogicRouter] 原始輸出: {stage1_text}")
+            if not stage1_text:
+                raise ValueError("第一階段輸出為空")
 
             # 解析第一階段決策狀態
-            state_data = json.loads(response_stage1.text)
+            state_data = json.loads(stage1_text)
             memory_state = MemoryState(**state_data)
             
             print(f"🔍 [LogicRouter] 決策產出:")
@@ -382,7 +543,6 @@ class AIChat(commands.Cog):
             
         except Exception as e:
             print(f"❌ [LogicRouter] 決策出錯: {e}")
-            # 容錯處理：預設必須回覆且休眠 1 小時
             memory_state = MemoryState(needs_reply=True, current_goal="因決策異常而被迫回覆", suggested_sleep_seconds=3600)
 
         # 真正將睡眠權限交給 AI
@@ -392,14 +552,13 @@ class AIChat(commands.Cog):
             self.next_sleep_duration = sleep_val
             self.sleep_intent = memory_state.sleep_intent
             if old_sleep != sleep_val:
-                self.wake_event.set() # 重新開始計時
+                self.schedule_update_event.set() # 重設排程計時器
 
         # ---------------------------------------------------------------------
         # 🚀 階段二：ChatGenerator (情感 OS 與擬態對話)
         # ---------------------------------------------------------------------
         if not memory_state.needs_reply:
             print("😴 [LogicRouter] 決定不回覆此訊息。")
-            # 發射不回覆的遙測資料
             telemetry_data = {
                 "situation_analysis": "決定不回覆",
                 "internal_thought": f"LogicRouter 評估為不需回覆。當前目標: {memory_state.current_goal}",
@@ -410,12 +569,12 @@ class AIChat(commands.Cog):
             }
             trigger_text = history_messages[-1].get("parts", [{}])[0].get("text", "Unknown") if history_messages else "Unknown"
             await self._emit_telemetry(telemetry_data, trigger_text, location_info)
-            return ""
+            return "", interaction1.id
 
         # 組裝 RAG Context
         rag_context = ""
         if self._last_search_results:
-            rag_context = "\n# ==========================================\n# 【階段一檢索到的背景記憶 (RAG)】\n# ==========================================\n" + "\n".join(self._last_search_results)
+            rag_context = "\n# ==========================================\n# 【階段一檢學到的背景記憶 (RAG)】\n# ==========================================\n" + "\n".join(self._last_search_results)
 
         sys_prompt_stage2 = f"""
 {system_instruction}
@@ -434,29 +593,42 @@ class AIChat(commands.Cog):
 請根據妳的存在宣言，輸出一個符合 `PersonaResponse` 定義的 JSON。
 """
 
-        config_stage2 = types.GenerateContentConfig(
-            temperature=1.0, # 角色發言維持高溫度以展現靈性
-            top_p=0.95,
-            top_k=40,
+        # 階段二無 tools，可以使用 response_format 來保證輸出結構化 JSON
+        interaction2 = await self._call_interaction_api(
+            model=self.model_name,
+            input=input_history,
             system_instruction=sys_prompt_stage2,
-            response_mime_type="application/json",
-            response_schema=PersonaResponse
+            generation_config=types.GenerateContentConfig(
+                temperature=1.0,
+                top_p=0.95,
+                top_k=40,
+            ),
+            response_format=[
+                {
+                    "type": "text",
+                    "mime_type": "application/json",
+                    "schema": PersonaResponse.model_json_schema()
+                }
+            ]
         )
 
-        try:
-            print("🧠 [ChatGenerator] 啟動角色模擬與情緒對話...")
-            response_stage2 = await self._generate_with_retry(history_messages, config_stage2)
-            
-            if not response_stage2 or not response_stage2.text:
-                return "..."
+        if not interaction2:
+            return "😵 (大腦連線失敗)", interaction1.id
 
-            # 解析第二階段角色扮演產出
-            persona_data = json.loads(response_stage2.text)
+        # 提取階段二最終文字
+        stage2_text = next((o.text for o in interaction2.outputs if o.type == "text" and hasattr(o, 'text')), None)
+
+        try:
+            print(f"🧠 [ChatGenerator] 原始輸出: {stage2_text}")
+            if not stage2_text:
+                raise ValueError("第二階段輸出為空")
+
+            persona_data = json.loads(stage2_text)
             persona_response = PersonaResponse(**persona_data)
             
         except Exception as e:
             print(f"❌ [ChatGenerator] 對話出錯: {e}")
-            return "😵 (大腦解析對話發生錯誤)"
+            return "😵 (大腦解析對話發生錯誤)", interaction2.id
 
         # 發射完整的遙測資料
         telemetry_data = {
@@ -470,7 +642,7 @@ class AIChat(commands.Cog):
         trigger_text = history_messages[-1].get("parts", [{}])[0].get("text", "Unknown") if history_messages else "Unknown"
         await self._emit_telemetry(telemetry_data, trigger_text, location_info)
 
-        return persona_response.final_speech if persona_response.final_speech else ""
+        return (persona_response.final_speech if persona_response.final_speech else ""), interaction2.id
     # --- Main Helper Methods ---
 
     def _load_text(self, path, default):
@@ -581,7 +753,10 @@ class AIChat(commands.Cog):
         
         # 🔍 DEBUG
         print(f"📨 [Buffer] New message from {message.author.display_name}: {message.content[:20]}...")
-
+        
+        # 物理喚醒休眠中的心跳引擎
+        self.sensory_interrupt_event.set()
+        
         # 2. Cancel Pending Task (Interrupt)
         if self.response_task and not self.response_task.done():
             self.response_task.cancel()
@@ -792,7 +967,7 @@ class AIChat(commands.Cog):
 
             # 4. Call Agent
             async with channel.typing():
-                response_text = await self._call_gemini_agent(api_messages, system_instruction=system_prompt, location_info=location_info)
+                response_text, interaction_id = await self._call_gemini_agent(api_messages, system_instruction=system_prompt, location_info=location_info)
 
                 if response_text and response_text.strip() and not response_text.startswith("😵"):
                     final_response = response_text
@@ -803,7 +978,7 @@ class AIChat(commands.Cog):
 
                     # Log AI Response
                     if self.memory_manager:
-                        await self.memory_manager.log_chat(role="model", content=response_text, session_id=f"discord_{channel.id}")
+                        await self.memory_manager.log_chat(role="model", content=response_text, session_id=f"discord_{channel.id}", interaction_id=interaction_id)
 
                     # Update History (Stateless - 已交由 log_chat 處理，無需操作 RAM)
                     pass
@@ -835,80 +1010,99 @@ class AIChat(commands.Cog):
         
         while not self.bot.is_closed():
             try:
-                # 預設每 1 小時醒來一次，或等待外部事件喚醒
-                # 這裡的 sleep_time 未來可以由 AgentResponse 的 suggested_sleep_seconds 決定
                 sleep_duration = self.next_sleep_duration
                 print(f"⏳ [Heartbeat] AI 決定休眠 {sleep_duration} 秒...") 
 
-                # 使用 wait_for，如果中途有人講話觸發 wake_event，就會提早醒來
-                await asyncio.wait_for(self.wake_event.wait(), timeout=sleep_duration)
+                # 同時監聽感官中斷事件與排程更新事件
+                sensory_task = asyncio.create_task(self.sensory_interrupt_event.wait())
+                schedule_task = asyncio.create_task(self.schedule_update_event.wait())
                 
-                # -- 被人吵醒 (Sensory Interrupt) --
-                self.wake_event.clear()
-                print("💓 [Heartbeat] 被外界聲音吵醒，重置生理時鐘。")
+                done, pending = await asyncio.wait(
+                    [sensory_task, schedule_task],
+                    timeout=sleep_duration,
+                    return_when=asyncio.FIRST_COMPLETED
+                )
                 
-            except asyncio.TimeoutError:
-                # -- 睡到自然醒 (主動甦醒) --
-                print(f"💓 [Heartbeat] 休眠結束，主動甦醒。")
+                # 取消未完成的監聽任務以防記憶體洩漏
+                for t in pending:
+                    t.cancel()
                 
-                # 測試模式：指定發送至頻道 1467980863990927623
-                target_channel_id = 1467980863990927623
-                channel = self.bot.get_channel(target_channel_id)
-                
-                if channel:
-                    print(f"💓 [Heartbeat] 準備在頻道 {channel.name} 發起主動閒聊...")
-                    try:
-                        # 1. 取得最近的聊天紀錄，看看大家睡前聊了什麼
-                        api_messages = []
-                        if self.memory_manager:
-                            raw_history = await self.memory_manager.get_recent_chat_history(limit=5)
-                            for msg in raw_history:
-                                role = msg.get("role", "user")
-                                content = msg.get("content", "")
-                                if "parts" in msg:
-                                    api_messages.append(msg)
-                                else:
-                                    api_messages.append({"role": role, "parts": [{"text": content}]})
-                            
-                            while api_messages and api_messages[0].get("role") != "user":
-                                api_messages.pop(0)
-
-                        # 2. 準備極簡的系統推播 (Minimal Context Update)
-                        current_time = datetime.now(timezone(timedelta(hours=8))).strftime('%m月%d日 %H:%M')
-                        base_prompt = await self._get_system_prompt("", f"頻道：{channel.name}", "", "")
-                        
-                        if self.sleep_intent:
-                            # 透過環境音暗示備忘錄的浮現，完全不給指令
-                            api_messages.append({"role": "user", "parts": [{"text": f"*(時間來到了 {current_time}。休眠結束，腦海中浮現了先前的備忘錄：「{self.sleep_intent}」)*"}]})
-                            self.sleep_intent = None
-                            self.next_sleep_duration = 3600
-                        else:
-                            # 極簡的時間推移暗示，完全不給指令
-                            api_messages.append({"role": "user", "parts": [{"text": f"*(時間來到了 {current_time})*"}]})
-                        
-                        # 3. 呼叫大腦 (直接使用 base_prompt)
-                        # 擷取環境資訊 (Location Info)
-                        location_info = f"- 伺服器 (Server): {channel.guild.name if channel.guild else '私人訊息 (Private)'}\n- 頻道 (Channel): {channel.name}"
-
-                        async with channel.typing():
-                            response_text = await self._call_gemini_agent(api_messages, system_instruction=base_prompt, location_info=location_info)
-                            
-                            if response_text and response_text.strip() and not response_text.startswith("😵"):
-                                final_response = response_text
-                                for k, v in self.emojis.items():
-                                    final_response = final_response.replace(f"[{k}]", v)
+                # 判定為何種事件觸發
+                if not done:
+                    # 1. 睡到自然醒 (Timeout)
+                    print(f"💓 [Heartbeat] 休眠結束，主動甦醒。")
+                    
+                    # 測試模式：指定發送至頻道 1467980863990927623
+                    target_channel_id = 1467980863990927623
+                    channel = self.bot.get_channel(target_channel_id)
+                    
+                    if channel:
+                        print(f"💓 [Heartbeat] 準備在頻道 {channel.name} 發起主動閒聊...")
+                        try:
+                            # 1. 取得最近的聊天紀錄，看看大家睡前聊了什麼
+                            api_messages = []
+                            if self.memory_manager:
+                                raw_history = await self.memory_manager.get_recent_chat_history(limit=5)
+                                for msg in raw_history:
+                                    role = msg.get("role", "user")
+                                    content = msg.get("content", "")
+                                    if "parts" in msg:
+                                        api_messages.append(msg)
+                                    else:
+                                        api_messages.append({"role": role, "parts": [{"text": content}]})
                                 
-                                await channel.send(final_response)
-                                
-                                if self.memory_manager:
-                                    await self.memory_manager.log_chat(role="model", content=response_text, session_id=f"discord_{channel.id}")
+                                while api_messages and api_messages[0].get("role") != "user":
+                                    api_messages.pop(0)
+
+                            # 2. 準備極簡的系統推播 (Minimal Context Update)
+                            current_time = datetime.now(timezone(timedelta(hours=8))).strftime('%m月%d日 %H:%M')
+                            base_prompt = await self._get_system_prompt("", f"頻道：{channel.name}", "", "")
+                            
+                            if self.sleep_intent:
+                                # 透過環境音暗示備忘錄的浮現，完全不給指令
+                                api_messages.append({"role": "user", "parts": [{"text": f"*(時間來到了 {current_time}。休眠結束，腦海中浮現了先前的備忘錄：「{self.sleep_intent}」)*"}]})
+                                self.sleep_intent = None
+                                self.next_sleep_duration = 3600
                             else:
-                                print(f"😴 [Heartbeat] AI 決定繼續裝死不講話。")
+                                # 極簡的時間推移暗示，完全不給指令
+                                api_messages.append({"role": "user", "parts": [{"text": f"*(時間來到了 {current_time})*"}]})
+                            
+                            # 3. 呼叫大腦 (直接使用 base_prompt)
+                            location_info = f"- 伺服器 (Server): {channel.guild.name if channel.guild else '私人訊息 (Private)'}\n- 頻道 (Channel): {channel.name}"
+
+                            async with channel.typing():
+                                response_text = await self._call_gemini_agent(api_messages, system_instruction=base_prompt, location_info=location_info)
                                 
-                    except Exception as e:
-                        print(f"❌ [Heartbeat] 主動閒聊失敗: {e}")
+                                if response_text and response_text.strip() and not response_text.startswith("😵"):
+                                    final_response = response_text
+                                    for k, v in self.emojis.items():
+                                        final_response = final_response.replace(f"[{k}]", v)
+                                    
+                                    await channel.send(final_response)
+                                    
+                                    if self.memory_manager:
+                                        await self.memory_manager.log_chat(role="model", content=response_text, session_id=f"discord_{channel.id}")
+                                else:
+                                    print(f"😴 [Heartbeat] AI 決定繼續裝死不講話。")
+                                    
+                        except Exception as e:
+                            print(f"❌ [Heartbeat] 主動閒聊失敗: {e}")
+                    else:
+                        print(f"⚠️ [Heartbeat] 找不到目標頻道 {target_channel_id}，放棄主動閒聊。")
                 else:
-                    print(f"⚠️ [Heartbeat] 找不到目標頻道 {target_channel_id}，放棄主動閒聊。")
+                    # 偵測到事件觸發
+                    if sensory_task in done:
+                        # 2. 被玩家說話吵醒 (Sensory Interrupt)
+                        self.sensory_interrupt_event.clear()
+                        print("💓 [Heartbeat] 被外界聲音吵醒，重置生理時鐘。")
+                    
+                    if schedule_task in done:
+                        # 3. AI 重設排程鬧鐘 (Schedule Update - 安靜更新)
+                        self.schedule_update_event.clear()
+                        print(f"💓 [Heartbeat] AI 鬧鐘重設，更新休眠時長為 {self.next_sleep_duration} 秒。")
+            except Exception as e:
+                print(f"❌ [Heartbeat] 迴圈錯誤: {e}")
+                await asyncio.sleep(5)
 
 async def setup(bot):
     await bot.add_cog(AIChat(bot))

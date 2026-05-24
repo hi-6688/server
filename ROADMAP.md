@@ -1,23 +1,27 @@
 # 📅 專案開發計畫書 (Roadmap)
 
-最後更新時間: 2026-05-11
+最後更新時間: 2026-05-24
 
 ## 🔴 當前急迫事項 (Immediate Actions)
-*嗨嗨 v5.0 核心架構升級與系統修復*
+*嗨嗨 v7.0 核心架構升級與系統修復*
+
+- [x] **P1: 遷移至 Google GenAI Interactions API (v7.0 核心升級)**
+    - 將大腦核心（`_call_gemini_agent`）遷移至 Interactions API，實作手動工具執行迴圈並動態相容 outputs 屬性，在 DB 中儲存與讀取 `interaction_id`，並引入實時腦內中繼遙測播報。
 
 - [x] **P0: 修正非同步 Embedding 阻塞問題**
     - 確保 `memory_manager.py` 中的 `embed_content` 呼叫不阻塞主執行緒。
-- [ ] **P1: Stateless 轉型 + Reference RAG (調閱原文檢索)**
+- [x] **P1: Stateless 轉型 + Reference RAG (調閱原文檢索)**
     - 拔除 `ai_chat.py` 中的 `self.history` 狀態，改為發言前即時查詢 `chat_history` 資料表。
     - 升級 `search_memory` 工具，自動利用時間戳記調閱歷史原文，提供完整對話脈絡給 AI。
-- [x] **P1: 導入 Pydantic 結構化輸出**
-    - 使用 `google-genai` SDK 的 Pydantic 支援，在 `ai_chat.py` 建立 `AgentResponse` 類別。
-    - 強制規範 AI 的思考流程，確保包含「內心獨白」及「情緒狀態」。
-- [ ] **P2: Embedding 維度升級評估**
-    - 考量是否將 `gemini-embedding-2-preview` 的向量維度從 768 提升至 3072 以增加精確度。
+- [x] **P1: 雙階段 Pydantic 認知管線與原生 SDK 化**
+    - 重構為 `google-genai` SDK 原生 `tools` 自動執行管線，廢除 `MAX_STEPS` 解析。
+    - 將思考解耦為階段一 `LogicRouter` (`MemoryState`) 與階段二 `ChatGenerator` (`PersonaResponse`)，確保發言與決策互不干擾。
+- [x] **P2: Embedding 檢索精度優化 (L2 歸一化)**
+    - 針對 `gemini-embedding-2` 截斷為 768 維向量時的 L2 歸一化修正，解決 pgvector 相似度失真問題。
 - [x] **P3: Async Heartbeat Engine (心跳引擎)**
     - 建立背景無窮迴圈 `asyncio.Task`，實作主動甦醒、防衛性休眠及獨立時間軸。
-
+    - 修復生理時鐘與中斷排程解耦 Bug，藉由 `sensory_interrupt_event` 與 `schedule_update_event` 雙事件排除驚醒與感官中斷的混淆問題。
+ 
 - [x] **`web_interface/` 目錄清理與重構** (已完成)
     - 舊版 HTML/JS 移至 `legacy/`
     - 偵錯腳本移至 `scripts/`
@@ -25,12 +29,13 @@
 - [x] **根目錄清理** (已完成)
     - [x] 將 `force_sync.py`, `test_main.sh` 等散落腳本移動至 `scripts/`
     - [x] 將 `my_server.tar.gz` 等備份檔移至 `backups/`
-
+ 
 ## 🟢 近期目標 (Short-term Goals)
 *優化現有服務運作與架構*
-
+ 
 - [x] **開發環境優化 (已完成)**
     - [x] 更新 VS Code 工作區與設定檔，使終端機與 Gemini CLI 預設開啟於 `servers` 目錄。
+    - [x] 將全域開發工具從舊版 Gemini CLI 移轉至最新的 Antigravity CLI (`agy`)，並同步更新 VS Code 工作區終端機 Profile 且撰寫中文設定說明文檔。
 
 - [x] **智慧型連線架構升級 (Smart Connection Upgrade) (已完成)**
     - [x] 針對 Web 面板導入 WebSocket 或 SSE (Server-Sent Events) 技術
@@ -47,6 +52,7 @@
 - [x] **系統穩定度提升與記憶體優化 (已完成)**
     - [x] 修復前端 Web Socket 日誌無限增長造成的記憶體洩漏 (OOM) 問題
     - [x] 完成 Python 後端與 JS 前端程式碼的全域記憶體洩漏排查與靜態分析
+    - [x] 修復 VS Code 終端機設定錯誤導致 `gemini -y` 遞迴執行所造成的記憶體爆炸問題
 - [x] **Web 介面優化 (已完成)**
     - [x] 轉型為 React/Vite 架構 (`web_interface/frontend/`)
     - [x] 組件拆分 (TopNav, Dashboard, LiveConsole, ConsolePage, PlayersPage, FilesPage, SettingsPage)
@@ -80,7 +86,7 @@
     - 移除 `cogs/vm_admin.py` 中寫死的 `agent_secret`，統一由 `.env` 變數控管。
     - 強化 `proxy_helpers.py` 呼叫 GCP API 的錯誤捕捉，避免 Web 面板因 GCP 瞬斷而崩潰。
 
-- [ ] **記憶體自我修復機制 (Self-Healing Memory Queue)**
+- [x] **記憶體自我修復機制 (Self-Healing Memory Queue)**
     - 針對 `gemini-3-flash-preview` 偶發的 503 斷線，實作非同步重試佇列。
     - 讓心跳引擎 (Heartbeat) 在深夜自動掃描並補齊缺少 `metadata` 標籤的殘缺記憶，達成資料最終一致性。
 
