@@ -338,21 +338,33 @@ class AIChat(commands.Cog):
             for p in parts:
                 if isinstance(p, dict):
                     if "text" in p:
-                        content_list.append({"type": "text", "text": p["text"]})
+                        val = p["text"]
+                        if val is not None:
+                            val_str = str(val).strip()
+                            if val_str: # 僅加入非空字串
+                                content_list.append({"type": "text", "text": val_str})
                     elif "inline_data" in p:
                         content_list.append({
                             "type": "image",
                             "mime_type": p["inline_data"].get("mime_type"),
                             "data": p["inline_data"].get("data")
                         })
-                elif hasattr(p, "text") and p.text:
-                    content_list.append({"type": "text", "text": p.text})
+                elif hasattr(p, "text"):
+                    val = p.text
+                    if val is not None:
+                        val_str = str(val).strip()
+                        if val_str:
+                            content_list.append({"type": "text", "text": val_str})
                 elif hasattr(p, "inline_data") and p.inline_data:
                     content_list.append({
                         "type": "image" if p.inline_data.mime_type.startswith("image") else "document",
                         "mime_type": p.inline_data.mime_type,
                         "data": p.inline_data.data
                     })
+            
+            # 若對話內容完全為空，填入 fallback 防止 API 報錯
+            if not content_list:
+                content_list.append({"type": "text", "text": "(無內容)"})
             
             if len(content_list) == 1 and content_list[0]["type"] == "text":
                 content_val = content_list[0]["text"]
