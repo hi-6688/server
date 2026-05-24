@@ -325,15 +325,17 @@ class AIChat(commands.Cog):
 
     def _convert_history(self, history_messages):
         """
-        將舊版 contents 格式的對話歷史，轉換為 Interactions API 的 input 格式 (支援多模態)。
+        將舊版 contents 格式的對話歷史，轉換為 Interactions API 的 input 格式。
+        混合使用簡化 role-content 結構與強型別 types.Part 物件。
         """
         converted = []
         for msg in history_messages:
             role = msg.get("role")
-            api_role = "assistant" if role in ["model", "assistant"] else "user"
+            # 官方 Interactions API 限定 role 只能是 user 或 model
+            api_role = "model" if role in ["model", "assistant"] else "user"
             
             parts = msg.get("parts", [])
-            content_list = []
+            converted_parts = []
             
             for p in parts:
                 if isinstance(p, dict):
@@ -341,35 +343,38 @@ class AIChat(commands.Cog):
                         val = p["text"]
                         if val is not None:
                             val_str = str(val).strip()
-                            if val_str: # 僅加入非空字串
-                                content_list.append({"type": "text", "text": val_str})
+                            if val_str:
+                                converted_parts.append(types.Part.from_text(text=val_str))
                     elif "inline_data" in p:
-                        content_list.append({
-                            "type": "image",
-                            "mime_type": p["inline_data"].get("mime_type"),
-                            "data": p["inline_data"].get("data")
-                        })
+                        converted_parts.append(
+                            types.Part.from_bytes(
+                                data=base64.b64decode(p["inline_data"]["data"]) if isinstance(p["inline_data"]["data"], str) else p["inline_data"]["data"],
+                                mime_type=p["inline_data"]["mime_type"]
+                            )
+                        )
                 elif hasattr(p, "text"):
                     val = p.text
                     if val is not None:
                         val_str = str(val).strip()
                         if val_str:
-                            content_list.append({"type": "text", "text": val_str})
+                            converted_parts.append(types.Part.from_text(text=val_str))
                 elif hasattr(p, "inline_data") and p.inline_data:
-                    content_list.append({
-                        "type": "image" if p.inline_data.mime_type.startswith("image") else "document",
-                        "mime_type": p.inline_data.mime_type,
-                        "data": p.inline_data.data
-                    })
+                    converted_parts.append(
+                        types.Part.from_bytes(
+                            data=p.inline_data.data,
+                            mime_type=p.inline_data.mime_type
+                        )
+                    )
             
-            # 若對話內容完全為空，填入 fallback 防止 API 報錯
-            if not content_list:
-                content_list.append({"type": "text", "text": "(無內容)"})
-            
-            if len(content_list) == 1 and content_list[0]["type"] == "text":
-                content_val = content_list[0]["text"]
+            # 若該輪次內容完全為空，補上 fallback，防 API 400 報錯
+            if not converted_parts:
+                converted_parts.append(types.Part.from_text(text="(無內容)"))
+                
+            # 在 REST JSON 中，content 可以是字串或 Part 列表
+            if len(converted_parts) == 1 and hasattr(converted_parts[0], 'text') and converted_parts[0].text:
+                content_val = converted_parts[0].text
             else:
-                content_val = content_list
+                content_val = converted_parts
                 
             converted.append({
                 "role": api_role,
