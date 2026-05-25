@@ -1113,6 +1113,28 @@ class AIChat(commands.Cog):
     async def status_group(self, ctx):
         await ctx.send(f"🤖 **HiHi Agent V2**\n- Model: {self.model_name}\n- Memory: {'✅ Postgres' if self.memory_manager else '❌ Disabled'}\n- Mode: Agentic Loop")
 
+    @commands.command(name="forget_me")
+    async def forget_me_command(self, ctx):
+        """
+        物理抹除您在「嗨嗨」記憶系統中的所有事實足跡，符合 GDPR 遺忘權。
+        """
+        if not self.memory_manager:
+            await ctx.send("😵 **錯誤**：長期記憶體尚未開啟，無法執行銷毀動作。")
+            return
+
+        user_id = str(ctx.author.id)
+        user_name = ctx.author.name
+        
+        # 發送處理中訊息
+        status_msg = await ctx.send(f"🧹 正在為 **{user_name}** 執行 GDPR 遺忘權，物理銷毀所有長期記憶中...")
+        
+        try:
+            # 物理銷毀 Mem0 該使用者的所有 facts
+            await self.memory_manager.delete_all_user_memories(user_id)
+            await status_msg.edit(content=f"🎯 **遺忘權執行完畢**！\n我已經把關於 **{user_name}** 的所有長期事實與向量完全從我的大腦中**物理抹除**了！我們現在就像初次見面一樣乾淨了喔～😊")
+        except Exception as e:
+            await status_msg.edit(content=f"❌ **遺忘權執行失敗**：在清空長期資料庫時遇到未預期錯誤：`{e}`")
+
     async def _heartbeat_loop(self):
         """
         非同步心跳引擎 (Async Heartbeat Engine)
