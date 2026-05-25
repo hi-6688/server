@@ -2,6 +2,15 @@
 
 本檔案記錄了專案的所有重大更新與架構變動。這對於 Agent (AI 助手) 理解專案演進至關重要。
 
+## [2026-05-25] - 解決無狀態 Steps 工具呼叫 400 格式錯誤與 TurnParam 嵌套大一統
+### 🐛 錯誤修復 (Fixes) & 🚀 架構與系統升級 (Architecture)
+- **修正無狀態工具 400 錯誤**：徹底解決 Interactions API 在 `store=False` (Stateless Steps) 模式下，因 `tool_results` 類型不被 API 支援以及 thought 簽章丟失導致的 400 格式錯誤。
+- **TurnParam 嵌套大一統**：將全量對話歷史與工具交互歷史全面對齊 Google 官方正統的 `TurnParam` (`role` + `content`) 結構。大腦剛產生的 steps (包含 thought 簽章與 `function_call`) 會以原裝 list 包裹在 `role: "model"` 的 Turn 內部；工具執行結果會包裝成標準的 `function_result` (`call_id`, `name`, `result`)，包裹在 `role: "user"` 的 Turn 內部。從根本上解決了 `Cannot specify tool calls outside of Turn items` 與 `Request contains an invalid argument` 兩大 API schema 驗證地雷，完美實現 100% 絕對穩定、原生連貫的無狀態大腦推理管道。
+
+## [2026-05-24] - 更新 Gemini CLI 工具
+### 🚀 效能與系統最佳化 (Performance & System)
+- **更新 Gemini CLI 工具**：應使用者要求，已重新將 Gemini CLI 全域工具更新至最新版 (v0.43.0)，並安裝於 `~/.local` 目錄。
+
 ## [2026-05-24] - 遷移至 Google GenAI Interactions API (v7.0 核心升級)
 ### 🚀 架構與系統升級 (Architecture)
 - **大腦核心 API 遷移**：將 `ai_chat.py` 中 `_call_gemini_agent` 核心從舊有的 `generateContent` 遷移至最新的 Google Interactions API（底層使用 `client.aio.interactions.create`）。

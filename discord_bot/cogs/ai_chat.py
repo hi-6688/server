@@ -236,77 +236,113 @@ class AIChat(commands.Cog):
     # --- Agent Loop ---
 
 
-    async def _emit_telemetry(self, pydantic_data, trigger_text, location_info=""):
+    async def _emit_logic_telemetry(self, memory_state, trigger_text, location_info=""):
         if not self.inner_world_channel_id: 
-            print("⚠️ 遙測失敗：未設定 INNER_WORLD_CHANNEL_ID")
             return
-            
         channel = self.bot.get_channel(self.inner_world_channel_id)
         if not channel:
             try:
                 channel = await self.bot.fetch_channel(self.inner_world_channel_id)
             except Exception as e:
-                print(f"⚠️ 遙測失敗：找不到頻道或無權限 ({self.inner_world_channel_id}): {e}")
+                print(f"⚠️ 邏輯遙測失敗：找不到頻道 ({self.inner_world_channel_id}): {e}")
                 return
         
         try:
-            embed = discord.Embed(title="🧠 內心世界：意識流截獲", color=discord.Color.blurple())
+            embed = discord.Embed(title="🧠 邏輯分析", color=0x3a86ff, timestamp=datetime.now(timezone(timedelta(hours=8))))
             
-            # 1. 觸發源與空間座標
+            # 1. 空間座標與觸發源 (並排 inline=True)
             short_trigger = trigger_text[:100] + "..." if len(trigger_text) > 100 else trigger_text
-            embed.add_field(name="📍 空間座標 (Location)", value=f"```\n{location_info.strip()}\n```" if location_info else "```位置未知```", inline=False)
-            embed.add_field(name="🎯 觸發源 (Context)", value=f"```\n{short_trigger}\n```", inline=False)
+            embed.add_field(name="📍 空間座標", value=f"```\n{location_info.strip()}\n```" if location_info else "```位置未知```", inline=True)
+            embed.add_field(name="🎯 觸發源", value=f"```\n{short_trigger}\n```", inline=True)
             
-            # 2. 情況與內心 OS
-            sit = pydantic_data.get('situation_analysis', 'N/A')
-            os_text = pydantic_data.get('internal_thought', 'N/A')
-            embed.add_field(name="👁️ 情況分析", value=sit, inline=False)
-            embed.add_field(name="💭 內心 OS", value=os_text, inline=False)
-            
-            # 3. 生存指標
+            # 2. 生存指標與生理調控
             req = self.daily_usage.get('requests', 0)
             limit = self.daily_limit_requests
             pct = (req / limit) * 100 if limit > 0 else 0
-            
             color_emoji = "🟢"
             if pct > 60: color_emoji = "🟡"
             if pct > 90: color_emoji = "🔴"
             
             vitals = f"{color_emoji} 消耗配額: **{req} / {limit}** ({pct:.1f}%)\n"
-            
-            sleep_sec = pydantic_data.get('suggested_sleep_seconds', 0)
-            sleep_intent = pydantic_data.get('sleep_intent')
-            vitals += f"💤 自主休眠決策: **{sleep_sec} 秒**"
-            if sleep_intent:
-                vitals += f"\n⏰ 鬧鐘備忘錄: `{sleep_intent}`"
+            vitals += f"💤 自主休眠決策: **{memory_state.suggested_sleep_seconds} 秒**"
+            if memory_state.sleep_intent:
+                vitals += f"\n⏰ 鬧鐘備忘錄: `{memory_state.sleep_intent}`"
             embed.add_field(name="⚡ 生存指標與生理調控", value=vitals, inline=False)
             
-            # 4. 物理行動
+            # 3. 物理行動決策
             executed_tools = getattr(self, '_last_executed_tools', [])
-            speech = pydantic_data.get('final_speech')
-            current_goal = pydantic_data.get('current_goal')
-            
-            action_text = ""
-            if current_goal:
-                action_text += f"**🎯 當前目標**: {current_goal}\n"
+            action_text = f"**🎯 當前目標**: {memory_state.current_goal}\n"
             if executed_tools:
-                action_text += f"**🔧 執行工具**: {', '.join(executed_tools)}\n"
-            if speech:
-                short_speech = speech[:50] + "..." if len(speech) > 50 else speech
-                action_text += f"**🗣️ 決定發言**: {short_speech}"
-            elif not executed_tools:
-                action_text += "**🤐 拒絕發言 (裝死)**"
+                action_text += "**🔧 物理行動細節**:\n" + "\n".join([f"- {tool}" for tool in executed_tools])
+            else:
+                action_text += "**🤐 拒絕執行工具 (無呼叫)**"
+            embed.add_field(name="🚀 物理行動決策", value=action_text, inline=False)
+            
+            await channel.send(embed=embed)
+        except Exception as e:
+            print(f"⚠️ 邏輯遙測發送錯誤: {e}")
+
+    async def _emit_chat_telemetry(self, persona_response, trigger_text, location_info=""):
+        if not self.inner_world_channel_id: 
+            return
+        channel = self.bot.get_channel(self.inner_world_channel_id)
+        if not channel:
+            try:
+                channel = await self.bot.fetch_channel(self.inner_world_channel_id)
+            except Exception as e:
+                print(f"⚠️ 情感遙測失敗：找不到頻道 ({self.inner_world_channel_id}): {e}")
+                return
                 
-            if action_text:
-                embed.add_field(name="🚀 物理行動輸出", value=action_text, inline=False)
+        try:
+            embed = discord.Embed(title="👁️ 發言決策", color=0xff006e, timestamp=datetime.now(timezone(timedelta(hours=8))))
+            
+            # 1. 情況分析
+            sit = persona_response.situation_analysis if persona_response.situation_analysis else "N/A"
+            embed.add_field(name="👁️ 外界情境分析", value=sit, inline=False)
+            
+            # 2. 內心 OS (使用高雅的 Discord 引言 Markdown 格式)
+            os_text = persona_response.internal_thought if persona_response.internal_thought else "N/A"
+            quoted_os = "\n".join([f"> {line}" for line in os_text.split("\n")])
+            embed.add_field(name="💭 靈魂 OS 意識流", value=quoted_os, inline=False)
+            
+            # 3. 決定發言
+            speech = persona_response.final_speech
+            if speech:
+                short_speech = speech[:250] + "..." if len(speech) > 250 else speech
+                embed.add_field(name="🗣️ 決定發言", value=f"```\n{short_speech}\n```", inline=False)
+            else:
+                embed.add_field(name="🤐 決定發言", value="**拒絕發言 (保持沉默)**", inline=False)
                 
             await channel.send(embed=embed)
         except Exception as e:
-            print(f"⚠️ 遙測發送失敗: {e}")
+            print(f"⚠️ 情感遙測發送錯誤: {e}")
+
+
+    def _normalize_schema_types(self, obj):
+        """
+        遞迴將 SDK 產出的大寫 JSON Schema type（STRING, OBJECT, INTEGER 等）
+        轉為 Interactions API 接受的小寫標準 JSON Schema 格式（string, object, integer 等）。
+        同時移除所有值為 None 的 key。
+        """
+        if isinstance(obj, dict):
+            result = {}
+            for k, v in obj.items():
+                if v is None:
+                    continue
+                if k == "type" and isinstance(v, str):
+                    result[k] = v.lower()
+                else:
+                    result[k] = self._normalize_schema_types(v)
+            return result
+        elif isinstance(obj, list):
+            return [self._normalize_schema_types(item) for item in obj]
+        return obj
 
     def _convert_tools(self, tools_list):
         """
-        將 Python 函數列表轉換為 Interactions API 規格的字典列表。
+        將 Python 函數列表轉換為 Interactions API 的 FunctionParam 格式字典列表。
+        FunctionParam: {"type": "function", "name": str, "description": str, "parameters": JSONSchema}
+        parameters 中的 type 必須是小寫 JSON Schema 標準格式。
         """
         converted = []
         for func in tools_list:
@@ -314,71 +350,93 @@ class AIChat(commands.Cog):
                 client=self.client._api_client,
                 callable=func
             )
-            decl_dict = decl.model_dump()
+            # 排除所有 None 值的 schema 屬性，防堵 API 伺服器因 maximum: null 拋出 400 錯誤
+            decl_dict = decl.model_dump(exclude_none=True)
+            # 將 parameters 中的 type 值從 SDK 大寫格式轉為 JSON Schema 小寫標準
+            params = decl_dict.get("parameters")
+            if params:
+                params = self._normalize_schema_types(params)
             converted.append({
                 "type": "function",
                 "name": decl_dict.get("name"),
                 "description": decl_dict.get("description"),
-                "parameters": decl_dict.get("parameters")
+                "parameters": params
             })
         return converted
 
     def _convert_history(self, history_messages):
         """
-        將舊版 contents 格式的對話歷史，轉換為 Interactions API 的 input 格式。
-        混合使用簡化 role-content 結構與強型別 types.Part 物件。
+        將舊版 generateContent 格式的對話歷史（role + parts），
+        轉換為 Interactions API 官方標準的 TurnParam 結構列表（role + content）。
+        
+        TurnParam 結構: {"role": "user"|"model", "content": list[ContentParam]}
+        ContentParam 包含 TextContentParam: {"type": "text", "text": str}
+                      ImageContentParam: {"type": "image", "data": base64, "mime_type": str}
         """
         converted = []
         for msg in history_messages:
             role = msg.get("role")
-            # 官方 Interactions API 限定 role 只能是 user 或 model
             api_role = "model" if role in ["model", "assistant"] else "user"
             
+            # 相容處理：如果是已經轉換過的 TurnParam 格式，直接透傳
+            if isinstance(msg, dict) and "role" in msg and "content" in msg:
+                converted.append(msg)
+                continue
+                
             parts = msg.get("parts", [])
-            converted_parts = []
+            content_items = []  # 收集 ContentParam 格式的項目
             
             for p in parts:
                 if isinstance(p, dict):
-                    if "text" in p:
+                    # 若已經是 ContentParam 格式（含 "type" key），直接透傳
+                    if "type" in p and p["type"] in ("text", "image"):
+                        if p["type"] == "text":
+                            val_str = str(p.get("text", "")).strip()
+                            if val_str:
+                                content_items.append({"type": "text", "text": val_str})
+                        elif p["type"] == "image":
+                            content_items.append(p)  # 已是 ImageContentParam 格式
+                    elif "text" in p:
+                        # 舊式 {"text": "..."} 格式
                         val = p["text"]
                         if val is not None:
                             val_str = str(val).strip()
                             if val_str:
-                                converted_parts.append(types.Part.from_text(text=val_str))
+                                content_items.append({"type": "text", "text": val_str})
                     elif "inline_data" in p:
-                        converted_parts.append(
-                            types.Part.from_bytes(
-                                data=base64.b64decode(p["inline_data"]["data"]) if isinstance(p["inline_data"]["data"], str) else p["inline_data"]["data"],
-                                mime_type=p["inline_data"]["mime_type"]
-                            )
-                        )
+                        # 舊式 {"inline_data": {"data": ..., "mime_type": ...}} 格式
+                        raw_data = p["inline_data"]["data"]
+                        if isinstance(raw_data, bytes):
+                            raw_data = base64.b64encode(raw_data).decode('utf-8')
+                        content_items.append({
+                            "type": "image",
+                            "data": raw_data,
+                            "mime_type": p["inline_data"]["mime_type"]
+                        })
                 elif hasattr(p, "text"):
                     val = p.text
                     if val is not None:
                         val_str = str(val).strip()
                         if val_str:
-                            converted_parts.append(types.Part.from_text(text=val_str))
+                            content_items.append({"type": "text", "text": val_str})
                 elif hasattr(p, "inline_data") and p.inline_data:
-                    converted_parts.append(
-                        types.Part.from_bytes(
-                            data=p.inline_data.data,
-                            mime_type=p.inline_data.mime_type
-                        )
-                    )
+                    raw_data = p.inline_data.data
+                    if isinstance(raw_data, bytes):
+                        raw_data = base64.b64encode(raw_data).decode('utf-8')
+                    content_items.append({
+                        "type": "image",
+                        "data": raw_data,
+                        "mime_type": p.inline_data.mime_type
+                    })
             
             # 若該輪次內容完全為空，補上 fallback，防 API 400 報錯
-            if not converted_parts:
-                converted_parts.append(types.Part.from_text(text="(無內容)"))
+            if not content_items:
+                content_items.append({"type": "text", "text": "(無內容)"})
                 
-            # 在 REST JSON 中，content 可以是字串或 Part 列表
-            if len(converted_parts) == 1 and hasattr(converted_parts[0], 'text') and converted_parts[0].text:
-                content_val = converted_parts[0].text
-            else:
-                content_val = converted_parts
                 
             converted.append({
                 "role": api_role,
-                "content": content_val
+                "content": content_items
             })
         return converted
 
@@ -455,10 +513,10 @@ class AIChat(commands.Cog):
         try:
             embed = discord.Embed(
                 description=text,
-                color=discord.Color.dark_gold(),
+                color=0xffb703,
                 timestamp=datetime.now(timezone(timedelta(hours=8)))
             )
-            embed.set_author(name="🧠 嗨嗨腦內動態播報")
+            embed.set_author(name="🔧 即時工具調用")
             await channel.send(embed=embed)
         except Exception as e:
             print(f"⚠️ 即時遙測發送失敗: {e}")
@@ -496,9 +554,10 @@ class AIChat(commands.Cog):
 在所有工具執行完畢後，妳必須且只能輸出一個符合 `MemoryState` 欄位定義的 JSON。
 """
 
-        # 呼叫第一階段 (注意：有 tools 時不可啟用 response_format 以防 API 400 報錯)
+        # 呼叫第一階段 (啟用 store=False 無狀態步驟模式；注意：有 tools 時不可啟用 response_format 以防 API 400 報錯)
         interaction1 = await self._call_interaction_api(
             model=self.model_name,
+            store=False,
             input=input_history,
             system_instruction=sys_prompt_stage1,
             tools=interaction_tools,
@@ -515,34 +574,71 @@ class AIChat(commands.Cog):
                 print("⚠️ [LogicRouter] 狀態為 requires_action 但找不到 function_call。")
                 break
                 
+            # 為了無狀態連貫性，將大腦剛產生的 steps (包含 thought 與 function_call) 包裝成一個 role: "model" 的 TurnParam 追加進歷史中
+            model_steps = []
+            for step in interaction1.outputs:
+                model_steps.append(step.model_dump(exclude_none=True))
+                
+            input_history.append({
+                "role": "model",
+                "content": model_steps
+            })
+                
             # 並行執行所有被觸發的工具呼叫
             tasks = []
+            tool_descriptions = []
             for fc in function_calls:
                 print(f"🔧 [LogicRouter Tool] 安排執行工具: {fc.name} 參數: {fc.arguments}")
                 tasks.append(self.execute_tool(fc.name, fc.arguments))
                 
-            # 實時發送中繼狀態遙測 (把所有工具名稱串聯起來)
-            tool_names_str = ", ".join([f"`[{fc.name}]`" for fc in function_calls])
-            await self._emit_telemetry_live(f"🔧 執行工具: {tool_names_str}")
+                # 建立極度白話且直觀的工具調用描述
+                args = fc.arguments
+                if fc.name == "search_memory":
+                    tool_descriptions.append(f"🔍 搜尋記憶 (關鍵字: '{args.get('query', '')}')")
+                elif fc.name == "save_memory":
+                    tool_descriptions.append(f"💾 儲存記憶 (內容: '{args.get('content', '')[:30]}...')")
+                elif fc.name == "manage_fact":
+                    tool_descriptions.append(f"📌 事實管理 (動作: {args.get('action')}, 內容: '{args.get('content', '')[:30]}...')")
+                elif fc.name == "learn_knowledge":
+                    tool_descriptions.append(f"🎓 學習知識 (詞條: '{args.get('term')}')")
+                else:
+                    tool_descriptions.append(f"🔧 執行 {fc.name}")
+                
+            # 實時發送白話工具調用播報 (以 asyncio.create_task 背景非阻塞發送)
+            live_broadcast_text = "正在執行大腦工具：\n" + "\n".join([f"- {desc}" for desc in tool_descriptions])
+            asyncio.create_task(self._emit_telemetry_live(live_broadcast_text))
             
             # 非同步並行等待所有工具執行結果
             results_str = await asyncio.gather(*tasks)
             
-            # 打包所有工具呼叫的結果
-            tool_results_input = []
-            for fc, res_str in zip(function_calls, results_str):
-                tool_results_input.append({
+            # 將工具結果包裝成 function_result 並放入 role: "user" 的 TurnParam 中，同時記錄白話結果
+            tool_results_content = []
+            for fc, desc, res_str in zip(function_calls, tool_descriptions, results_str):
+                tool_results_content.append({
                     "type": "function_result",
                     "call_id": fc.id,
                     "name": fc.name,
                     "result": [{"type": "text", "text": res_str}]
                 })
+                # 記錄白話結果至成員變數中，供第一階段遙測 Embed 渲染使用
+                short_res = res_str[:120] + "..." if len(res_str) > 120 else res_str
+                self._last_executed_tools.append(f"{desc}\n  ➔ 結果: {short_res}")
+                
+            input_history.append({
+                "role": "user",
+                "content": tool_results_content
+            })
             
-            # 繼續下一輪互動 (將所有結果以一個陣列傳回大腦)
+            # 繼續下一輪互動 (將全量且完全連貫的累積 steps 作為 input 傳入)
             interaction1 = await self._call_interaction_api(
                 model=self.model_name,
-                previous_interaction_id=interaction1.id,
-                input=tool_results_input
+                store=False,
+                input=input_history,
+                system_instruction=sys_prompt_stage1,
+                tools=interaction_tools,
+                generation_config=types.GenerateContentConfig(
+                    temperature=0.7,
+                )
             )
 
         if not interaction1:
@@ -578,21 +674,15 @@ class AIChat(commands.Cog):
             if old_sleep != sleep_val:
                 self.schedule_update_event.set() # 重設排程計時器
 
+        # 第一階段邏輯決策完成後，立刻背景非同步發射邏輯分析遙測
+        trigger_text = history_messages[-1].get("parts", [{}])[0].get("text", "Unknown") if history_messages else "Unknown"
+        asyncio.create_task(self._emit_logic_telemetry(memory_state, trigger_text, location_info))
+
         # ---------------------------------------------------------------------
         # 🚀 階段二：ChatGenerator (情感 OS 與擬態對話)
         # ---------------------------------------------------------------------
         if not memory_state.needs_reply:
             print("😴 [LogicRouter] 決定不回覆此訊息。")
-            telemetry_data = {
-                "situation_analysis": "決定不回覆",
-                "internal_thought": f"LogicRouter 評估為不需回覆。當前目標: {memory_state.current_goal}",
-                "suggested_sleep_seconds": memory_state.suggested_sleep_seconds,
-                "sleep_intent": memory_state.sleep_intent,
-                "current_goal": memory_state.current_goal,
-                "final_speech": None
-            }
-            trigger_text = history_messages[-1].get("parts", [{}])[0].get("text", "Unknown") if history_messages else "Unknown"
-            await self._emit_telemetry(telemetry_data, trigger_text, location_info)
             return "", interaction1.id
 
         # 組裝 RAG Context
@@ -617,15 +707,15 @@ class AIChat(commands.Cog):
 請根據妳的存在宣言，輸出一個符合 `PersonaResponse` 定義的 JSON。
 """
 
-        # 階段二無 tools，可以使用 response_format 來保證輸出結構化 JSON
+        # 階段二無 tools，可以使用 response_format 來保證輸出結構化 JSON (啟用 store=False 無狀態模式)
         interaction2 = await self._call_interaction_api(
             model=self.model_name,
+            store=False,
             input=input_history,
             system_instruction=sys_prompt_stage2,
             generation_config=types.GenerateContentConfig(
                 temperature=1.0,
                 top_p=0.95,
-                top_k=40,
             ),
             response_format=[
                 {
@@ -654,17 +744,8 @@ class AIChat(commands.Cog):
             print(f"❌ [ChatGenerator] 對話出錯: {e}")
             return "😵 (大腦解析對話發生錯誤)", interaction2.id
 
-        # 發射完整的遙測資料
-        telemetry_data = {
-            "situation_analysis": persona_response.situation_analysis,
-            "internal_thought": persona_response.internal_thought,
-            "suggested_sleep_seconds": memory_state.suggested_sleep_seconds,
-            "sleep_intent": memory_state.sleep_intent,
-            "current_goal": memory_state.current_goal,
-            "final_speech": persona_response.final_speech
-        }
-        trigger_text = history_messages[-1].get("parts", [{}])[0].get("text", "Unknown") if history_messages else "Unknown"
-        await self._emit_telemetry(telemetry_data, trigger_text, location_info)
+        # 第二階段情感生成完成後，立刻背景非同步發射發言決策遙測
+        asyncio.create_task(self._emit_chat_telemetry(persona_response, trigger_text, location_info))
 
         return (persona_response.final_speech if persona_response.final_speech else ""), interaction2.id
     # --- Main Helper Methods ---
@@ -917,15 +998,19 @@ class AIChat(commands.Cog):
                     except: pass
 
                 # --- 2. Handle Images (Attachments) ---
+                # 使用 Interactions API 的 ImageContentParam 格式: {"type": "image", "data": base64, "mime_type": str}
                 if msg.attachments:
                     for attachment in msg.attachments:
                         if attachment.content_type and attachment.content_type.startswith("image/"):
                             if attachment.size > 8 * 1024 * 1024: continue
                             try:
                                 image_data = await attachment.read()
-                                current_user_parts.append(
-                                    types.Part.from_bytes(data=image_data, mime_type=attachment.content_type)
-                                )
+                                # ImageContentParam 格式
+                                current_user_parts.append({
+                                    "type": "image",
+                                    "data": base64.b64encode(image_data).decode('utf-8'),
+                                    "mime_type": attachment.content_type
+                                })
                                 # Image Hashing Logic
                                 try:
                                     img_hash = hashlib.sha256(image_data).hexdigest()
@@ -933,7 +1018,8 @@ class AIChat(commands.Cog):
                                         existing = await self.memory_manager.check_image_hash(img_hash)
                                         if existing:
                                             ts = existing['created_at'].strftime('%Y-%m-%d %H:%M')
-                                            current_user_parts.append({"text": f"\n[系統提示: 這張圖片在 {ts} 由 {existing['user_id']} 傳送過。]"})
+                                            # TextContentParam 格式
+                                            current_user_parts.append({"type": "text", "text": f"\n[系統提示: 這張圖片在 {ts} 由 {existing['user_id']} 傳送過。]"})
                                         else:
                                             await self.memory_manager.add_image_hash(img_hash, msg.author.name)
                                 except: pass
@@ -945,9 +1031,6 @@ class AIChat(commands.Cog):
                     sticker_names = []
                     for sticker in msg.stickers:
                         sticker_names.append(sticker.name)
-                        # Try to get sticker image if compatible (PNG/APNG/LOTTIE?)
-                        # Gemini supports PNG, JPEG, WEBP, HEIC, HEIF
-                        # Discord stickers are often Lottie (JSON) or PNG/APNG
                         try:
                             if sticker.format in [discord.StickerFormatType.png, discord.StickerFormatType.apng]:
                                 url = sticker.url
@@ -955,10 +1038,12 @@ class AIChat(commands.Cog):
                                     async with session.get(url) as resp:
                                         if resp.status == 200:
                                             data = await resp.read()
-                                            mime = "image/png" # Default
-                                            current_user_parts.append(
-                                                types.Part.from_bytes(data=data, mime_type=mime)
-                                            )
+                                            # ImageContentParam 格式
+                                            current_user_parts.append({
+                                                "type": "image",
+                                                "data": base64.b64encode(data).decode('utf-8'),
+                                                "mime_type": "image/png"
+                                            })
                         except Exception as e:
                             print(f"⚠️ Sticker processing error: {e}")
                     
@@ -986,10 +1071,11 @@ class AIChat(commands.Cog):
                 # Format: [Andy | 朋友 | 12:00] (回覆 Bob: "...") Content
                 user_header = f"[{msg.author.display_name} ({msg.author.name}) | 朋友 | {datetime.now(timezone(timedelta(hours=8))).strftime('%H:%M')}]\n"
                 
-                # Combine parts
+                # Combine parts — 使用 TextContentParam 格式
                 final_text = user_header + reply_context + text_content + "\n"
-                current_user_parts.append({"text": final_text})
+                current_user_parts.append({"type": "text", "text": final_text})
 
+            # 使用 parts 格式 — 會在 _convert_history 中統一轉換為 TurnParam
             api_messages.append({"role": "user", "parts": current_user_parts})
 
             # 4. Call Agent

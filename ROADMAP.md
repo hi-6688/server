@@ -1,12 +1,13 @@
 # 📅 專案開發計畫書 (Roadmap)
 
-最後更新時間: 2026-05-24
+最後更新時間: 2026-05-25
 
 ## 🔴 當前急迫事項 (Immediate Actions)
 *嗨嗨 v7.0 核心架構升級與系統修復*
 
 - [x] **P1: 遷移至 Google GenAI Interactions API (v7.0 核心升級)**
     - 將大腦核心（`_call_gemini_agent`）遷移至 Interactions API，實作手動工具執行迴圈並動態相容 outputs 屬性，在 DB 中儲存與讀取 `interaction_id`，並引入實時腦內中繼遙測播報。
+    - **[2026-05-25 追記修復]**：成功修正無狀態步驟 (`store=False`) 模式下，因 `tool_results` 類型不支持與 thought 簽章丟失所導致的 400 報錯。將歷史格式全量升級大一統為官方正統 `TurnParam` (`role` + `content`) 結構並實作 model/user nested 嵌套，徹底打通無狀態工具鏈推理管道。
 
 - [x] **P0: 修正非同步 Embedding 阻塞問題**
     - 確保 `memory_manager.py` 中的 `embed_content` 呼叫不阻塞主執行緒。
@@ -34,6 +35,7 @@
 *優化現有服務運作與架構*
  
 - [x] **開發環境優化 (已完成)**
+    - [x] 更新 Gemini CLI 工具至最新版，並將其安裝於 `~/.local` 目錄。
     - [x] 更新 VS Code 工作區與設定檔，使終端機與 Gemini CLI 預設開啟於 `servers` 目錄。
     - [x] 將全域開發工具從舊版 Gemini CLI 移轉至最新的 Antigravity CLI (`agy`)，並同步更新 VS Code 工作區終端機 Profile 且撰寫中文設定說明文檔。
 
