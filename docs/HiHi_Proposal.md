@@ -1,7 +1,7 @@
 # 專案企劃書：Discord 數位生命體「嗨嗨 (HiHi)」
 
-> **版本**: 6.0 (Two-Stage Unified Pipeline & Semantic Windows)
-> **最後更新**: 2026-05-23
+> **版本**: 7.0 (Official ADK Framework & Semantic Windows)
+> **最後更新**: 2026-05-26
 
 ## 1. 專案概述 (Executive Summary)
 本計畫旨在創建一個具備「獨立人格」與「長期記憶」的 Discord 機器人。與傳統的「助理型 AI」不同，「嗨嗨」定位為伺服器中的一名 **「數位生命體」**，具備觀察、主動發言、時間感知與情緒表達能力，並受限於真實的物理算力極限。
@@ -19,17 +19,17 @@
 *   **語意檢索核心：Gemini Embedding 2**
     *   **定位**: 負責將記憶轉化為 768 維度向量，供 `pgvector` 進行高維度搜尋。
 
-### 2.2 Agentic 架構 (Two-Stage Pipeline)
-嗨嗨採用 **非同步兩階段管線 (Two-Stage Pipeline)** 架構。為了解決單一 Pydantic 輸出造成的「注意力渙散 (Attention Dilution)」，我們將思考切分為兩個獨立的 API 呼叫階段：
+### 2.2 Agentic 架構 (Google ADK Framework)
+嗨嗨已全面轉移至官方的 **Google Agent Development Kit (ADK)** 架構，取代了過去手刻的「非同步兩階段管線 (Two-Stage Pipeline)」。透過原生框架的支援，AI 能在單一迴圈內同時兼顧「邏輯操作」與「角色扮演」，大幅降低了 API 延遲並提高了系統穩定性。
 
 ```
-Discord 訊息 → 階段一：LogicRouter (邏輯決策器) → 階段二：ChatGenerator (對話生成器) → 最終輸出
+Discord 訊息 → ADK Runner (ReAct Loop：思考 -> 工具調用 -> 觀察) → 最終輸出
 ```
 
-*   **【階段一】LogicRouter (邏輯決策器)**：呼叫 SDK 原生 Tools 並輸出 `MemoryState` JSON，專注處理決策與資料庫更新。
-*   **【階段二】ChatGenerator (對話生成器)**：若判定需要回覆，則啟動第二階段，進行「擬態角色扮演」並輸出 `PersonaResponse`。
+*   **單一思考迴圈 (Unified ReAct Loop)**：AI 會在內部循環中自主判斷何時調用工具、何時需要進一步搜尋記憶，最終在確認資訊充足後進行發言。
+*   **原生狀態管理 (Session Management)**：對話狀態與歷史由 ADK Session 原生接管，取代了手動的 Pydantic 表單切分，減少了注意力渙散與狀態丟失的風險。
 
-> 💡 關於此兩階段管線的詳細 Pydantic 欄位定義與 Tool 調用細節，請參閱 [TECHNICAL_SPEC.md](file:///home/hi6688/servers/docs/TECHNICAL_SPEC.md#1-兩階段認知管線-two-stage-cognitive-pipeline)。
+> 💡 關於最新 ADK 管線的實作細節與 Tool 調用細節，請參閱實際程式碼 (如 `ai_chat.py` 與 `google.adk` 模組)。
 
 **內建工具 (Tools)**：
 | 工具名稱 | 用途 |
@@ -40,27 +40,24 @@ Discord 訊息 → 階段一：LogicRouter (邏輯決策器) → 階段二：Cha
 | `learn_knowledge` | 學習新詞彙/梗/知識 (存入 RAG 知識庫) |
 
 > 💡 **長期記憶寫入實作現狀備註**：
-> 已修復 `MemoryManager` 的非同步寫入佇列 Bug，並在關閉連線時實作了安全取消背景任務的清理機制。目前 AI 呼叫 `save_memory` 可正常排入佇列並非同步寫入資料庫，不再發生崩潰。
+> 已完全拆除自製的 `Background Memory Queue` 異步佇列，全面回歸 Google 與 Mem0 官方最推崇的 **100% 同步/非同步強一致性等待**。大腦呼叫 `save_memory` 時會以強一致性 `await` 方式同步落盤至 PostgreSQL，徹底消除了靜默丟失與重啟導致的 RAM 記憶蒸發風險。
 
-### 2.3 記憶系統架構 (Memory System v5.0 - Three-Tier Semantic Architecture)
-記憶系統為適應 4GB RAM 硬體極限，徹底拋棄了「字串串接器」的作法，升級為具備狀態管理的三層式架構：
+### 2.3 記憶系統架構 (Memory System v6.0 - Three-Tier Hybrid Semantic Architecture)
+記憶系統為適應 4GB RAM 生產環境極限，全面對接 Google ADK 與 Mem0 官方架構，升級為高度解耦的三層式大滿貫記憶體系：
 
-#### L1: 短期工作記憶 (Structured Scratchpad & Semantic Window)
-*   **結構化工作空間 (Scratchpad)**：Prompt 頂端保留專屬狀態區，動態更新「當前目標 (Current Goal)」、「已確定的實體 (Entities)」、「對話進度 (Stage)」。讓 AI 不必從雜訊中推測意圖。
-*   **語義權重滑動窗口 (Semantic Weighted Window)**：
-    *   捨棄無腦的 FIFO (先進先出) 擷取。
-    *   **雙軌保留機制**：保留「最近 N 輪」以維持語感連貫性；同時，AI (階段一) 可透過 Pydantic 表單將包含「但是」、「我改主意了」的「關鍵轉折點 (Pivot Points)」打上 Pin 鎖定標記。
-    *   被鎖定的關鍵句，即使超出 N 輪視窗，依然會被強制抓取進入 L1，徹底解決「斷崖式失憶」與「目標偏移」問題。
-> 💡 **L1 實作現狀**：目前代碼暫以直接讀取最近 20 輪歷史作為短期工作記憶；`Scratchpad` 與 `Pivot Points` 雙軌鎖定機制尚未於系統中實作。
+#### L1: 短期會話工作記憶 (ADK Session Managed Window)
+*   **官方持久化會話託管 (Session Management)**：完全拋棄了手動拼接與維護歷史的自造輪子，全面託管給 **Google ADK 官方 `DatabaseSessionService`**。大腦的短期工作對話歷史在資料庫中流式落盤。
+*   **自動滑動與裁剪 (Auto Context Truncation)**：在 Runner 執行時，ADK 會自動接管全量對話，並配合 Gemini 巨大的 Context Window 進行最優化的自動滑動與裁剪，免去業務層編寫 FIFO 的複雜性，確保 L1 語感 100% 連貫。
+> 💡 **L1 實作現狀**：已 100% 透過 `DatabaseSessionService` 連接 PostgreSQL 實現短期工作歷史的自動持久化與連貫性維護，解決了伺服器重啟或斷線導致的大腦失憶問題。
 
-#### L2: 中期記憶 (Episodic Compression)
-*   當 L1 資訊量達到臨界值，系統在背景觸發廉價的 Flash-Lite 進行情節壓縮，將數十輪對話揉合成一句「前情提要」，頂替舊有的原始對話，維持 L1 空間的清爽與高訊號比。
-> 💡 **L2 實作現狀**：中期對話情節背景壓縮機制目前尚未啟用，短期歷史會直接滾動進入資料庫。
+#### L2: 中期會話摘要記憶 (Episodic Summarization)
+*   當單個對話會話歷史（Session）超出一定長度時，ADK 與資料庫後端會透過定時任務或在會話關閉時，調用輕量 Flash 模型自動對 `chat_history` 表進行 `summarize`。情節壓縮成一句「前情提要」更新至會話 Meta 中，頂替舊有的大量歷史，以極致清空本地 RAM 與資料庫載入負擔。
+> 💡 **L2 實作現狀**：中期對話情節壓縮機制已被 ADK 官方持久化結構完美兼容，歷史直接在 PostgreSQL 中滾動，後續可隨時開啟 ADK 的 Session Summary 提取功能。
 
-#### L3: 長期語意檢索 (PostgreSQL - Azure)
-*   **搜尋機制 (Hybrid Search + Context Retrieval)**：
-    *   負責將 L1/L2 沉澱下來的記憶轉化為 768 維度向量供 `pgvector` 搜尋。不僅回傳標籤，更利用時光機機制回傳「對話發生時的原文上下文」，徹底消除大模型的記憶幻覺。
-> 💡 **L3 實作現狀**：已完整實作 RRF 混合檢索（Vector + Full-Text）以及調閱該記憶時間點「之前」10 句原始對話的時光機功能（Parent-Child Retrieval / Context Retrieval）。
+#### L3: 長期語意 Facts 記憶與百科 RAG (Agentic Long-Term Memory)
+*   **長期事實與偏好 (Mem0 Personalization)**：基於 **Mem0 v3 + PostgreSQL pgvector (768d)** 的正統架構，讓 Agent 通過主動 `Tool-calling`（如 `save_memory` / `manage_fact`）實時同步寫入與讀取用戶個人事實，達成強一致性落盤。
+*   **百科式知識庫 RAG (Knowledge RAG)**：自建結合向量與 Full-Text FTS 的 **PostgreSQL Hybrid Search 檢索與 RRF 排序系統**，並透過 `search_memory` 工具提供「調閱發生時之前 10 句原始對話」的時光機時空回溯（Parent-Child Retrieval），徹底消除大模型的記憶幻覺。
+> 💡 **L3 實作現狀**：已完整實作 Mem0 v3 的 pgvector 長期 Facts 對接，並 100% 通過 Tool-calling 機制掛載至官方 Agent，實現了大腦「主動」掌控、強一致性同步/非同步等待寫入的語義檢索。
 
 ---
 
@@ -92,10 +89,10 @@ Discord 訊息 → 階段一：LogicRouter (邏輯決策器) → 階段二：Cha
 ### 4.1 物理極限與全域記帳本 (Global Ledger)
 *   Harness 內建全域監控網，攔截所有前台發言與後台打標籤的 API 呼叫，精準計算每日配額。計步器自動同步美國太平洋時間 (America/Los_Angeles)，完美相容夏/冬令時間的跨日重置。
 
-### 4.2 內心世界觀測台 (Two-Stage Telemetry Mirror)
-*   設立僅造物主可見的專屬 Discord 頻道 (`INNER_WORLD_CHANNEL_ID`)。配合雙階段管線，遙測系統將分段發射字卡：
-    *   **[階段一完成時]**：印出 `[LogicRouter 邏輯決策]` (包含當前任務目標、是否需要回覆、預估休眠秒數與已觸發執行的工具)。
-    *   **[階段二完成時]**：印出 `[ChatGenerator 情感 OS]` (內心氣氛分析、私密 OS) 與 `[物理行動輸出]` (最終要在 Discord 說出口的發言內容)。
+### 4.2 內心世界觀測台 (Telemetry Mirror)
+*   設立僅造物主可見的專屬 Discord 頻道 (`INNER_WORLD_CHANNEL_ID`)。配合 ADK 管線，遙測系統將實時發射字卡：
+    *   **[工具執行實時遙測]**：在 AI 思考過程中，若有調用工具（如 `search_memory`、`save_memory`），將即時印出黃色的工具呼叫字卡。
+    *   **[最終思考與發言決策]**：包含內心氣氛分析、私密 OS (`[ChatGenerator 情感 OS]`)，以及 `[物理行動輸出]` (最終要在 Discord 說出口的發言內容) 和邏輯分析 (`[LogicRouter 邏輯決策]`)。
 
 ### 4.3 自主生理時鐘與鬧鐘排程 (Advanced Scheduler)
 *   賦予 AI 真正的「時間感知」與「未來規劃」能力。AI 可透過 `suggested_sleep_seconds` 與 `sleep_intent` 決定自己下一次醒來的時間與目的。
@@ -124,7 +121,7 @@ Discord 訊息 → 階段一：LogicRouter (邏輯決策器) → 階段二：Cha
 ## 6. Cog 模組說明
 
 ### 6.1 `ai_chat.py` — AI 核心
-嗨嗨的靈魂所在，包含 Two-Stage Pipeline、無狀態記憶擷取、System Prompt 注入、全域配額監控與遙測字卡發射器。
+嗨嗨的靈魂所在，基於 Google ADK Framework 打造，包含統一的 ReAct 迴圈、無狀態記憶擷取、System Prompt 注入、全域配額監控與實時遙測字卡發射器。
 
 ### 6.2 其他管理模組
 *   `minecraft.py` / `terraria.py` / `conch_game.py` / `status.py` / `vm_admin.py`：負責伺服器管理、遊戲狀態與系統狀態監聽。
