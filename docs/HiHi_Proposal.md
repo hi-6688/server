@@ -102,7 +102,7 @@ Discord 訊息 → 階段一：LogicRouter (邏輯決策器) → 階段二：Cha
 *   Harness 接收到指令後，會發出強制的物理中斷 (`wake_event.set()`)，改寫背景 `asyncio` 心跳引擎的睡眠時長。時間一到，心跳引擎主動甦醒，並將 AI 自己寫下的「鬧鐘備忘錄」塞入 Prompt 中。
 
 > 💡 **排程實作現狀備註**：
-> 目前心跳引擎中，AI 自主設定睡眠時間引發的物理中斷（`wake_event.set()`）會被心跳引擎誤判定為「被外界聲音吵醒（Sensory Interrupt）」，且真正的訊息傳入時並未實際呼叫中斷。此排程中斷邏輯與自然甦醒的偵測混淆，自主生理時鐘與鬧鐘排程功能在實作上與設計意圖有偏離。
+> 生理時鐘與排程中斷問題已全面修復！我們引入了 `sensory_interrupt_event`（感官中斷）與 `schedule_update_event`（排程更新）雙事件監聽機制，徹底將自然甦醒、被吵醒與 AI 鬧鐘排程進行解耦，大腦生理感知功能運轉正常。
 
 ---
 
@@ -139,6 +139,7 @@ Discord 訊息 → 階段一：LogicRouter (邏輯決策器) → 階段二：Cha
     *   > 💡 **核心記憶實作現狀備註**：核心記憶已成功注入至 System Prompt 最頂端，作為 AI 大腦最核心的行為約束，已正式生效。
 2.  **🔵 表層記憶 (Adaptive Memory)**
     *   **儲存**：PostgreSQL (memories / user_facts / knowledge)。AI 透過 Function Calling 自動維護。
+    *   > 💡 **表層記憶實作現狀備註 (v9.0/v10.0 記憶大滿貫升級)**：已全面遷移至 **Mem0 v3 智慧記憶引擎 + 本地 PostgreSQL (pgvector)**。不再使用硬性 SQL 相似度比對，而是全面啟用 Mem0 官方的時間衰減 (Memory Decay)、增量提取 (ADD-Only)、語義衝突消解 (Temporal Reasoning) 與實體連結 (Entity Linking)。並同步實裝了符合 GDPR 隱私保護的 `!forget_me` 物理銷毀指令。
 
 ### 7.2 以人為主體 (User-Centric)
 嗨嗨的記憶圍繞每一個使用者旋轉，事實按 `user_id` 分類管理。
