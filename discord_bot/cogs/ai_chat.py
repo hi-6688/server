@@ -191,6 +191,12 @@ class AIChat(commands.Cog):
                 elif adk_db_url.startswith("postgresql://"):
                     adk_db_url = adk_db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
 
+                # asyncpg 不支持 sslmode 引數，直接將其從 URL 中移除以防連線崩潰
+                if "?" in adk_db_url:
+                    base_url, query_str = adk_db_url.split("?", 1)
+                    params = [p for p in query_str.split("&") if not p.startswith("sslmode=")]
+                    adk_db_url = f"{base_url}?{'&'.join(params)}" if params else base_url
+
                 # 初始化會話持久化服務與 Runner
                 self.session_service = DatabaseSessionService(db_url=adk_db_url)
                 self.runner = Runner(
