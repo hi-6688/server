@@ -54,13 +54,17 @@ class MemoryManager:
             }
         }
         
-        # 若有 PostgreSQL URL，優先對接 pgvector
-        if db_url and "postgresql" in db_url:
+        # 若有 PostgreSQL URL，優先對接 pgvector (支援 postgres:// 與 postgresql://)
+        if db_url and ("postgresql" in db_url or "postgres" in db_url):
+            # SQLAlchemy 要求協議必須是 postgresql://，防禦性轉換
+            mem0_db_url = db_url
+            if mem0_db_url.startswith("postgres://"):
+                mem0_db_url = mem0_db_url.replace("postgres://", "postgresql://", 1)
             self.mem0_config["vector_store"] = {
-                "provider": "postgres",
+                "provider": "pgvector",
                 "config": {
-                    "connection_string": db_url,
-                    "table_name": "hihi_mem0_facts",
+                    "connection_string": mem0_db_url,
+                    "collection_name": "hihi_mem0_facts",
                     "embedding_model_dims": 768
                 }
             }
