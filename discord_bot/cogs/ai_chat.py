@@ -546,6 +546,24 @@ class AIChat(commands.Cog):
         if not self.runner:
             return "😵 (ADK 官方運行時未初始化)", None
 
+        # 確保會話存在於持久化資料庫中，防範 "Session not found" 報錯
+        try:
+            session = await self.session_service.get_session(
+                app_name="HiHiDiscordBot",
+                user_id=user_id,
+                session_id=session_id
+            )
+            if not session:
+                print(f"📝 [ADK Session] 會話 {session_id} 不存在於資料庫中，正在自動建立...")
+                await self.session_service.create_session(
+                    app_name="HiHiDiscordBot",
+                    user_id=user_id,
+                    session_id=session_id
+                )
+                print(f"✅ [ADK Session] 會話 {session_id} 建立成功！")
+        except Exception as e:
+            print(f"⚠️ [ADK Session] 確保會話存在時遇到未預期錯誤: {e}")
+
         # 動態更新大腦的 System Instruction，融入當前實時的物理感官、時間與事實
         if system_instruction:
             self.hihi_agent.instruction = system_instruction
