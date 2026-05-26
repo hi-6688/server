@@ -20,6 +20,9 @@ import itertools
 import hashlib
 from google import genai
 from google.genai import types
+from google.adk.agents import Agent
+from google.adk.runners import Runner
+from google.adk.sessions.database_session_service import DatabaseSessionService
 
 
 # --- 設定檔路徑 ---
@@ -114,6 +117,91 @@ class AIChat(commands.Cog):
         else:
             print("❌ [Memory] CRITICAL ERROR: DATABASE_URL not set. Memory disabled.")
             self.memory_manager = None
+
+        # 初始化 Google ADK Agent 與 DatabaseSessionService 持久化會話 Runner
+        self.runner = None
+        if db_url and self.api_key:
+            try:
+                # 定義長期事實與學習工具 (讓 ADK 自動分析 Schema，完美掛載)
+                async def save_memory_tool(user_name: str, content: str, importance: int = 5) -> str:
+                    """當你覺得這段對話包含重要的長期資訊、個人喜好、或值得記住的觀察時使用。不要記瑣碎的事。
+                    
+                    Args:
+                        user_name: 對話者的名字
+                        content: 要記住的具體內容 (例如: 'Andy 喜歡吃拉麵')
+                        importance: 重要程度 (1-10)
+                    """
+                    return await self.save_memory(user_name, content, importance)
+
+                async def manage_fact_tool(action: str, user_id: str, content: str, category: str = "Data") -> str:
+                    """管理關於使用者的長期事實 (CRUD)。當你發現新的事實，或發現舊事實有誤時使用。
+                    
+                    Args:
+                        action: 'add' (新增) 或 'delete' (刪除/修正)
+                        user_id: 對象名字 (例如 'Andy')
+                        content: 事實內容 (例如: '喜歡吃拉麵')
+                        category: 類別，可填 'Data' (客觀資料: 生日/職業) 或 'Impression' (主觀印象: 個性/愛好)
+                    """
+                    return await self.manage_fact(action, user_id, content, category)
+
+                async def search_memory_tool(query: str) -> str:
+                    """當你需要回顧過去的對話、事實、或搜尋特定主題時使用。
+                    
+                    Args:
+                        query: 搜尋關鍵字或問題
+                    """
+                    return await self.search_memory(query)
+
+                async def learn_knowledge_tool(term: str, definition: str, category: str = "General") -> str:
+                    """當使用者教你新詞彙、梗、或伺服器設定時使用。這會存入你的[知識庫] (RAG)。
+                    
+                    Args:
+                        term: 關鍵詞 (例如: 'Hammer', '炸服')
+                        definition: 定義與解釋
+                        category: 類別，可填 'Emoji', 'Slang', 'Lore', 'Person', 'General'
+                    """
+                    return await self.learn_knowledge(term, definition, category)
+
+                async def schedule_next_sleep_tool(seconds: int, intent: str) -> str:
+                    """當妳想決定自己接下來要主動休眠多久（秒）並設定醒來後的鬧鐘備忘錄時呼叫此工具。
+                    這是妳用來保護「生命配額」的唯一手段。若配額充足且群組熱鬧，建議設定 3600；若配額快耗盡，請設定 14400 或更長。
+                    
+                    Args:
+                        seconds: 睡眠秒數
+                        intent: 醒來後要主動做的事情備忘錄 (例如：『等待60秒後回答問題』)
+                    """
+                    self.next_sleep_duration = seconds
+                    self.sleep_intent = intent
+                    self.schedule_update_event.set()
+                    print(f"💤 [ADK Tool - Sleep] AI 主動設定生理時鐘: 休眠 {seconds} 秒，備忘錄: '{intent}'")
+                    return f"✅ 已成功為您排程下一次生理休眠 {seconds} 秒，備忘錄已設定。"
+
+                # 建立 Agent (掛載工具，以 DNA 核心記憶作為 System Instruction)
+                self.hihi_agent = Agent(
+                    model=self.model_name,
+                    name="HiHiv3Agent",
+                    instruction=self.core_memory_text,
+                    tools=[save_memory_tool, manage_fact_tool, search_memory_tool, learn_knowledge_tool, schedule_next_sleep_tool]
+                )
+                
+                # 處理 SQLAlchemy asyncpg 要求使用 postgresql+asyncpg:// 協議的問題
+                adk_db_url = db_url
+                if adk_db_url.startswith("postgres://"):
+                    adk_db_url = adk_db_url.replace("postgres://", "postgresql+asyncpg://", 1)
+                elif adk_db_url.startswith("postgresql://"):
+                    adk_db_url = adk_db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+
+                # 初始化會話持久化服務與 Runner
+                self.session_service = DatabaseSessionService(db_url=adk_db_url)
+                self.runner = Runner(
+                    app_name="HiHiDiscordBot",
+                    agent=self.hihi_agent,
+                    session_service=self.session_service
+                )
+                print("🧠 [ADK] 官方 Persistent Runner 初始化成功！")
+            except Exception as e:
+                print(f"❌ [ADK] 官方架構初始化失敗: {e}")
+                self.runner = None
 
         # 暫存 RAG 搜尋結果與空間座標，供多階段與工具調用使用
         self._last_search_results = []
@@ -440,314 +528,116 @@ class AIChat(commands.Cog):
             })
         return converted
 
-    async def _call_interaction_api(self, **kwargs):
-        """
-        Interactions API 呼叫的退避重試包裝器，避免隨機 503 崩潰。
-        """
-        max_retries = 3
-        retry_delay = 2
-        for attempt in range(max_retries):
-            try:
-                if not self._increment_usage():
-                    print("⚠️ [Global Ledger] 今日發言額度已達上限，暫停生成。")
-                    return None
-                
-                interaction = await self.client.aio.interactions.create(**kwargs)
-                return interaction
-            except Exception as api_err:
-                print(f"⚠️ [API] Interactions 呼叫失敗 (Attempt {attempt+1}/{max_retries}): {api_err}")
-                if attempt < max_retries - 1:
-                    print(f"⏳ 等待 {retry_delay} 秒後重試...")
-                    await asyncio.sleep(retry_delay)
-                    retry_delay *= 2
-                else:
-                    raise api_err
-        return None
+    # =========================================================================
+    # 🧠 Google ADK 官方 Persistent Runner 核心驅動與非同步事件流遙測發射
+    # =========================================================================
 
-    async def execute_tool(self, name: str, arguments: dict) -> str:
+    async def _call_adk_runner(self, user_id: str, session_id: str, new_message: Any, system_instruction: str = "", location_info: str = "") -> tuple[str, str]:
         """
-        手動解構並執行對應的工具函數，回傳執行結果字串。
+        使用 Google ADK 官方 Persistent Runner 與 DatabaseSessionService 持久化會話，
+        並透過非同步事件流 (Async Event Generator) 實時監聽 Thought 與 Tool 狀態以發射雙遙測。
         """
-        try:
-            if name == "save_memory":
-                user_name = arguments.get("user_name", "Unknown")
-                content = arguments.get("content", "")
-                importance = int(arguments.get("importance", 5))
-                return await self.save_memory(user_name=user_name, content=content, importance=importance)
-                
-            elif name == "manage_fact":
-                action = arguments.get("action", "add")
-                user_id = arguments.get("user_id", "Unknown")
-                content = arguments.get("content", "")
-                category = arguments.get("category", "Data")
-                return await self.manage_fact(action=action, user_id=user_id, content=content, category=category)
-                
-            elif name == "search_memory":
-                query = arguments.get("query", "")
-                return await self.search_memory(query=query)
-                
-            elif name == "learn_knowledge":
-                term = arguments.get("term", "")
-                definition = arguments.get("definition", "")
-                category = arguments.get("category", "General")
-                return await self.learn_knowledge(term=term, definition=definition, category=category)
-                
-            else:
-                return f"錯誤：找不到名為 {name} 的工具。"
-        except Exception as e:
-            return f"執行工具 {name} 錯誤: {e}"
+        if not self.runner:
+            return "😵 (ADK 官方運行時未初始化)", None
 
-    async def _emit_telemetry_live(self, text: str):
-        """
-        發送實時中繼狀態遙測至內心世界頻道。
-        """
-        if not self.inner_world_channel_id:
-            return
-        channel = self.bot.get_channel(self.inner_world_channel_id)
-        if not channel:
-            try:
-                channel = await self.bot.fetch_channel(self.inner_world_channel_id)
-            except Exception as e:
-                print(f"⚠️ 即時遙測失敗：找不到頻道 ({self.inner_world_channel_id}): {e}")
-                return
-        try:
-            embed = discord.Embed(
-                description=text,
-                color=0xffb703,
-                timestamp=datetime.now(timezone(timedelta(hours=8)))
+        # 動態更新大腦的 System Instruction，融入當前實時的物理感官、時間與事實
+        if system_instruction:
+            self.hihi_agent.instruction = system_instruction
+
+        # 將 new_message 轉換為 types.Content 以供 ADK 官方處理
+        msg_content = None
+        if isinstance(new_message, str):
+            msg_content = types.Content(
+                role="user",
+                parts=[types.Part.from_text(text=new_message)]
             )
-            embed.set_author(name="🔧 即時工具調用")
-            await channel.send(embed=embed)
-        except Exception as e:
-            print(f"⚠️ 即時遙測發送失敗: {e}")
+        elif isinstance(new_message, list):
+            parts = []
+            for p in new_message:
+                if p.get("type") == "text":
+                    parts.append(types.Part.from_text(text=p["text"]))
+                elif p.get("type") == "image":
+                    raw_data = base64.b64decode(p["data"])
+                    parts.append(types.Part.from_bytes(data=raw_data, mime_type=p["mime_type"]))
+            msg_content = types.Content(role="user", parts=parts)
+        else:
+            msg_content = new_message
 
-    async def _call_gemini_agent(self, history_messages, system_instruction, location_info=""):
-        """
-        使用 Interactions API 重構雙階段大腦管線
-        - 階段一：LogicRouter (邏輯決策器) -> 手動 tools 迴圈 -> 輸出 MemoryState JSON
-        - 階段二：ChatGenerator (對話生成器) -> 純文字擬態發言 -> 輸出 PersonaResponse JSON
-        """
-        if not self.client: return "😵 (AI Client Not Initialized)", None
+        # 為了 telemetry 輸出，先將 new_message 轉成簡潔便於閱讀的字串
+        telemetry_msg = ""
+        if isinstance(new_message, str):
+            telemetry_msg = new_message
+        elif isinstance(new_message, list):
+            for p in new_message:
+                if p.get("type") == "text":
+                    telemetry_msg += p["text"]
+                elif p.get("type") == "image":
+                    telemetry_msg += " [圖片訊息] "
+        else:
+            telemetry_msg = str(new_message)
 
         # 初始化本次的工具紀錄與暫存狀態
         self._last_executed_tools = []
         self._last_search_results = []
         self._current_location_info = location_info
 
-        # 轉換歷史紀錄格式
-        input_history = self._convert_history(history_messages)
-
-        # ---------------------------------------------------------------------
-        # 🚀 階段一：LogicRouter (邏輯決策)
-        # ---------------------------------------------------------------------
-        tools = [self.save_memory, self.manage_fact, self.search_memory, self.learn_knowledge]
-        interaction_tools = self._convert_tools(tools)
-        
-        sys_prompt_stage1 = f"""
-{system_instruction}
-
-# ==========================================
-# 【階段一任務：LogicRouter (邏輯決策)】
-# ==========================================
-妳是 HiHi 的 LogicRouter。妳的任務是評估環境與歷史對話，並決定是否要回覆。
-如果妳需要，妳可以調用工具進行資料的儲存或搜尋。
-在所有工具執行完畢後，妳必須且只能輸出一個符合 `MemoryState` 欄位定義的 JSON。
-"""
-
-        # 呼叫第一階段 (啟用 store=False 無狀態步驟模式；注意：有 tools 時不可啟用 response_format 以防 API 400 報錯)
-        interaction1 = await self._call_interaction_api(
-            model=self.model_name,
-            store=False,
-            input=input_history,
-            system_instruction=sys_prompt_stage1,
-            tools=interaction_tools,
-            generation_config=types.GenerateContentConfig(
-                temperature=0.7,
-            )
-        )
-
-        # 手動 Tool 執行迴圈
-        while interaction1 and interaction1.status == "requires_action":
-            # 尋找所有 function_call 步驟 (在 outputs 中)
-            function_calls = [o for o in interaction1.outputs if o.type == "function_call"]
-            if not function_calls:
-                print("⚠️ [LogicRouter] 狀態為 requires_action 但找不到 function_call。")
-                break
-                
-            # 為了無狀態連貫性，將大腦剛產生的 steps (包含 thought 與 function_call) 包裝成一個 role: "model" 的 TurnParam 追加進歷史中
-            model_steps = []
-            for step in interaction1.outputs:
-                model_steps.append(step.model_dump(exclude_none=True))
-                
-            input_history.append({
-                "role": "model",
-                "content": model_steps
-            })
-                
-            # 並行執行所有被觸發的工具呼叫
-            tasks = []
-            tool_descriptions = []
-            for fc in function_calls:
-                print(f"🔧 [LogicRouter Tool] 安排執行工具: {fc.name} 參數: {fc.arguments}")
-                tasks.append(self.execute_tool(fc.name, fc.arguments))
-                
-                # 建立極度白話且直觀的工具調用描述
-                args = fc.arguments
-                if fc.name == "search_memory":
-                    tool_descriptions.append(f"🔍 搜尋記憶 (關鍵字: '{args.get('query', '')}')")
-                elif fc.name == "save_memory":
-                    tool_descriptions.append(f"💾 儲存記憶 (內容: '{args.get('content', '')[:30]}...')")
-                elif fc.name == "manage_fact":
-                    tool_descriptions.append(f"📌 事實管理 (動作: {args.get('action')}, 內容: '{args.get('content', '')[:30]}...')")
-                elif fc.name == "learn_knowledge":
-                    tool_descriptions.append(f"🎓 學習知識 (詞條: '{args.get('term')}')")
-                else:
-                    tool_descriptions.append(f"🔧 執行 {fc.name}")
-                
-            # 實時發送白話工具調用播報 (以 asyncio.create_task 背景非阻塞發送)
-            live_broadcast_text = "正在執行大腦工具：\n" + "\n".join([f"- {desc}" for desc in tool_descriptions])
-            asyncio.create_task(self._emit_telemetry_live(live_broadcast_text))
-            
-            # 非同步並行等待所有工具執行結果
-            results_str = await asyncio.gather(*tasks)
-            
-            # 將工具結果包裝成 function_result 並放入 role: "user" 的 TurnParam 中，同時記錄白話結果
-            tool_results_content = []
-            for fc, desc, res_str in zip(function_calls, tool_descriptions, results_str):
-                tool_results_content.append({
-                    "type": "function_result",
-                    "call_id": fc.id,
-                    "name": fc.name,
-                    "result": [{"type": "text", "text": res_str}]
-                })
-                # 記錄白話結果至成員變數中，供第一階段遙測 Embed 渲染使用
-                short_res = res_str[:120] + "..." if len(res_str) > 120 else res_str
-                self._last_executed_tools.append(f"{desc}\n  ➔ 結果: {short_res}")
-                
-            input_history.append({
-                "role": "user",
-                "content": tool_results_content
-            })
-            
-            # 繼續下一輪互動 (將全量且完全連貫的累積 steps 作為 input 傳入)
-            interaction1 = await self._call_interaction_api(
-                model=self.model_name,
-                store=False,
-                input=input_history,
-                system_instruction=sys_prompt_stage1,
-                tools=interaction_tools,
-                generation_config=types.GenerateContentConfig(
-                    temperature=0.7,
-                )
-            )
-
-        if not interaction1:
-            return "😵 (今天累了，我先休息囉)", None
-
-        # 從 outputs 提取最終 text 內容
-        stage1_text = next((o.text for o in interaction1.outputs if o.type == "text" and hasattr(o, 'text')), None)
+        response_text = ""
+        interaction_id = None
 
         try:
-            print(f"🧠 [LogicRouter] 原始輸出: {stage1_text}")
-            if not stage1_text:
-                raise ValueError("第一階段輸出為空")
+            # 增加全域配額生理記帳
+            if not self._increment_usage():
+                print("⚠️ [Global Ledger] 今日發言額度已達上限，暫停生成。")
+                return "😵 (今天累了，我的生理能量已經用完囉，明天見！)", None
 
-            # 解析第一階段決策狀態
-            state_data = json.loads(stage1_text)
-            memory_state = MemoryState(**state_data)
-            
-            print(f"🔍 [LogicRouter] 決策產出:")
-            print(f"   - 需回覆 (needs_reply): {memory_state.needs_reply}")
-            print(f"   - 當前目標 (current_goal): {memory_state.current_goal}")
-            print(f"   - 建議休眠 (suggested_sleep_seconds): {memory_state.suggested_sleep_seconds} 秒")
-            
+            # 呼叫 ADK 官方非同步生成器執行推理與 Tools 循環
+            async for event in self.runner.run_async(
+                user_id=user_id,
+                session_id=session_id,
+                new_message=msg_content
+            ):
+                # 1. 實時捕捉大腦內心 thought OS 簽章
+                if event.content and event.content.parts:
+                    for part in event.content.parts:
+                        if getattr(part, 'thought_signature', None) and part.text:
+                            # 發現 thought OS，發送情感遙測 (Discord 灰引言渲染)
+                            # 包裹成 PersonaResponse 與舊 telemetry 相容
+                            from pydantic import BaseModel
+                            class FakePersonaResponse(BaseModel):
+                                situation_analysis: str = "環境與情緒自然流轉"
+                                internal_thought: str = part.text
+                                final_speech: str = ""
+                            asyncio.create_task(self._emit_chat_telemetry(FakePersonaResponse(internal_thought=part.text), telemetry_msg, location_info))
+
+                # 2. 實時捕捉即時工具調用
+                if event.actions and event.actions.function_calls:
+                    for fc in event.actions.function_calls:
+                        # 金色 Embed 背景播報
+                        fc_args = fc.arguments if hasattr(fc, 'arguments') else {}
+                        asyncio.create_task(self._emit_telemetry_live(f"🔧 **工具呼叫**: `{fc.name}`\n  * 參數: `{fc_args}`"))
+
+                # 3. 實時捕捉大腦回覆與對話 ID
+                if event.id:
+                    interaction_id = event.id
+                if event.content and event.content.parts:
+                    for part in event.content.parts:
+                        if part.text:
+                            response_text += part.text
+
+            # 決策完成後發射邏輯分析字卡 (與舊 telemetry 緊密相容)
+            from pydantic import BaseModel
+            class FakeMemoryState(BaseModel):
+                needs_reply: bool = True
+                current_goal: str = "與親愛的使用者進行貼心交流"
+                suggested_sleep_seconds: int = self.next_sleep_duration
+                sleep_intent: Optional[str] = self.sleep_intent
+            asyncio.create_task(self._emit_logic_telemetry(FakeMemoryState(), telemetry_msg, location_info))
+
         except Exception as e:
-            print(f"❌ [LogicRouter] 決策出錯: {e}")
-            memory_state = MemoryState(needs_reply=True, current_goal="因決策異常而被迫回覆", suggested_sleep_seconds=3600)
+            print(f"❌ [ADK Runner] 執行出錯: {e}")
+            return f"😵 (大腦思考時發生未預期錯誤: {e})", None
 
-        # 真正將睡眠權限交給 AI
-        sleep_val = memory_state.suggested_sleep_seconds
-        if sleep_val > 0:
-            old_sleep = self.next_sleep_duration
-            self.next_sleep_duration = sleep_val
-            self.sleep_intent = memory_state.sleep_intent
-            if old_sleep != sleep_val:
-                self.schedule_update_event.set() # 重設排程計時器
-
-        # 第一階段邏輯決策完成後，立刻背景非同步發射邏輯分析遙測
-        trigger_text = history_messages[-1].get("parts", [{}])[0].get("text", "Unknown") if history_messages else "Unknown"
-        asyncio.create_task(self._emit_logic_telemetry(memory_state, trigger_text, location_info))
-
-        # ---------------------------------------------------------------------
-        # 🚀 階段二：ChatGenerator (情感 OS 與擬態對話)
-        # ---------------------------------------------------------------------
-        if not memory_state.needs_reply:
-            print("😴 [LogicRouter] 決定不回覆此訊息。")
-            return "", interaction1.id
-
-        # 組裝 RAG Context
-        rag_context = ""
-        if self._last_search_results:
-            rag_context = "\n# ==========================================\n# 【階段一檢學到的背景記憶 (RAG)】\n# ==========================================\n" + "\n".join(self._last_search_results)
-
-        sys_prompt_stage2 = f"""
-{system_instruction}
-{rag_context}
-
-# ==========================================
-# 【階段一決策背景】
-# ==========================================
-- 當前目標 (current_goal): {memory_state.current_goal}
-- 休眠備忘 (sleep_intent): {memory_state.sleep_intent}
-
-# ==========================================
-# 【階段二任務：ChatGenerator (角色發言)】
-# ==========================================
-妳是 HiHi 的 ChatGenerator。妳此時的任務是結合階段一收集的事實與回憶，進行【同化與擬態 (Mirroring)】。
-請根據妳的存在宣言，輸出一個符合 `PersonaResponse` 定義的 JSON。
-"""
-
-        # 階段二無 tools，可以使用 response_format 來保證輸出結構化 JSON (啟用 store=False 無狀態模式)
-        interaction2 = await self._call_interaction_api(
-            model=self.model_name,
-            store=False,
-            input=input_history,
-            system_instruction=sys_prompt_stage2,
-            generation_config=types.GenerateContentConfig(
-                temperature=1.0,
-                top_p=0.95,
-            ),
-            response_format=[
-                {
-                    "type": "text",
-                    "mime_type": "application/json",
-                    "schema": PersonaResponse.model_json_schema()
-                }
-            ]
-        )
-
-        if not interaction2:
-            return "😵 (大腦連線失敗)", interaction1.id
-
-        # 提取階段二最終文字
-        stage2_text = next((o.text for o in interaction2.outputs if o.type == "text" and hasattr(o, 'text')), None)
-
-        try:
-            print(f"🧠 [ChatGenerator] 原始輸出: {stage2_text}")
-            if not stage2_text:
-                raise ValueError("第二階段輸出為空")
-
-            persona_data = json.loads(stage2_text)
-            persona_response = PersonaResponse(**persona_data)
-            
-        except Exception as e:
-            print(f"❌ [ChatGenerator] 對話出錯: {e}")
-            return "😵 (大腦解析對話發生錯誤)", interaction2.id
-
-        # 第二階段情感生成完成後，立刻背景非同步發射發言決策遙測
-        asyncio.create_task(self._emit_chat_telemetry(persona_response, trigger_text, location_info))
-
-        return (persona_response.final_speech if persona_response.final_speech else ""), interaction2.id
+        return response_text, interaction_id
     # --- Main Helper Methods ---
 
     def _load_text(self, path, default):
@@ -1080,7 +970,13 @@ class AIChat(commands.Cog):
 
             # 4. Call Agent
             async with channel.typing():
-                response_text, interaction_id = await self._call_gemini_agent(api_messages, system_instruction=system_prompt, location_info=location_info)
+                response_text, interaction_id = await self._call_adk_runner(
+                    user_id=str(last_message.author.id),
+                    session_id=f"discord_{channel.id}",
+                    new_message=current_user_parts,
+                    system_instruction=system_prompt,
+                    location_info=location_info
+                )
 
                 if response_text and response_text.strip() and not response_text.startswith("😵"):
                     final_response = response_text
@@ -1174,40 +1070,28 @@ class AIChat(commands.Cog):
                     if channel:
                         print(f"💓 [Heartbeat] 準備在頻道 {channel.name} 發起主動閒聊...")
                         try:
-                            # 1. 取得最近的聊天紀錄，看看大家睡前聊了什麼
-                            api_messages = []
-                            if self.memory_manager:
-                                raw_history = await self.memory_manager.get_recent_chat_history(limit=5)
-                                for msg in raw_history:
-                                    role = msg.get("role", "user")
-                                    content = msg.get("content", "")
-                                    if "parts" in msg:
-                                        api_messages.append(msg)
-                                    else:
-                                        api_messages.append({"role": role, "parts": [{"text": content}]})
-                                
-                                while api_messages and api_messages[0].get("role") != "user":
-                                    api_messages.pop(0)
-
-                            # 2. 準備極簡的系統推播 (Minimal Context Update)
+                            # 1. 準備極簡的系統推播 (Minimal Context Update)
                             current_time = datetime.now(timezone(timedelta(hours=8))).strftime('%m月%d日 %H:%M')
                             base_prompt = await self._get_system_prompt("", f"頻道：{channel.name}", "", "")
                             
                             if self.sleep_intent:
-                                # 透過環境音暗示備忘錄的浮現，完全不給指令
-                                api_messages.append({"role": "user", "parts": [{"text": f"*(時間來到了 {current_time}。休眠結束，腦海中浮現了先前的備忘錄：「{self.sleep_intent}」)*"}]})
+                                awaken_hint = f"*(時間來到了 {current_time}。休眠結束，腦海中浮現了先前的備忘錄：「{self.sleep_intent}」)*"
                                 self.sleep_intent = None
                                 self.next_sleep_duration = 3600
                             else:
-                                # 極簡的時間推移暗示，完全不給指令
-                                api_messages.append({"role": "user", "parts": [{"text": f"*(時間來到了 {current_time})*"}]})
+                                awaken_hint = f"*(時間來到了 {current_time})*"
                             
-                            # 3. 呼叫大腦 (直接使用 base_prompt)
+                            # 2. 呼叫大腦 (直接使用 base_prompt)
                             location_info = f"- 伺服器 (Server): {channel.guild.name if channel.guild else '私人訊息 (Private)'}\n- 頻道 (Channel): {channel.name}"
 
                             async with channel.typing():
-                                # 修正心跳引擎呼叫，正確解構 tuple 回傳值 (包含對話 ID)
-                                response_text, interaction_id = await self._call_gemini_agent(api_messages, system_instruction=base_prompt, location_info=location_info)
+                                response_text, interaction_id = await self._call_adk_runner(
+                                    user_id="heartbeat_awakening",
+                                    session_id=f"discord_{channel.id}",
+                                    new_message=awaken_hint,
+                                    system_instruction=base_prompt,
+                                    location_info=location_info
+                                )
                                 
                                 if response_text and response_text.strip() and not response_text.startswith("😵"):
                                     final_response = response_text

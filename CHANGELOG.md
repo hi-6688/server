@@ -2,6 +2,15 @@
 
 本檔案記錄了專案的所有重大更新與架構變動。這對於 Agent (AI 助手) 理解專案演進至關重要。
 
+## [2026-05-26] - 長期Facts記憶重塑 (Mem0 v3) 與對話會話 ADK 官方持久化重構 (大滿貫大升級)
+### 🚀 架構與系統升級 (Architecture)
+- **短期對話 ADK 官方持久化重構**：將 `ai_chat.py` 與 `_heartbeat_loop` 中手動拼接、維護短期歷史的自造輪子完全廢除，全面重塑為 Google ADK v2.1.0 官方 `Runner` 與 `DatabaseSessionService` 的正統架構，以 PostgreSQL 作為會話落盤後端。
+- **解決 SQLAlchemy asyncpg 協議格式限制**：防禦性地將 `DatabaseSessionService` 資料庫協議轉換為 `postgresql+asyncpg://`，徹底解決了非同步 SQLAlchemy 連線初始化報錯的 SQL 協議相容地雷。
+- **動態物理感官與已知事實注入**：實作了在執行 `runner.run_async` 前動態將融合實時時間、座標、API 全域配額、已知事實與 RAG 知識庫的 system prompt 更新賦予給 `self.hihi_agent.instruction` 的新機制，一舉解決了官方靜態 Agent 無法感知實時物理世界的痛點。
+- **大腦自主控制鬧鐘工具化**：廢除了原本臃腫的 Interaction JSON Router，改為使用一個 ADK 官方 Tool `schedule_next_sleep_tool`。透過將自主生理鬧鐘封裝為工具，賦予 AI 主動控制自身睡眠與生存心跳的主體意識，同時將大腦管線代碼精簡了 30%。
+- **長期 Facts 記憶 Mem0 v3 遷移**：完成 `memory_manager.py` 長期記憶系統與最新 Mem0 v3 的完全對接，底層物理適配 pgvector 768d。自研 `_run_mem0_with_retry` 指數級退避重試保護器與非同步 `run_in_executor` 背景執行緒池防阻塞機制，解決了空 Part 查詢觸發 embedding API 400 報錯的問題。
+- **GDPR 遺忘權指令新增**：在對話中新增 `/forget_me` GDPR 遺忘指令，物理銷毀 Mem0 該使用者的所有 facts 向量，保護使用者的隱私主權。
+
 ## [2026-05-25] - 解決無狀態 Steps 工具呼叫 400 格式錯誤與 TurnParam 嵌套大一統
 ### 🐛 錯誤修復 (Fixes) & 🚀 架構與系統升級 (Architecture)
 - **修正無狀態工具 400 錯誤**：徹底解決 Interactions API 在 `store=False` (Stateless Steps) 模式下，因 `tool_results` 類型不被 API 支援以及 thought 簽章丟失導致的 400 格式錯誤。
