@@ -2,6 +2,13 @@
 
 本檔案記錄了專案的所有重大更新與架構變動。這對於 Agent (AI 助手) 理解專案演進至關重要。
 
+## [2026-05-26] - 全面回歸並大一統至 Mem0 v3，清除 150+ 行舊有靜態 RAG 死碼
+### 🚀 架構與系統升級 (Architecture)
+- **大腦長期記憶 100% 大一統**：廢除了舊有自造的靜態 `memories` 資料表，將大腦的長期 facts 記憶 100% 整合至官方 Mem0 v3 智慧圖譜與 pgvector，實現前台、後台、手動/自動寫入事實的全面大一統。
+- **清除 150+ 行舊有 RAG 死碼**：安全廢除了 `MemoryManager` 內部舊版自研的 `add_memory`、`_analyze_content` (Auto-Tagging) 與傳統 SQL RAG 搜尋 `search_memory` 等不再被使用的冗餘死碼。
+- **save_memory 與 search_memory 工具全面 Mem0 化**：重塑了對話 Cog 中這兩個最核心的長期記憶工具，直接調用 `add_fact` 寫入官方事實庫、調用 `search_facts_by_topic` 進行高精度的語意聯想與實體鏈結檢索。
+- **省下巨量 API 額度與時間**：廢除了手動 AI 自動標籤 (Auto-Tagging) 的額外 Gemini API 呼叫，每一次寫入記憶都省下了 1-2 秒的大腦思考延遲，並徹底消除了 token 浪費。
+
 ## [2026-05-26] - Google ADK MemoryService 原生接口對接與 Token 極致優化
 ### 🚀 架構與系統升級 (Architecture)
 - **實作 `Mem0MemoryService` 原生記憶服務**：建立 `discord_bot/utils/memory_service.py`，完美繼承 ADK 的 `BaseMemoryService`，並完成 `search_memory` (facts 自動無感預載) 與 `add_session_to_memory` (對話結束事實自動落盤) 的 Native Python 實作。
