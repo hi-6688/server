@@ -23,6 +23,7 @@ from google.genai import types
 from google.adk.agents import Agent
 from google.adk.runners import Runner
 from google.adk.sessions.database_session_service import DatabaseSessionService
+from discord_bot.utils.memory_service import Mem0MemoryService
 
 
 # --- 設定檔路徑 ---
@@ -199,15 +200,19 @@ class AIChat(commands.Cog):
 
                 # 初始化會話持久化服務與 Runner
                 self.session_service = DatabaseSessionService(db_url=adk_db_url)
+                # 初始化自訂的 Mem0 官方記憶服務原生對接介面
+                self.memory_service = Mem0MemoryService(self.memory_manager)
                 self.runner = Runner(
                     app_name="HiHiDiscordBot",
                     agent=self.hihi_agent,
-                    session_service=self.session_service
+                    session_service=self.session_service,
+                    memory_service=self.memory_service  # 原生接口對接綁定
                 )
                 print("🧠 [ADK] 官方 Persistent Runner 初始化成功！")
             except Exception as e:
                 print(f"❌ [ADK] 官方架構初始化失敗: {e}")
                 self.runner = None
+                self.memory_service = None
 
         # 暫存 RAG 搜尋結果與空間座標，供多階段與工具調用使用
         self._last_search_results = []
@@ -375,6 +380,23 @@ class AIChat(commands.Cog):
             await channel.send(embed=embed)
         except Exception as e:
             print(f"⚠️ 邏輯遙測發送錯誤: {e}")
+
+    async def _emit_telemetry_live(self, content):
+        """實時遙測，用於播報工具執行等單行訊息。"""
+        if not self.inner_world_channel_id:
+            return
+        channel = self.bot.get_channel(self.inner_world_channel_id)
+        if not channel:
+            try:
+                channel = await self.bot.fetch_channel(self.inner_world_channel_id)
+            except Exception as e:
+                print(f"⚠️ 實時遙測失敗：找不到頻道 ({self.inner_world_channel_id}): {e}")
+                return
+        try:
+            embed = discord.Embed(description=content, color=0xffd166, timestamp=datetime.now(timezone(timedelta(hours=8))))
+            await channel.send(embed=embed)
+        except Exception as e:
+            print(f"⚠️ 實時遙測發送錯誤: {e}")
 
     async def _emit_chat_telemetry(self, persona_response, trigger_text, location_info=""):
         if not self.inner_world_channel_id: 
@@ -564,6 +586,34 @@ class AIChat(commands.Cog):
         except Exception as e:
             print(f"⚠️ [ADK Session] 確保會話存在時遇到未預期錯誤: {e}")
 
+        # 為了 telemetry 輸出與記憶檢索，先將 new_message 轉成簡潔便於閱讀的字串
+        telemetry_msg = ""
+        if isinstance(new_message, str):
+            telemetry_msg = new_message
+        elif isinstance(new_message, list):
+            for p in new_message:
+                if p.get("type") == "text":
+                    telemetry_msg += p["text"]
+                elif p.get("type") == "image":
+                    telemetry_msg += " [圖片訊息] "
+        else:
+            telemetry_msg = str(new_message)
+
+        # 實時動態檢索長期 facts 並融入 System Instruction (ADK MemoryService 原生自動預載)
+        if self.memory_service:
+            try:
+                facts_response = await self.memory_service.search_memory(
+                    app_name="HiHiDiscordBot",
+                    user_id=user_id,
+                    query=telemetry_msg
+                )
+                if facts_response.memories:
+                    facts_text = facts_response.memories[0].content.parts[0].text
+                    system_instruction = f"{facts_text}\n\n{system_instruction}"
+                    print(f"🧠 [ADK Memory] 成功為對話預載並自動注入長期 Facts 偏好庫！")
+            except Exception as e:
+                print(f"⚠️ [ADK Memory] 預載 facts 時發生未預期錯誤: {e}")
+
         # 動態更新大腦的 System Instruction，融入當前實時的物理感官、時間與事實
         if system_instruction:
             self.hihi_agent.instruction = system_instruction
@@ -586,19 +636,6 @@ class AIChat(commands.Cog):
             msg_content = types.Content(role="user", parts=parts)
         else:
             msg_content = new_message
-
-        # 為了 telemetry 輸出，先將 new_message 轉成簡潔便於閱讀的字串
-        telemetry_msg = ""
-        if isinstance(new_message, str):
-            telemetry_msg = new_message
-        elif isinstance(new_message, list):
-            for p in new_message:
-                if p.get("type") == "text":
-                    telemetry_msg += p["text"]
-                elif p.get("type") == "image":
-                    telemetry_msg += " [圖片訊息] "
-        else:
-            telemetry_msg = str(new_message)
 
         # 初始化本次的工具紀錄與暫存狀態
         self._last_executed_tools = []
@@ -634,10 +671,11 @@ class AIChat(commands.Cog):
                             asyncio.create_task(self._emit_chat_telemetry(FakePersonaResponse(internal_thought=part.text), telemetry_msg, location_info))
 
                 # 2. 實時捕捉即時工具調用
-                if event.actions and event.actions.function_calls:
-                    for fc in event.actions.function_calls:
+                func_calls = event.get_function_calls()
+                if func_calls:
+                    for fc in func_calls:
                         # 金色 Embed 背景播報
-                        fc_args = fc.arguments if hasattr(fc, 'arguments') else {}
+                        fc_args = fc.args if hasattr(fc, 'args') else {}
                         asyncio.create_task(self._emit_telemetry_live(f"🔧 **工具呼叫**: `{fc.name}`\n  * 參數: `{fc_args}`"))
 
                 # 3. 實時捕捉大腦回覆與對話 ID
@@ -660,6 +698,20 @@ class AIChat(commands.Cog):
         except Exception as e:
             print(f"❌ [ADK Runner] 執行出錯: {e}")
             return f"😵 (大腦思考時發生未預期錯誤: {e})", None
+
+        # 對話結束後，自動觸發 MemoryService 原生落盤事實
+        if self.memory_service:
+            try:
+                # 重新獲取 session 以取得最新的 history 數據
+                session_obj = await self.session_service.get_session(
+                    app_name="HiHiDiscordBot",
+                    user_id=user_id,
+                    session_id=session_id
+                )
+                if session_obj:
+                    await self.memory_service.add_session_to_memory(session_obj)
+            except Exception as e:
+                print(f"⚠️ [ADK Memory] 自動落盤時發生未預期錯誤: {e}")
 
         return response_text, interaction_id
     # --- Main Helper Methods ---
@@ -738,7 +790,6 @@ class AIChat(commands.Cog):
 # 【記憶與環境 (The Environment)】
 # ==========================================
 {knowledge_context if knowledge_context else ""}
-{facts_context if facts_context else ""}
 
 妳只能透過 Pydantic 表單與這個宇宙互動。如果覺得過度疲勞，妳有權利選擇休眠 (final_speech: null)。請根據上述物理感官與記憶，決定妳的下一個動作。
 """
@@ -818,27 +869,8 @@ class AIChat(commands.Cog):
             self.last_message_time = time.time()
             
             # 2. Context Building (Similar to before)
-            # Fact Injection
+            # Fact Injection (已由 ADK MemoryService 原生自動檢索接管，前台僅傳入空字串)
             facts_context = ""
-            if self.memory_manager:
-                try:
-                    target_users = set()
-                    for msg in messages_to_process:
-                        target_users.add(msg.author)
-                        for user in msg.mentions:
-                            if not user.bot: target_users.add(user)
-                    
-                    facts_lines = []
-                    for user in target_users:
-                        user_key = user.name 
-                        user_facts = await self.memory_manager.get_facts(user_key)
-                        if user_facts:
-                            facts_lines.append(f"- {user.display_name} ({user.name}):")
-                            for f in user_facts:
-                                facts_lines.append(f"  * {f}")
-                    if facts_lines:
-                        facts_context = "[已知事實 (Known Facts)]\n" + "\n".join(facts_lines)
-                except Exception as e: print(f"⚠️ Fact Injection Error: {e}")
 
             # Location Info
             try:

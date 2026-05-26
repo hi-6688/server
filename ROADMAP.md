@@ -5,11 +5,12 @@
 ## 🔴 當前急迫事項 (Immediate Actions)
 *嗨嗨 v7.0 核心架構升級與系統修復*
 
-- [x] **P0: 長期Facts記憶 Mem0 v3 重塑 (階段2) 與短期會話 ADK 官方持久化大滿貫重構 (階段3)**
+- [x] **P0: Long Term Facts 記憶 Mem0 v3 重塑 與 Google ADK MemoryService 原生對接 (大滿貫重構完成)**
     - **長期記憶完全回歸官方強一致性同步等待**：徹底移除 `memory_manager.py` 自造的非同步 `memory_queue` 與背景協程，將 `add_memory` 改為強一致性 `await` 實時寫入管道，100% 確保長期記憶落盤安全，徹底解決 RAM 佇列記憶丟失（靜默丟失）風險。
     - **啟用 NLP 實體鏈結 (Entity Linking)**：成功安裝 `mem0ai[nlp]` 依賴與 `spaCy` NLP 核心，正式解鎖 Mem0 v3 官方最核心的 Entity 實體分析與檢索加權機制，告別 semantic-only 降級模式。
     - **長期Facts記憶重塑**：將 `memory_manager.py` 與最新 Mem0 v3 對接，底層適配 pgvector 768d，自研背景非同步 `run_in_executor` 與 `_run_mem0_with_retry` 退避重試保護器，並修復了空 Parts 查詢的 API 400 報錯。
     - **短期對話 ADK 官方持久化重構**：將 `ai_chat.py` 核心重構為 ADK Runner，並實作非同步會話自動存在性檢測與建立，徹底排除新頻道首次發言拋出 `Session not found` 崩潰的地雷。
+    - **ADK MemoryService 原生對接與 Token 極致優化**：繼承 ADK `BaseMemoryService` 實作自訂原生對接，與 ADK `Runner` 深度綁定，實現發言前 facts 自動無感注入與對話結束事實自動提煉落盤。徹底移除了前台手動撈取與拼接 facts 的冗餘 SQL/RAG 代碼，大幅縮減 system instruction 提示詞長度，Token 消耗大幅降低，並已通過 `scratch/test_memory_service.py` 完整生命週期單元測試驗證！
     - **解決 SQLAlchemy asyncpg 協議格式限制**：防禦性地將資料庫 URL 協議轉換為 `postgresql+asyncpg://`，並動態過濾移除 `sslmode` 參數（防護 asyncpg 連線崩潰），徹底解決了 SQLAlchemy 非同步連線與執行期地雷。
     - **大腦自主控制鬧鐘工具化**：封裝 ADK 官方 Tool `schedule_next_sleep_tool` 自主管理睡眠排程，大腦管線代碼精簡了 30%。
     - **GDPR 遺忘權指令新增**：新增 `/forget_me` GDPR 遺忘指令，物理銷毀 Mem0 中該使用者的所有長期 Facts 向量。

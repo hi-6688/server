@@ -2,6 +2,13 @@
 
 本檔案記錄了專案的所有重大更新與架構變動。這對於 Agent (AI 助手) 理解專案演進至關重要。
 
+## [2026-05-26] - Google ADK MemoryService 原生接口對接與 Token 極致優化
+### 🚀 架構與系統升級 (Architecture)
+- **實作 `Mem0MemoryService` 原生記憶服務**：建立 `discord_bot/utils/memory_service.py`，完美繼承 ADK 的 `BaseMemoryService`，並完成 `search_memory` (facts 自動無感預載) 與 `add_session_to_memory` (對話結束事實自動落盤) 的 Native Python 實作。
+- **重塑對話 Cog 實現 Token 極致優化**：在 `AIChat.__init__` 中將 `Mem0MemoryService` 與 ADK `Runner` 正式綁定，徹底移除了前台手動撈取與拼接 facts 的冗餘 SQL/RAG 代碼，使 system instruction 與大腦前置對話邏輯獲得極致淨化，大幅減少 Token 消耗並提升體感生成速度。
+- **排除子模組導入 ImportError 地雷**：發現並排除了 ADK 的 `SearchMemoryResponse` 與 `BaseMemoryService` 必須自 `google.adk.memory.base_memory_service` 子模組導入（而非 package 根目錄 `google.adk.memory`）的 ImportError 地雷，保障了原生記憶框架在生產環境的完美加載。
+- **多中英 facts 魯棒性單元測試驗證**：建立並通過了 `scratch/test_memory_service.py` 完整生命週期單元測試，驗證事實的自動預載與對話結束後 facts 自動提煉落盤（pgvector + spaCy 實體鏈結）完美全綠燈通過。
+
 ## [2026-05-26] - 長期記憶完全回歸官方強一致性同步等待重構
 ### 🚀 架構與系統升級 (Architecture)
 - **拆除自造非同步長期記憶佇列 (Background Memory Queue)**：應官方 Google ADK 與 Mem0 設計的最佳實踐，徹底拆除了在 `memory_manager.py` 中自製 of `asyncio.Queue` 非同步佇列與其背景處理協程 `_process_memory_queue`。
