@@ -258,9 +258,9 @@ class AIChat(commands.Cog):
 
         self._last_executed_tools.append("save_memory")
         print(f"🔧 [SDK Tool] save_memory: user_name={user_name}, content={content}, importance={importance}")
-        loc_meta = self._current_location_info.replace('\n', ' | ') if self._current_location_info else "位置未知"
-        await self.memory_manager.add_memory(user_name, content, importance, metadata={"location": loc_meta})
-        return f"✅ 已儲存記憶: {content}"
+        # 直接使用 Mem0 v3 寫入 facts，享有強大的內建實體鏈結與自動事實提煉
+        await self.memory_manager.add_fact(user_id=user_name, fact=content)
+        return f"✅ 已儲存長期事實記憶: {content}"
 
     async def manage_fact(self, action: str, user_id: str, content: str, category: str = "Data") -> str:
         """管理關於使用者的長期事實 (CRUD)。當你發現新的事實，或發現舊事實有誤時使用。
@@ -298,21 +298,19 @@ class AIChat(commands.Cog):
 
         self._last_executed_tools.append("search_memory")
         print(f"🔧 [SDK Tool] search_memory: query={query}")
-        results = await self.memory_manager.search_memory(query)
+        results = await self.memory_manager.search_facts_by_topic(query)
         if not results:
             return "沒有找到相關記憶。"
         
         res_blocks = []
         for r in results:
-            date_str = r['created_at'].strftime('%Y-%m-%d %H:%M')
-            block = f"📍 【記憶標籤】 ({date_str}) {r['user_name']}: {r['content']}\n"
-            if r.get('raw_context'):
-                block += "   📜 當時的對話現場 (原文重現):\n"
-                for ctx in r['raw_context']:
-                    block += f"      {ctx}\n"
+            # Mem0 搜尋結果格式為字典列表：[{'id': ..., 'memory': ..., 'user_id': ...}]
+            mem_text = r.get('memory') or r.get('fact', '')
+            user_lbl = r.get('user_id', 'User')
+            block = f"📍 【記憶事實】 ({user_lbl}): {mem_text}\n"
             res_blocks.append(block)
         
-        result_str = f"🔍搜尋結果:\n" + "\n".join(res_blocks)
+        result_str = f"🔍 語意聯想搜尋結果:\n" + "\n".join(res_blocks)
         self._last_search_results.append(result_str)
         return result_str
 
