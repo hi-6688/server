@@ -6,6 +6,7 @@
 ### 🚀 架構與系統升級 (Architecture)
 - **短期對話 ADK 官方持久化重構**：將 `ai_chat.py` 與 `_heartbeat_loop` 中手動拼接、維護短期歷史的自造輪子完全廢除，全面重塑為 Google ADK v2.1.0 官方 `Runner` 與 `DatabaseSessionService` 的正統架構，以 PostgreSQL 作為會話落盤後端。
 - **解決 SQLAlchemy asyncpg 協議格式限制**：防禦性地將 `DatabaseSessionService` 資料庫協議轉換為 `postgresql+asyncpg://`，徹底解決了非同步 SQLAlchemy 連線初始化報錯的 SQL 協議相容地雷。
+- **過濾資料庫 sslmode 地雷**：在 `asyncpg` 驅動中，URL 附帶的 `sslmode=require` 參數會導致連線拋出 `TypeError: connect() got an unexpected keyword argument 'sslmode'` 錯誤。我們實作了連線字串的**動態參數過濾機制**，將其從 ADK 資料庫 URL 中安全移除（利用 `asyncpg` 預設的安全 SSL 協商），成功保障了對話歷史持久會話在真實資料庫交互中的 100% 暢通！
 - **動態物理感官與已知事實注入**：實作了在執行 `runner.run_async` 前動態將融合實時時間、座標、API 全域配額、已知事實與 RAG 知識庫的 system prompt 更新賦予給 `self.hihi_agent.instruction` 的新機制，一舉解決了官方靜態 Agent 無法感知實時物理世界的痛點。
 - **大腦自主控制鬧鐘工具化**：廢除了原本臃腫的 Interaction JSON Router，改為使用一個 ADK 官方 Tool `schedule_next_sleep_tool`。透過將自主生理鬧鐘封裝為工具，賦予 AI 主動控制自身睡眠與生存心跳的主體意識，同時將大腦管線代碼精簡了 30%。
 - **長期 Facts 記憶 Mem0 v3 遷移**：完成 `memory_manager.py` 長期記憶系統與最新 Mem0 v3 的完全對接，底層物理適配 pgvector 768d。自研 `_run_mem0_with_retry` 指數級退避重試保護器與非同步 `run_in_executor` 背景執行緒池防阻塞機制，解決了空 Part 查詢觸發 embedding API 400 報錯的問題。

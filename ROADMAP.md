@@ -8,7 +8,7 @@
 - [x] **P0: 長期Facts記憶 Mem0 v3 重塑 (階段2) 與短期會話 ADK 官方持久化大滿貫重構 (階段3)**
     - **長期Facts記憶重塑**：將 `memory_manager.py` 與最新 Mem0 v3 對接，底層適配 pgvector 768d，自研背景非同步 `run_in_executor` 與 `_run_mem0_with_retry` 退避重試保護器，並修復了空 Parts 查詢的 API 400 報錯。
     - **短期對話 ADK 官方持久化重構**：將 `ai_chat.py` 中手動拼接短期歷史的代碼，全面重構為 Google ADK v2.1.0 官方 `Runner` 與 `DatabaseSessionService` 的正規架構，藉此利用異步事件流在背景實時發射雙遙測。
-    - **解決 SQLAlchemy asyncpg 協議格式限制**：防禦性地將資料庫 URL 協議轉換為 `postgresql+asyncpg://`，徹底解決了 SQLAlchemy 非同步連線初始化地雷。
+    - **解決 SQLAlchemy asyncpg 協議格式限制**：防禦性地將資料庫 URL 協議轉換為 `postgresql+asyncpg://`，並動態過濾移除 `sslmode` 參數（防護 asyncpg 連線崩潰），徹底解決了 SQLAlchemy 非同步連線與執行期地雷。
     - **大腦自主控制鬧鐘工具化**：封裝 ADK 官方 Tool `schedule_next_sleep_tool` 自主管理睡眠排程，大腦管線代碼精簡了 30%。
     - **GDPR 遺忘權指令新增**：新增 `/forget_me` GDPR 遺忘指令，物理銷毀 Mem0 中該使用者的所有長期 Facts 向量。
 
