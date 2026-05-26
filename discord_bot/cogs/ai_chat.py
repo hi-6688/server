@@ -23,7 +23,7 @@ from google.genai import types
 from google.adk.agents import Agent
 from google.adk.runners import Runner
 from google.adk.sessions.database_session_service import DatabaseSessionService
-from discord_bot.utils.memory_service import Mem0MemoryService
+from utils.memory_service import Mem0MemoryService
 
 
 # --- 設定檔路徑 ---
