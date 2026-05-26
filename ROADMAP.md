@@ -7,6 +7,7 @@
 
 - [x] **P0: 長期Facts記憶 Mem0 v3 重塑 (階段2) 與短期會話 ADK 官方持久化大滿貫重構 (階段3)**
     - **長期記憶完全回歸官方強一致性同步等待**：徹底移除 `memory_manager.py` 自造的非同步 `memory_queue` 與背景協程，將 `add_memory` 改為強一致性 `await` 實時寫入管道，100% 確保長期記憶落盤安全，徹底解決 RAM 佇列記憶丟失（靜默丟失）風險。
+    - **啟用 NLP 實體鏈結 (Entity Linking)**：成功安裝 `mem0ai[nlp]` 依賴與 `spaCy` NLP 核心，正式解鎖 Mem0 v3 官方最核心的 Entity 實體分析與檢索加權機制，告別 semantic-only 降級模式。
     - **長期Facts記憶重塑**：將 `memory_manager.py` 與最新 Mem0 v3 對接，底層適配 pgvector 768d，自研背景非同步 `run_in_executor` 與 `_run_mem0_with_retry` 退避重試保護器，並修復了空 Parts 查詢的 API 400 報錯。
     - **短期對話 ADK 官方持久化重構**：將 `ai_chat.py` 核心重構為 ADK Runner，並實作非同步會話自動存在性檢測與建立，徹底排除新頻道首次發言拋出 `Session not found` 崩潰的地雷。
     - **解決 SQLAlchemy asyncpg 協議格式限制**：防禦性地將資料庫 URL 協議轉換為 `postgresql+asyncpg://`，並動態過濾移除 `sslmode` 參數（防護 asyncpg 連線崩潰），徹底解決了 SQLAlchemy 非同步連線與執行期地雷。
