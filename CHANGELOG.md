@@ -2,6 +2,12 @@
 
 本檔案記錄了專案的所有重大更新與架構變動。這對於 Agent (AI 助手) 理解專案演進至關重要。
 
+## [2026-05-26] - 長期記憶完全回歸官方強一致性同步等待重構
+### 🚀 架構與系統升級 (Architecture)
+- **拆除自造非同步長期記憶佇列 (Background Memory Queue)**：應官方 Google ADK 與 Mem0 設計的最佳實踐，徹底拆除了在 `memory_manager.py` 中自製 of `asyncio.Queue` 非同步佇列與其背景處理協程 `_process_memory_queue`。
+- **重構 `add_memory` 為強一致性實時寫入管道**：將 `add_memory` 改為強一致性 `await` 同步/非同步實時寫入，順序 `await` 執行 AI 自動標籤 (Auto-Tagging)、向量生成 (Gemini Embedding) 與 PostgreSQL 資料庫持久化，100% 確保長期記憶安全落盤，杜絕因為系統維護、重啟或崩潰引發的 RAM 佇列記憶丟失（靜默丟失）風險。
+- **單元測試與連線池生命週期優化**：移成了 `init_pool` 中對背景佇列協程的啟動，以及 `close_pool` 中繁瑣的協程 cancellation 取消與 await 等待代碼；優化並簡化了主程式單元測試（`__main__` 區塊）的測試等待邏輯，經本地 PostgreSQL 768 維 pgvector 實測 100% 通過。
+
 ## [2026-05-26] - 長期Facts記憶重塑 (Mem0 v3) 與對話會話 ADK 官方持久化重構 (大滿貫大升級)
 ### 🚀 架構與系統升級 (Architecture)
 - **短期對話 ADK 官方持久化重構**：將 `ai_chat.py` 與 `_heartbeat_loop` 中手動拼接、維護短期歷史的自造輪子完全廢除，全面重塑為 Google ADK v2.1.0 官方 `Runner` 與 `DatabaseSessionService` 的正統架構，以 PostgreSQL 作為會話落盤後端。
