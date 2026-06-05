@@ -5,6 +5,11 @@
 ## 🔴 當前急迫事項 (Immediate Actions)
 *嗨嗨 v7.0 核心架構升級與系統修復*
 
+- [x] **P0: 解決 gemini-3.1-flash-lite 429 資源限制與 Bot 重複執行問題 (重啟優化與工具解耦完成)**
+    - **金鑰替換與配額重置**：將 `.env` 中的 `GEMINI_API_KEY` 替換為第一把免費 API 金鑰，排除金鑰 2 的配額耗盡問題。
+    - **服務解耦與進程拆分**：修正了 `discord_bot.service` 的 systemd 設定，加入 `Environment=BOT_MODE=HIHI` 參數。物理拆分「嗨嗨 AI 大腦」與「神奇嗨螺」，透過 `systemd --user` 重啟服務，徹底終止重複登入與雙倍 API 金鑰爭搶。
+    - **工具衝突與限流排除**：發現並排除了 Gemini API `url_context` (網頁精讀) 與 `file_search` (RAG 知識庫) 無法在同一個 request 中合併使用的衝突，同時移除了免費金鑰受限的 `google_search` 聯網工具，僅保留穩定的 `file_search`，杜絕大腦搜尋時的 API 死循環漏洞。
+
 - [x] **P0: Long Term Facts 記憶 Mem0 v3 重塑 與 Google ADK MemoryService 原生對接 (大滿貫重構完成)**
     - **長期記憶完全回歸官方強一致性同步等待**：徹底移除 `memory_manager.py` 自造的非同步 `memory_queue` 與背景協程，將 `add_memory` 改為強一致性 `await` 實時寫入管道，100% 確保長期記憶落盤安全，徹底解決 RAM 佇列記憶丟失（靜默丟失）風險。
     - **啟用 NLP 實體鏈結 (Entity Linking)**：成功安裝 `mem0ai[nlp]` 依賴與 `spaCy` NLP 核心，正式解鎖 Mem0 v3 官方最核心的 Entity 實體分析與檢索加權機制，告別 semantic-only 降級模式。

@@ -2,6 +2,12 @@
 
 本檔案記錄了專案的所有重大更新與架構變動。這對於 Agent (AI 助手) 理解專案演進至關重要。
 
+## [2026-06-05] - 解決 gemini-3.1-flash-lite 429 資源限制與 Bot 進程重複執行問題
+### 🐛 錯誤修復 (Fixes) & 🚀 架構與系統升級 (Architecture)
+- **更換 API 金鑰為免費金鑰 1**：將 `.env` 中的 `GEMINI_API_KEY` 替換為備份的第一把免費 API 金鑰，排除第二把金鑰配額被耗盡導致的 429 錯誤。
+- **物理拆分並重新託管 Bot 服務**：修正了 `discord_bot.service` 缺乏 `BOT_MODE` 參數而預設運行 `ALL` 模式的配置，將其限制為僅加載 `hihi.ai_chat` 的 `BOT_MODE=HIHI` 模式。藉此徹底拆分「嗨嗨 AI 大腦」與「神奇嗨螺」的運行進程，終止重複登入與 API 資源爭搶，大幅節省 API 配額。
+- **排除 `url_context` 與 `file_search` 工具衝突**：發現並解決了 Gemini API 內建 `url_context` (網頁精讀) 與 `file_search` (RAG 知識庫) 無法同時出現在同一個 API Request 的 tools 欄位中的衝突。移除了衝突的 `url_context` 與免費金鑰受限的 `google_search` 聯網工具，僅保留相容穩定的 `file_search`，徹底根除了大腦調用搜尋專家時陷入死循環並噴出 429 資源限制的漏洞。
+
 ## [2026-05-26] - 全面回歸並大一統至 Mem0 v3，清除 150+ 行舊有靜態 RAG 死碼
 ### 🚀 架構與系統升級 (Architecture)
 - **大腦長期記憶 100% 大一統**：廢除了舊有自造的靜態 `memories` 資料表，將大腦的長期 facts 記憶 100% 整合至官方 Mem0 v3 智慧圖譜與 pgvector，實現前台、後台、手動/自動寫入事實的全面大一統。
