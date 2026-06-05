@@ -5,6 +5,7 @@
 ## [2026-06-05] - 解決 gemini-3.1-flash-lite 429 資源限制與 Bot 進程重複執行問題
 ### 🐛 錯誤修復 (Fixes) & 🚀 架構與系統升級 (Architecture)
 - **更換 API 金鑰為免費金鑰 1**：將 `.env` 中的 `GEMINI_API_KEY` 替換為備份的第一把免費 API 金鑰，排除第二把金鑰配額被耗盡導致的 429 錯誤。
+- **對齊 Mem0 最新 Python SDK 版本**：經排查釐清，JS 與 Python SDK 的版本命名空間不同。目前 PyPI 上的 Python SDK 最新穩定版為 `2.0.4`，專案已成功在虛擬環境中對齊並於 `requirements.txt` 中鎖定為 `mem0ai==2.0.4`。
 - **物理拆分並重新託管 Bot 服務**：修正了 `discord_bot.service` 缺乏 `BOT_MODE` 參數而預設運行 `ALL` 模式的配置，將其限制為僅加載 `hihi.ai_chat` 的 `BOT_MODE=HIHI` 模式。藉此徹底拆分「嗨嗨 AI 大腦」與「神奇嗨螺」的運行進程，終止重複登入與 API 資源爭搶，大幅節省 API 配額。
 - **排除 `url_context` 與 `file_search` 工具衝突**：發現並解決了 Gemini API 內建 `url_context` (網頁精讀) 與 `file_search` (RAG 知識庫) 無法同時出現在同一個 API Request 的 tools 欄位中的衝突。移除了衝突的 `url_context` 與免費金鑰受限的 `google_search` 聯網工具，僅保留相容穩定的 `file_search`，徹底根除了大腦調用搜尋專家時陷入死循環並噴出 429 資源限制的漏洞。
 

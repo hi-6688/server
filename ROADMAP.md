@@ -7,6 +7,7 @@
 
 - [x] **P0: 解決 gemini-3.1-flash-lite 429 資源限制與 Bot 重複執行問題 (重啟優化與工具解耦完成)**
     - **金鑰替換與配額重置**：將 `.env` 中的 `GEMINI_API_KEY` 替換為第一把免費 API 金鑰，排除金鑰 2 的配額耗盡問題。
+    - **對齊 Mem0 最新 Python SDK**：確認 Python 與 JS 的 SDK 版本命名空間不同。目前 PyPI 上的 Python SDK 最新穩定版為 `2.0.4`，已將 `requirements.txt` 正式鎖定同步，虛擬環境中已是最新版本運作中。
     - **服務解耦與進程拆分**：修正了 `discord_bot.service` 的 systemd 設定，加入 `Environment=BOT_MODE=HIHI` 參數。物理拆分「嗨嗨 AI 大腦」與「神奇嗨螺」，透過 `systemd --user` 重啟服務，徹底終止重複登入與雙倍 API 金鑰爭搶。
     - **工具衝突與限流排除**：發現並排除了 Gemini API `url_context` (網頁精讀) 與 `file_search` (RAG 知識庫) 無法在同一個 request 中合併使用的衝突，同時移除了免費金鑰受限的 `google_search` 聯網工具，僅保留穩定的 `file_search`，杜絕大腦搜尋時的 API 死循環漏洞。
 
