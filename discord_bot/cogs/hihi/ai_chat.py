@@ -22,6 +22,7 @@ from google.adk.agents import Agent
 from google.adk.runners import Runner
 from google.adk.tools import AgentTool, url_context # 導入多智能體委派工具與官方內建 url_context 讀網頁工具
 from google.adk.telemetry.setup import maybe_set_otel_providers # 導入官方遙測設定
+from google.adk.apps.app import App # 導入官方 ADK App 容器
 
 # 💡 導入高雅解耦的自製工具與服務模組
 from tools.scheduler_tools import execute_sleep_scheduling
@@ -135,16 +136,6 @@ class AIChat(commands.Cog):
         if db_url and self.api_key:
             try:
                 # 定義長期事實與學習工具 (讓 ADK 自動分析 Schema，完美掛載)
-                async def save_memory_tool(user_name: str, content: str, importance: int = 5) -> str:
-                    """當你覺得這段對話包含重要的長期資訊、個人喜好、或值得記住的觀察時使用。不要記瑣碎的事。
-                    
-                    Args:
-                        user_name: 對話者的名字
-                        content: 要記住的具體內容 (例如: 'Andy 喜歡吃拉麵')
-                        importance: 重要程度 (1-10)
-                    """
-                    return await self.save_memory(user_name, content, importance)
-
                 async def manage_fact_tool(action: str, user_id: str, content: str, category: str = "Data") -> str:
                     """管理關於使用者的長期事實 (CRUD)。當你發現新的事實，或發現舊事實有誤時使用。
                     
@@ -155,14 +146,6 @@ class AIChat(commands.Cog):
                         category: 類別，可填 'Data' (客觀資料: 生日/職業) 或 'Impression' (主觀印象: 個性/愛好)
                     """
                     return await self.manage_fact(action, user_id, content, category)
-
-                async def search_memory_tool(query: str) -> str:
-                    """當你需要回顧過去的對話、事實、或搜尋特定主題時使用。
-                    
-                    Args:
-                        query: 搜尋關鍵字或問題
-                    """
-                    return await self.search_memory(query)
 
                 async def learn_knowledge_tool(term: str, definition: str, category: str = "General") -> str:
                     """當使用者教你新詞彙、梗、或伺服器設定時使用。這會存入你的[知識庫] (RAG)。
@@ -205,9 +188,7 @@ class AIChat(commands.Cog):
                     name="HiHiv3Agent",
                     instruction=self.core_memory_text,
                     tools=[
-                        save_memory_tool, 
                         manage_fact_tool, 
-                        search_memory_tool, 
                         learn_knowledge_tool, 
                         schedule_next_sleep_tool, 
                         AgentTool(agent=self.search_agent)  # 🧠 注入搜尋專家委派工具
@@ -219,9 +200,13 @@ class AIChat(commands.Cog):
                 self.session_service = get_session_service()
                 # 初始化自訂的 Mem0 官方記憶服務原生對接介面 (直連自裝配)
                 self.memory_service = Mem0MemoryService(db_url=db_url, google_api_key=self.api_key)
+                # 使用官方推薦的 App 容器封裝智能體，消除 Deprecation 警告
+                app = App(
+                    name="HiHiDiscordBot",
+                    root_agent=self.hihi_agent
+                )
                 self.runner = Runner(
-                    app_name="HiHiDiscordBot",
-                    agent=self.hihi_agent,
+                    app=app,
                     session_service=self.session_service,
                     memory_service=self.memory_service  # 原生接口對接綁定
                 )
@@ -336,15 +321,19 @@ class AIChat(commands.Cog):
                     if self.search_agent.generate_content_config is None:
                         self.search_agent.generate_content_config = types.GenerateContentConfig()
                     
-                    # 建立單純的 File Search 原生 RAG Grounding Tool 物件
+                    # 建立 File Search 原生 RAG 與 Google 搜尋聯網 Tool 物件
                     fs_tool = types.Tool(
                         file_search=types.FileSearch(
                             file_search_store_names=[self.file_search_store_name]
                         )
                     )
+                    gs_tool = types.Tool(
+                        google_search=types.GoogleSearch() # 🌐 重啟官方 Google 搜尋聯網功能
+                    )
                     
                     self.search_agent.generate_content_config.tools = [
-                        fs_tool
+                        fs_tool,
+                        gs_tool
                     ]
                     
                     # 設置關鍵的 tool_config 參數，允許搜尋專家在後台調用這些工具
@@ -368,23 +357,6 @@ class AIChat(commands.Cog):
                 print(f"⚠️ [RAG] 官方 File Search 初始化或同步失敗: {e}")
 
     # --- Tool Definitions (Gemini Function Calling) ---
-
-    async def save_memory(self, user_name: str, content: str, importance: int = 5) -> str:
-        """當你覺得這段對話包含重要的長期資訊、個人喜好、或值得記住的觀察時使用。不要記瑣碎的事。
-        
-        Args:
-            user_name: 對話者的名字
-            content: 要記住的具體內容 (例如: 'Andy 喜歡吃拉麵')
-            importance: 重要程度 (1-10)
-        """
-        if not self.memory_service:
-            return "錯誤：記憶服務尚未初始化。"
-
-        self._last_executed_tools.append("save_memory")
-        print(f"🔧 [SDK Tool] save_memory: user_name={user_name}, content={content}, importance={importance}")
-        # 直接使用 Mem0 v3 寫入 facts
-        await self.memory_service._run_mem0_with_retry(self.memory_service.memory_layer.add, content, user_id=user_name)
-        return f"✅ 已儲存長期事實記憶: {content}"
 
     async def manage_fact(self, action: str, user_id: str, content: str, category: str = "Data") -> str:
         """管理關於使用者的長期事實 (CRUD)。當你發現新的事實，或發現舊事實有誤時使用。
@@ -410,33 +382,6 @@ class AIChat(commands.Cog):
             return f"🗑️ 已刪除事實: {user_id} - {full_fact}"
         else:
             return "❌ 未知操作。請使用 'add' 或 'delete'。"
-
-    async def search_memory(self, query: str) -> str:
-        """當你需要回顧過去的對話、事實、或搜尋特定主題時使用。
-        
-        Args:
-            query: 搜尋關鍵字或問題
-        """
-        if not self.memory_service:
-            return "錯誤：記憶服務尚未初始化。"
-
-        self._last_executed_tools.append("search_memory")
-        print(f"🔧 [SDK Tool] search_memory: query={query}")
-        results = await self.memory_service.search_facts_by_topic(query)
-        if not results:
-            return "沒有找到相關記憶。"
-        
-        res_blocks = []
-        for r in results:
-            # Mem0 搜尋結果格式為字典列表：[{'id': ..., 'memory': ..., 'user_id': ...}] 或者 {'fact': ...}
-            mem_text = r.get('memory') or r.get('fact', '')
-            user_lbl = r.get('user_id', 'User')
-            block = f"📍 【記憶事實】 ({user_lbl}): {mem_text}\n"
-            res_blocks.append(block)
-        
-        result_str = f"🔍 語意聯想搜尋結果:\n" + "\n".join(res_blocks)
-        self._last_search_results.append(result_str)
-        return result_str
 
     async def learn_knowledge(self, term: str, definition: str, category: str = "General") -> str:
         """當使用者教你新詞彙、梗、或伺服器設定時使用。這會存入你的[知識庫] (RAG)。
