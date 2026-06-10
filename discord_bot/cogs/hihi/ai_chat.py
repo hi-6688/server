@@ -22,7 +22,7 @@ from google.adk.agents import Agent
 from google.adk.runners import Runner
 from google.adk.tools import AgentTool, url_context # 導入多智能體委派工具與官方內建 url_context 讀網頁工具
 from google.adk.telemetry.setup import maybe_set_otel_providers # 導入官方遙測設定
-from google.adk.apps.app import App # 導入官方 ADK App 容器
+from google.adk.apps.app import App, EventsCompactionConfig # 導入官方 ADK App 容器與事件壓縮配置
 
 # 💡 導入高雅解耦的自製工具與服務模組
 from tools.scheduler_tools import execute_sleep_scheduling
@@ -198,7 +198,13 @@ class AIChat(commands.Cog):
                 # 使用官方推薦的 App 容器封裝智能體，消除 Deprecation 警告
                 app = App(
                     name="HiHiDiscordBot",
-                    root_agent=self.hihi_agent
+                    root_agent=self.hihi_agent,
+                    events_compaction_config=EventsCompactionConfig(
+                        compaction_interval=5,
+                        overlap_size=2,
+                        token_threshold=50000,
+                        event_retention_size=15
+                    )
                 )
                 self.runner = Runner(
                     app=app,
@@ -342,9 +348,12 @@ class AIChat(commands.Cog):
                     if self.hihi_agent.generate_content_config is None:
                         self.hihi_agent.generate_content_config = types.GenerateContentConfig()
                     
-                    # 為主大腦啟用純淨生成設定，避免免費 Key 觸發 429
-                    self.hihi_agent.generate_content_config.thinking_config = None
-                    print("🧠 [ADK Main Agent] 主大腦已成功套用純淨生成設定（停用思考鏈）！")
+                    # 重新啟用正常思考鏈設定，在 Compaction 配合下可安全運行
+                    self.hihi_agent.generate_content_config.thinking_config = types.ThinkingConfig(
+                        thinking_level="high",
+                        include_thoughts=True
+                    )
+                    print("🧠 [ADK Main Agent] 主大腦已成功啟用思考鏈！")
             except Exception as e:
                 print(f"⚠️ [RAG] 官方 File Search 初始化或同步失敗: {e}")
 
