@@ -2,6 +2,14 @@
 
 本檔案記錄了專案的所有重大更新與架構變動。這對於 Agent (AI 助手) 理解專案演進至關重要。
 
+## [2026-06-10] - 遷移至 APScheduler 4.0 異步排程與 PostgreSQL 持久化
+### 🚀 架構與系統升級 (Architecture)
+- **APScheduler 4.0.0a6 深度整合**：全面廢除原本在 `ai_chat.py` 中自行撰寫的異步心跳迴圈（`_heartbeat_loop`）、玩家感官吵醒事件（`sensory_interrupt_event`）與手動資料庫掃描器（`Crash-recovery Scanner`）等繁瑣的自造輪子。
+- **PostgreSQL 任務持久化**：使用 SQLAlchemy `create_async_engine` 驅動，結合 `SQLAlchemyDataStore` 實現排程任務 100% 持久化落盤。即使機器人發生崩潰、重啟或主機維護，也能在開機重啟時自動讀取待執行的任務。
+- **Misfire 甦醒寬限補償機制**：藉由 APScheduler 4.0 原生提供的異步任務重啟機制，自動補發並觸發在停機期間過期的主動甦醒心跳（misfire 補償），確保心跳機制的高可用性。
+- **大腦自主控制與心跳推遲**：重構 `schedule_next_sleep` 方法與 `on_message` 事件，利用 `DateTrigger` 及 `conflict_policy="replace"` 實現毫秒級無感排程推遲與鬧鐘替換更新，以極簡、高雅的原生架隔保衛 AI 運算配額。
+- **單元測試與排障驗證**：建立 `test_apscheduler_v4_pg.py` 單元測試，在真實的 PostgreSQL 資料庫上模擬崩潰、停機與過期重啟，100% 驗證 misfire 補償任務可被順利自動補發。
+
 ## [2026-06-10] - 解決 Discord 機器人啟動 NameError 錯誤 (Hotfix)
 ### 🐛 錯誤修復 (Fixes)
 - **修復 `ToolContext` 導入遺漏**：修正 `cogs/hihi/ai_chat.py` 中 `HiHiAgentTool` 的非同步執行方法 `run_async` 參數使用了 `ToolContext` 型別註解，但卻遺漏從 `google.adk.tools` 導入該型別導致的 `NameError`。從而順利解決重啟後 Discord 機器人模組加載失敗、完全無反應的故障。

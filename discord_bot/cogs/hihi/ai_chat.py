@@ -28,6 +28,13 @@ from google.adk.tools.agent_tool import _get_input_schema, _get_output_schema, _
 from google.adk.utils.context_utils import Aclosing
 from google.adk.sessions.in_memory_session_service import InMemorySessionService
 from google.adk.memory.in_memory_memory_service import InMemoryMemoryService
+
+# 💡 導入 APScheduler 4.0 官方異步排程核心與持久化組件
+from apscheduler import AsyncScheduler
+from apscheduler.datastores.sqlalchemy import SQLAlchemyDataStore
+from apscheduler.triggers.date import DateTrigger
+from sqlalchemy.ext.asyncio import create_async_engine
+
 from google.adk.tools._forwarding_artifact_service import ForwardingArtifactService
 from google.adk.utils._schema_utils import validate_schema
 from typing import Any
@@ -299,13 +306,13 @@ class AIChat(commands.Cog):
         self.response_task: Optional[asyncio.Task] = None
         self.message_buffer: list[discord.Message] = []
 
-        # 💓 心跳引擎 (Async Heartbeat Engine)
-        self.heartbeat_task: Optional[asyncio.Task] = None
-        self.sensory_interrupt_event = asyncio.Event()
-        self.schedule_update_event = asyncio.Event()
-        self.next_sleep_duration = 3600
+        # 💓 異步排程器 (APScheduler 4.0 Engine)
+        self.scheduler = None
+        self.scheduler_task = None
         self.sleep_intent = None
         self.session_service = get_session_service() # 初始化官方 ADK 會話服務
+
+
 
         # 載入靜態/設定檔
         self.daily_limit_requests = 500
@@ -420,9 +427,31 @@ class AIChat(commands.Cog):
         self.bot.loop.create_task(self._init_ai())
 
     def cog_unload(self):
-        if self.heartbeat_task:
-            self.heartbeat_task.cancel()
+        # 取消排程器背景任務，以觸發 context manager 結束釋放資源
+        if self.scheduler_task:
+            self.scheduler_task.cancel()
         pass
+
+    async def run_scheduler(self):
+        """
+        以背景協程方式執行 APScheduler v4.0 的 context manager，確保其生命週期與 Cog 對齊。
+        """
+        try:
+            db_url = os.getenv("DATABASE_URL")
+            cleaned_db_url = db_url.replace("postgres://", "postgresql+asyncpg://").replace("?sslmode=require", "")
+            print(f"🔌 [APScheduler] 正在初始化 SQLAlchemyDataStore 連接: {cleaned_db_url.split('@')[-1]}")
+            
+            engine = create_async_engine(cleaned_db_url)
+            data_store = SQLAlchemyDataStore(engine)
+            
+            async with AsyncScheduler(data_store) as scheduler:
+                self.scheduler = scheduler
+                print("💓 [APScheduler] 異步排程引擎啟動成功，並已在背景持續執行！")
+                await scheduler.run_until_stopped()
+        except asyncio.CancelledError:
+            print("🧹 [APScheduler] 背景排程任務被取消，已安全退出。")
+        except Exception as e:
+            print(f"❌ [APScheduler] 排程器運行出錯: {e}")
 
     async def _init_ai(self):
         # 0. 啟動官方 OpenTelemetry 遙測追蹤
@@ -432,43 +461,17 @@ class AIChat(commands.Cog):
         except Exception as e:
             print(f"⚠️ [Telemetry] 遙測系統啟動失敗: {e}")
 
-        # 1. 啟動防崩潰補償掃描器 (Crash-recovery Scanner)
-        try:
-            print("🔍 [Heartbeat - Scanner] 正在從 Postgres 讀取上一次未完成的鬧鐘...")
-            loaded = await self.session_service.get_session(
-                app_name="hihi_app",
-                user_id="hihi_system",
-                session_id="hihi_global_state"
-            )
-            if loaded and loaded.state:
-                saved_time_str = loaded.state.get("wakeup_time")
-                saved_intent = loaded.state.get("sleep_intent")
-                
-                if saved_time_str:
-                    wakeup_time = datetime.fromisoformat(saved_time_str)
-                    now_time = datetime.now(timezone.utc)
-                    
-                    if now_time >= wakeup_time:
-                        # A. 超時補償：在關機期間錯過了鬧鐘，立刻甦醒
-                        print(f"🚨 [Heartbeat - Scanner] 錯過鬧鐘！原定甦醒時間: {saved_time_str}，現已超時。立刻發起主動甦醒補償！")
-                        self.sleep_intent = saved_intent
-                        self.next_sleep_duration = 5 # 5秒後立刻甦醒
-                    else:
-                        # B. 重新排程：尚未超時，動態還原定時器
-                        remaining_seconds = int((wakeup_time - now_time).total_seconds())
-                        print(f"⏰ [Heartbeat - Scanner] 找到未到期鬧鐘，將於 {remaining_seconds} 秒後主動甦醒。備忘錄: '{saved_intent}'")
-                        self.sleep_intent = saved_intent
-                        self.next_sleep_duration = max(remaining_seconds, 5)
-            else:
-                print("⏰ [Heartbeat - Scanner] 沒有發現未到期鬧鐘，使用預設休眠。")
-        except Exception as ex:
-            print(f"⚠️ [Heartbeat - Scanner] 掃描持久化狀態時遇到錯誤: {ex}")
+        # 1. 啟動 APScheduler 4.0 異步排程系統 (帶有 PostgreSQL 持久化)
+        db_url = os.getenv("DATABASE_URL")
+        if db_url:
+            print("🔌 [APScheduler] 正在背景啟動排程任務...")
+            self.scheduler_task = self.bot.loop.create_task(self.run_scheduler())
+        else:
+            print("⚠️ [APScheduler] 未配置 DATABASE_URL，無法啟用持久化排程器。")
 
-        # 2. 啟動心跳引擎
-        self.heartbeat_task = self.bot.loop.create_task(self._heartbeat_loop())
-        print("💓 [Heartbeat] 非同步心跳引擎已啟動")
-        
         print(f"✅ [AIChat] 初始化完成 (REST API Mode: {self.model_name})")
+
+
 
         # 初始化 Google 官方 File Search Store (Managed RAG)
         if self.client:
@@ -1066,8 +1069,9 @@ class AIChat(commands.Cog):
         # 🔍 DEBUG
         print(f"📨 [Buffer] New message from {message.author.display_name}: {message.content[:20]}...")
         
-        # 物理喚醒休眠中的心跳引擎
-        self.sensory_interrupt_event.set()
+        # 透過排程器更新下一次心跳排程，將鬧鐘重設至 1 小時之後
+        await self.schedule_next_sleep(seconds=3600, intent=None)
+
         
         # 2. Cancel Pending Task (Interrupt)
         if self.response_task and not self.response_task.done():
@@ -1262,104 +1266,64 @@ class AIChat(commands.Cog):
         except Exception as e:
             await status_msg.edit(content=f"❌ **遺忘權執行失敗**：在清空長期資料庫時遇到未預期錯誤：`{e}`")
 
-    async def _heartbeat_loop(self):
+    async def schedule_next_sleep(self, seconds: int, intent: str = None):
         """
-        非同步心跳引擎 (Async Heartbeat Engine)
-        負責主動甦醒、管理疲勞值、與觸發背景任務 (如記憶整合)
+        使用 APScheduler v4.0 動態安排下一次心跳甦醒任務。
         """
-        await self.bot.wait_until_ready()
-        print("💓 [Heartbeat] 引擎開始運轉...")
+        if not self.scheduler:
+            print("⚠️ [APScheduler] 排程器未啟動，無法安排睡眠。")
+            return
+            
+        wakeup_time = datetime.now() + timedelta(seconds=seconds)
+        self.sleep_intent = intent
         
-        while not self.bot.is_closed():
-            try:
-                sleep_duration = self.next_sleep_duration
-                print(f"⏳ [Heartbeat] AI 決定休眠 {sleep_duration} 秒...") 
+        # 4.0 中以 DateTrigger 定義執行時間點
+        # conflict_policy="replace" 實現覆寫更新
+        await self.scheduler.add_schedule(
+            self.execute_scheduled_wake,
+            DateTrigger(run_time=wakeup_time),
+            id="hihi_heartbeat_schedule",
+            args=[intent],
+            conflict_policy="replace"
+        )
+        print(f"⏰ [APScheduler 4.0] 已安排下一次主動甦醒：{wakeup_time}。備忘錄: '{intent}'")
 
-                # 同時監聽感官中斷事件與排程更新事件
-                sensory_task = asyncio.create_task(self.sensory_interrupt_event.wait())
-                schedule_task = asyncio.create_task(self.schedule_update_event.wait())
-                
-                done, pending = await asyncio.wait(
-                    [sensory_task, schedule_task],
-                    timeout=sleep_duration,
-                    return_when=asyncio.FIRST_COMPLETED
+    async def execute_scheduled_wake(self, intent: str):
+        """
+        時間到後，APScheduler 自動非同步觸發此方法發起主動閒聊。
+        """
+        print(f"💓 [APScheduler 4.0] 鬧鐘時間到，主動甦醒中。備忘意圖: '{intent}'")
+        target_channel_id = 1467980863990927623
+        channel = self.bot.get_channel(target_channel_id)
+        
+        if not channel:
+            print(f"⚠️ [APScheduler] 找不到目標頻道 {target_channel_id}，放棄主動閒聊。")
+            return
+            
+        try:
+            current_time = datetime.now(timezone(timedelta(hours=8))).strftime('%m月%d日 %H:%M')
+            base_prompt = await self._get_system_prompt("", f"頻道：{channel.name}", "", "")
+            
+            awaken_hint = f"*(時間來到了 {current_time}。休眠結束，腦海中浮現了先前的備忘錄：「{intent}」)*" if intent else f"*(時間來到了 {current_time})*"
+            location_info = f"- 伺服器 (Server): {channel.guild.name if channel.guild else '私人訊息 (Private)'}\n- 頻道 (Channel): {channel.name}"
+            
+            async with channel.typing():
+                response_text, interaction_id = await self._call_adk_runner(
+                    user_id="heartbeat_awakening",
+                    session_id=f"discord_{channel.id}",
+                    new_message=awaken_hint,
+                    system_instruction=base_prompt,
+                    location_info=location_info
                 )
                 
-                # 取消未完成的監聽任務以防記憶體洩漏
-                for t in pending:
-                    t.cancel()
-                
-                # 判定為何種事件觸發
-                if not done:
-                    # 1. 睡到自然醒 (Timeout)
-                    print(f"💓 [Heartbeat] 休眠結束，主動甦醒。")
-                    
-                    # 測試模式：指定發送至頻道 1467980863990927623
-                    target_channel_id = 1467980863990927623
-                    channel = self.bot.get_channel(target_channel_id)
-                    
-                    if channel:
-                        print(f"💓 [Heartbeat] 準備在頻道 {channel.name} 發起主動閒聊...")
-                        try:
-                            # 1. 準備極簡的系統推播 (Minimal Context Update)
-                            current_time = datetime.now(timezone(timedelta(hours=8))).strftime('%m月%d日 %H:%M')
-                            base_prompt = await self._get_system_prompt("", f"頻道：{channel.name}", "", "")
-                            
-                            if self.sleep_intent:
-                                awaken_hint = f"*(時間來到了 {current_time}。休眠結束，腦海中浮現了先前的備忘錄：「{self.sleep_intent}」)*"
-                                self.sleep_intent = None
-                                self.next_sleep_duration = 3600
-                                
-                                # 甦醒執行完畢，物理清除已到期的 Postgres 鬧鐘會話
-                                try:
-                                    await self.session_service.delete_session(
-                                        app_name="hihi_app",
-                                        user_id="hihi_system",
-                                        session_id="hihi_global_state"
-                                    )
-                                    print("🧹 [Heartbeat - Postgres] 鬧鐘已順利執行完畢，物理清理 Postgres 會話記錄。")
-                                except Exception:
-                                    pass
-                            else:
-                                awaken_hint = f"*(時間來到了 {current_time})*"
-                            
-                            # 2. 呼叫大腦 (直接使用 base_prompt)
-                            location_info = f"- 伺服器 (Server): {channel.guild.name if channel.guild else '私人訊息 (Private)'}\n- 頻道 (Channel): {channel.name}"
-
-                            async with channel.typing():
-                                response_text, interaction_id = await self._call_adk_runner(
-                                    user_id="heartbeat_awakening",
-                                    session_id=f"discord_{channel.id}",
-                                    new_message=awaken_hint,
-                                    system_instruction=base_prompt,
-                                    location_info=location_info
-                                )
-                                
-                                if response_text and response_text.strip() and not response_text.startswith("😵"):
-                                    final_response = self.emoji_service.replace_emojis(response_text)
-                                    await channel.send(final_response)
-                                    
-                                else:
-                                    print(f"😴 [Heartbeat] AI 決定繼續裝死不講話。")
-                                    
-                        except Exception as e:
-                            print(f"❌ [Heartbeat] 主動閒聊失敗: {e}")
-                    else:
-                        print(f"⚠️ [Heartbeat] 找不到目標頻道 {target_channel_id}，放棄主動閒聊。")
+                if response_text and response_text.strip() and not response_text.startswith("😵"):
+                    final_response = self.emoji_service.replace_emojis(response_text)
+                    await channel.send(final_response)
                 else:
-                    # 偵測到事件觸發
-                    if sensory_task in done:
-                        # 2. 被玩家說話吵醒 (Sensory Interrupt)
-                        self.sensory_interrupt_event.clear()
-                        print("💓 [Heartbeat] 被外界聲音吵醒，重置生理時鐘。")
-                    
-                    if schedule_task in done:
-                        # 3. AI 重設排程鬧鐘 (Schedule Update - 安靜更新)
-                        self.schedule_update_event.clear()
-                        print(f"💓 [Heartbeat] AI 鬧鐘重設，更新休眠時長為 {self.next_sleep_duration} 秒。")
-            except Exception as e:
-                print(f"❌ [Heartbeat] 迴圈錯誤: {e}")
-                await asyncio.sleep(5)
+                    print("😴 [APScheduler] AI 決定繼續裝死不發言。")
+        except Exception as e:
+            print(f"❌ [APScheduler] 主動閒聊失敗: {e}")
+
 
 async def setup(bot):
     await bot.add_cog(AIChat(bot))

@@ -10,7 +10,7 @@ dotenv.load_dotenv(os.path.join(os.path.dirname(os.path.dirname(__file__)), '.en
 # Add current directory to path to import cogs
 sys.path.append(os.path.dirname(__file__))
 
-from cogs.ai_chat import AIChat
+from cogs.hihi.ai_chat import AIChat
 
 class MockUser:
     def __init__(self, name="User", id=123456789):

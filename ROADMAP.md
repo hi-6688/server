@@ -5,6 +5,12 @@
 ## 🔴 當前急迫事項 (Immediate Actions)
 *嗨嗨 v7.0 核心架構升級與系統修復*
 
+- [x] **P0: 遷移至 APScheduler 4.0 異步排程與 PostgreSQL 持久化**
+    - **排程引擎升級**：全面廢除原本在 `ai_chat.py` 中自行撰寫的異步心跳迴圈（`_heartbeat_loop`）與 `Crash-recovery Scanner` 手動資料庫比對邏輯，大一統至 APScheduler 4.0 (`4.0.0a6`) 異步框架。
+    - **任務 100% 持久化落盤**：結合 SQLAlchemy `create_async_engine` 與 `SQLAlchemyDataStore` 將心跳定時器持久化於 PostgreSQL。機器人或主機重啟時能自動還原鬧鐘，並支援 `misfire_grace_time` 甦醒補發，確保離線心跳高可用。
+    - **極簡鬧鐘推遲與修改**：使用 `DateTrigger` 配合 `conflict_policy="replace"` 機制，重構心跳推遲與大腦鬧鐘工具，實現毫秒級無感任務修改，並完美打通主動甦醒閒聊管道。
+    - **測試與重啟部署**：通過 `test_apscheduler_v4_pg.py` 在線數據庫單元測試，並在 systemd 重新部署重啟，成功解決 attributes/start 啟動地雷。
+
 - [x] **P1: Discord 遙測系統重構：實時動態播報與事後綜合報告卡**
     - **實時動態播報 (Live Timeline)**：重構大腦與子代理執行流程，利用 `emit_telemetry_live` 實時發送單行緊緻 Embed 狀態更新，並以全形空格製造視覺層級縮排。
     - **事後綜合報告卡 (Post-Mortem Embed)**：重構 `emit_logic_telemetry`，將空間座標、觸發訊息、配額 states、短期對話歷史、長期 Facts、執行軌跡 (Trace) 與翻譯後的大腦思緒 (OS) 完美融合成單張精美大卡片。
