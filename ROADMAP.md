@@ -1,9 +1,16 @@
 # 📅 專案開發計畫書 (Roadmap)
 
-最後更新時間: 2026-05-26
+最後更新時間: 2026-06-10
 
 ## 🔴 當前急迫事項 (Immediate Actions)
 *嗨嗨 v7.0 核心架構升級與系統修復*
+
+- [x] **P1: Discord 遙測系統重構：實時動態播報與事後綜合報告卡**
+    - **實時動態播報 (Live Timeline)**：重構大腦與子代理執行流程，利用 `emit_telemetry_live` 實時發送單行緊緻 Embed 狀態更新，並以全形空格製造視覺層級縮排。
+    - **事後綜合報告卡 (Post-Mortem Embed)**：重構 `emit_logic_telemetry`，將空間座標、觸發訊息、配額 states、短期對話歷史、長期 Facts、執行軌跡 (Trace) 與翻譯後的大腦思緒 (OS) 完美融合成單張精美大卡片。
+    - **自訂 `HiHiAgentTool`**：繼承官方 `AgentTool` 覆寫其非同步 `run_async` 方法，在不修改 ADK 原生套件的前題下無縫攔截子代理的 RAG (FileSearch) 執行軌跡、結果與耗時。
+    - **記憶與 DNA 全觀測**：在 Context 中整合前 5 句短期對話與載入的長期 Facts，並新增 `🧬 核心 DNA` 的狀態與字元長度指標，全景掌握記憶加載狀況。
+    - **啟動異常修復 (Hotfix)**：解決因 `ToolContext` 導入缺失引發 `NameError` 造成 Cog 無法加載而使 Bot 無反應之重大地雷，實現完美重啟載入。
 
 - [x] **P0: 解決 gemini-3.1-flash-lite 429 資源限制與 Bot 重複執行問題 (重啟優化與工具解耦完成)**
     - **金鑰替換與配額重置**：將 `.env` 中的 `GEMINI_API_KEY` 替換為第一把免費 API 金鑰，排除金鑰 2 的配額耗盡問題。
@@ -51,6 +58,7 @@
 *優化現有服務運作與架構*
  
 - [x] **開發環境優化 (已完成)**
+    - [x] 重新安裝並更新 `@google/gemini-cli` 至最新版 (`0.46.0`)，確保指令與系統需求相容。
     - [x] 更新 Gemini CLI 工具至最新版，並將其安裝於 `~/.local` 目錄。
     - [x] 更新 VS Code 工作區與設定檔，使終端機與 Gemini CLI 預設開啟於 `servers` 目錄。
     - [x] 將全域開發工具從舊版 Gemini CLI 移轉至最新的 Antigravity CLI (`agy`)，並同步更新 VS Code 工作區終端機 Profile 且撰寫中文設定說明文檔。

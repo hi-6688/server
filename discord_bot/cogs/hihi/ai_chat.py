@@ -20,9 +20,18 @@ from google import genai
 from google.genai import types
 from google.adk.agents import Agent
 from google.adk.runners import Runner
-from google.adk.tools import AgentTool, url_context # 導入多智能體委派工具與官方內建 url_context 讀網頁工具
+from google.adk.tools import AgentTool, url_context, ToolContext # 導入多智能體委派工具、官方內建 url_context 讀網頁工具與 ToolContext
 from google.adk.telemetry.setup import maybe_set_otel_providers # 導入官方遙測設定
 from google.adk.apps.app import App, EventsCompactionConfig # 導入官方 ADK App 容器與事件壓縮配置
+# 💡 額外導入 ADK 內部模組以供自訂 HiHiAgentTool 繼承覆寫使用
+from google.adk.tools.agent_tool import _get_input_schema, _get_output_schema, _part_to_text
+from google.adk.utils.context_utils import Aclosing
+from google.adk.sessions.in_memory_session_service import InMemorySessionService
+from google.adk.memory.in_memory_memory_service import InMemoryMemoryService
+from google.adk.tools._forwarding_artifact_service import ForwardingArtifactService
+from google.adk.utils._schema_utils import validate_schema
+from typing import Any
+
 
 # 💡 導入高雅解耦的自製工具與服務模組
 from tools.scheduler_tools import execute_sleep_scheduling
@@ -57,6 +66,190 @@ class PersonaResponse(BaseModel):
     situation_analysis: str = Field(description="簡短分析目前群組的氣氛與上下文脈絡。")
     internal_thought: str = Field(description="妳在心裡的 OS。決定用什麼態度回覆。")
     final_speech: Optional[str] = Field(default=None, description="最後要在 Discord 說出口的話。如果覺得不想回，請填 null。")
+
+class HiHiAgentTool(AgentTool):
+    """
+    自訂的 HiHi 智能體委派工具 (HiHiAgentTool)，繼承自官方的 AgentTool。
+    用於在子代理執行時，精確發射實時遙測（Live Telemetry）並記錄執行耗時與 Trace。
+    """
+    def __init__(
+        self,
+        agent,
+        telemetry_mirror,
+        parent_cog, # 指向 AIChat 實體物件
+        skip_summarization: bool = False,
+        *,
+        include_plugins: bool = True,
+        propagate_grounding_metadata: bool = False
+    ):
+        super().__init__(
+            agent,
+            skip_summarization,
+            include_plugins=include_plugins,
+            propagate_grounding_metadata=propagate_grounding_metadata
+        )
+        self.telemetry_mirror = telemetry_mirror # 遙測鏡像物件
+        self.parent_cog = parent_cog # 父層 Cog 實體
+        
+    async def run_async(
+        self,
+        *,
+        args: dict[str, Any],
+        tool_context: ToolContext
+    ) -> Any:
+        # 動態獲取 session_id 並對齊 Trace 列表 (session_id: 當前會話識別碼, trace_list: 當前會話追蹤列表)
+        session_id = "default"
+        if tool_context._invocation_context and tool_context._invocation_context.session_id:
+            session_id = tool_context._invocation_context.session_id
+            
+        if session_id not in self.parent_cog._session_traces:
+            self.parent_cog._session_traces[session_id] = []
+        trace_list = self.parent_cog._session_traces[session_id]
+
+        # 取得請求參數文字 (request_text: 取得子代理的輸入文字)
+        request_text = args.get('request', '(無指令)')
+        # 縮減長度避免 Embed 卡片超長 (short_request: 縮短的請求文字)
+        short_request = request_text[:120] + "..." if len(request_text) > 120 else request_text
+        
+        # 實時發射子代理啟動的遙測播報 (emit_telemetry_live: 發射實時遙測)
+        await self.telemetry_mirror.emit_telemetry_live(
+            f"　　🔎 **[子代理 {self.name}] 啟動**！接收指令：\n　　> {short_request}"
+        )
+        
+        # 記錄啟動 Trace 與時間戳記 (start_time: 子代理執行開始時間)
+        start_time = time.time()
+        trace_list.append(f"{self.name} 啟動：接收指令 \"{short_request}\"")
+
+        # 以下複寫官方 AgentTool.run_async 的執行流程
+        if self.skip_summarization:
+            tool_context.actions.skip_summarization = True
+
+        input_schema = _get_input_schema(self.agent)
+        if input_schema:
+            input_value = input_schema.model_validate(args)
+            content = types.Content(
+                role='user',
+                parts=[
+                    types.Part.from_text(
+                        text=input_value.model_dump_json(exclude_none=True)
+                    )
+                ],
+            )
+        else:
+            content = types.Content(
+                role='user',
+                parts=[types.Part.from_text(text=args['request'])],
+            )
+            
+        invocation_context = tool_context._invocation_context
+        parent_app_name = (
+            invocation_context.app_name if invocation_context else None
+        )
+        child_app_name = parent_app_name or self.agent.name
+        plugins = (
+            tool_context._invocation_context.plugin_manager.plugins
+            if self.include_plugins
+            else None
+        )
+        
+        runner = Runner(
+            app_name=child_app_name,
+            agent=self.agent,
+            artifact_service=ForwardingArtifactService(tool_context),
+            session_service=InMemorySessionService(),
+            memory_service=InMemoryMemoryService(),
+            credential_service=tool_context._invocation_context.credential_service,
+            plugins=plugins,
+        )
+        
+        if self.include_plugins:
+            runner.plugin_manager.set_skip_closing_plugins(True)
+
+        state_dict = {
+            k: v
+            for k, v in tool_context.state.to_dict().items()
+            if not k.startswith('_adk')
+        }
+        
+        session = await runner.session_service.create_session(
+            app_name=child_app_name,
+            user_id=tool_context._invocation_context.user_id,
+            state=state_dict,
+        )
+
+        last_content = None
+        last_grounding_metadata = None
+        has_sent_rag_receipt = False # 是否已發射 RAG 接收遙測
+
+        async with Aclosing(
+            runner.run_async(
+                user_id=session.user_id, session_id=session.id, new_message=content
+            )
+        ) as agen:
+            async for event in agen:
+                # 轉送 state_delta
+                if event.actions.state_delta:
+                    tool_context.state.update(event.actions.state_delta)
+                
+                # 實時監聽子代理內部的工具呼叫 (func_calls: 偵測子代理工具呼叫)
+                func_calls = event.get_function_calls()
+                if func_calls:
+                    for fc in func_calls:
+                        fc_args = fc.args if hasattr(fc, 'args') else {}
+                        # 實時播報：子代理調用工具 (fc_desc: 格式化後的工具呼叫資訊)
+                        fc_desc = f"　　🔧 **[子代理 行動]** 呼叫了工具：`{fc.name}`\n　　  * 參數: `{fc_args}`"
+                        await self.telemetry_mirror.emit_telemetry_live(fc_desc)
+                        # 寫入 Trace 軌跡
+                        trace_list.append(f"{self.name} -> 呼叫 -> {fc.name}")
+                
+                # 捕捉子代理取得的 RAG (File Search) 回應內容
+                if event.content:
+                    last_content = event.content
+                    last_grounding_metadata = event.grounding_metadata
+                    
+                    # 當子代裡收到 RAG 檢索資料（即開始有內容輸出且尚未播報接收時）
+                    if not has_sent_rag_receipt:
+                        parts_text = []
+                        if event.content.parts:
+                            for p in event.content.parts:
+                                if p.text and not getattr(p, 'thought', False):
+                                    parts_text.append(p.text)
+                        
+                        text_summary = " ".join(parts_text).strip()
+                        if text_summary:
+                            # 節錄前 100 字元 (snippet: 擷取的精華文本)
+                            snippet = text_summary[:100] + "..." if len(text_summary) > 100 else text_summary
+                            # 實時播報：子代理接收檢索結果
+                            await self.telemetry_mirror.emit_telemetry_live(
+                                f"　　📥 **[子代理 接收]** 獲得檢索結果，正在彙整客觀報告...\n　　  * 節錄: *\"{snippet}\"*"
+                            )
+                            has_sent_rag_receipt = True
+                            trace_list.append(f"{self.name} -> 獲得檢索結果：\"{snippet}\"")
+
+        await runner.close()
+
+        if last_content is None or last_content.parts is None:
+            tool_result = ''
+        else:
+            parts_text_gen = (_part_to_text(p) for p in last_content.parts if not p.thought)
+            merged_text = '\n'.join(t for t in parts_text_gen if t)
+            output_schema = _get_output_schema(self.agent)
+            if output_schema:
+                tool_result = validate_schema(output_schema, merged_text)
+            else:
+                tool_result = merged_text
+
+        if self.propagate_grounding_metadata and last_grounding_metadata:
+            tool_context.state['temp:_adk_grounding_metadata'] = (
+                last_grounding_metadata
+            )
+
+        # 計算耗時並紀錄 Trace (duration: 子代理總花費秒數)
+        duration = time.time() - start_time
+        trace_list.append(f"{self.name} 任務完成 (等待 {duration:.1f}秒)")
+        
+        return tool_result
+
 
 class AIChat(commands.Cog):
     def __init__(self, bot):
@@ -124,6 +317,7 @@ class AIChat(commands.Cog):
         self.quota_manager = QuotaManager(usage_file=self.usage_file, daily_limit=self.daily_limit_requests)
         self.emoji_service = EmojiService(emoji_file=EMOJI_FILE, meanings_file=self.emoji_meanings_file)
         self.telemetry_mirror = TelemetryMirror(bot=self.bot, inner_world_channel_id=self.inner_world_channel_id, client=self.client)
+        self._session_traces = {} # 存放各會話執行軌跡的字典 (self._session_traces: 執行軌跡快取)
         
         # 工具初始化
 
@@ -186,7 +380,7 @@ class AIChat(commands.Cog):
                         manage_fact_tool, 
                         learn_knowledge_tool, 
                         schedule_next_sleep_tool, 
-                        AgentTool(agent=self.search_agent)  # 🧠 注入搜尋專家委派工具
+                        HiHiAgentTool(agent=self.search_agent, telemetry_mirror=self.telemetry_mirror, parent_cog=self)  # 🧠 注入自訂搜尋專家委派工具 (HiHiAgentTool: 帶有遙測的代理工具)
                     ],
                     generate_content_config=generation_config
                 )
@@ -322,19 +516,18 @@ class AIChat(commands.Cog):
                     if self.search_agent.generate_content_config is None:
                         self.search_agent.generate_content_config = types.GenerateContentConfig()
                     
-                    # 建立 File Search 原生 RAG 與 Google 搜尋聯網 Tool 物件
+                    # 建立 File Search 原生 RAG 物件 (Google Search 已關閉)
                     fs_tool = types.Tool(
                         file_search=types.FileSearch(
                             file_search_store_names=[self.file_search_store_name]
                         )
                     )
-                    gs_tool = types.Tool(
-                        google_search=types.GoogleSearch() # 🌐 重啟官方 Google 搜尋聯網功能
-                    )
+                    # gs_tool = types.Tool(
+                    #     google_search=types.GoogleSearch() # 🌐 因免費額度限制暫時關閉官方 Google 搜尋聯網功能
+                    # )
                     
                     self.search_agent.generate_content_config.tools = [
-                        fs_tool,
-                        gs_tool
+                        fs_tool
                     ]
                     
                     # 設置關鍵的 tool_config 參數，允許搜尋專家在後台調用這些工具
@@ -586,7 +779,18 @@ class AIChat(commands.Cog):
         else:
             telemetry_msg = str(new_message)
 
+        # 初始化與記錄本次會話執行軌跡 (self._session_traces: 各會話執行軌跡快取)
+        self._session_traces[session_id] = []
+        trace_list = self._session_traces[session_id]
+
+        # 實時發射使用者傳送訊息的遙測播報 (emit_telemetry_live: 發送單行遙測)
+        short_input = telemetry_msg[:120] + "..." if len(telemetry_msg) > 120 else telemetry_msg
+        await self.telemetry_mirror.emit_telemetry_live(f"💬 **[User]** 傳送了訊息：\"{short_input}\"")
+        await self.telemetry_mirror.emit_telemetry_live(f"🧠 **[主大腦 思考中]** 評估任務...")
+        trace_list.append("主大腦評估任務中...")
+
         # 實時動態檢索長期 facts 並融入 System Instruction (ADK MemoryService 原生自動預載)
+        facts_text = "N/A"
         if self.memory_service:
             try:
                 facts_response = await self.memory_service.search_memory(
@@ -598,6 +802,8 @@ class AIChat(commands.Cog):
                     facts_text = facts_response.memories[0].content.parts[0].text
                     system_instruction = f"{facts_text}\n\n{system_instruction}"
                     print(f"🧠 [ADK Memory] 成功為對話預載並自動注入長期 Facts 偏好庫！")
+                    # 寫入 Trace 軌跡
+                    trace_list.append("大腦載入長期記憶 Facts")
             except Exception as e:
                 print(f"⚠️ [ADK Memory] 預載 facts 時發生未預期錯誤: {e}")
 
@@ -669,9 +875,22 @@ class AIChat(commands.Cog):
                 func_calls = event.get_function_calls()
                 if func_calls:
                     for fc in func_calls:
-                        # 金色 Embed 背景播報
                         fc_args = fc.args if hasattr(fc, 'args') else {}
-                        asyncio.create_task(self.telemetry_mirror.emit_telemetry_live(f"🔧 **工具呼叫**: `{fc.name}`\n  * 參數: `{fc_args}`"))
+                        # 判斷是否為子代理任務委派
+                        if fc.name == "search_specialist":
+                            # 實時播報：任務委派
+                            await self.telemetry_mirror.emit_telemetry_live(
+                                "🤝 **[任務委派]** 主大腦呼叫了工具：`AgentTool(search_specialist)`。將控制權轉交子代理。"
+                            )
+                            trace_list.append("HiHiv3Agent -> 呼叫 -> search_specialist")
+                            self._last_executed_tools.append("search_specialist")
+                        else:
+                            # 實時播報：主大腦調用工具
+                            await self.telemetry_mirror.emit_telemetry_live(
+                                f"🔧 **[主大腦 行動]** 呼叫了工具：`{fc.name}`\n  * 參數: `{fc_args}`"
+                            )
+                            trace_list.append(f"HiHiv3Agent -> 呼叫 -> {fc.name}")
+                            self._last_executed_tools.append(fc.name)
 
                 # 3. 實時捕捉官方 Token 統計與對話互動 ID
                 if getattr(event, 'usage_metadata', None):
@@ -700,28 +919,60 @@ class AIChat(commands.Cog):
                 # 保險起見：若循環極短未觸發背景任務，此處進行同步防禦性翻譯
                 translated_thought = await self.telemetry_mirror._translate_thought_with_gemma(accumulated_thought)
 
-            # 發射情感與回覆記錄卡片 (此時的 translated_thought 已是 100% 高質量繁體中文，且併入官方 Token 與 ID 展示)
-            from pydantic import BaseModel
-            class FakePersonaResponse(BaseModel):
-                situation_analysis: str = "環境與情緒自然流轉"
-                internal_thought: str = translated_thought
-                final_speech: str = response_text
-            asyncio.create_task(self.telemetry_mirror.emit_chat_telemetry(
-                FakePersonaResponse(internal_thought=translated_thought, final_speech=response_text), 
-                telemetry_msg, 
-                location_info, 
-                usage_metadata=latest_usage_metadata, 
-                interaction_id=interaction_id
-            ))
+            # 實時播報：若曾呼叫搜尋子代理，主大腦收到報告準備潤飾
+            if "search_specialist" in self._last_executed_tools:
+                await self.telemetry_mirror.emit_telemetry_live(
+                    "🧠 **[主大腦 思考中]** 收到報告，準備進行最終擬人化潤飾..."
+                )
+                trace_list.append("主大腦獲得報告並彙整潤飾")
+            else:
+                trace_list.append("主大腦完成思考與回覆生成")
 
-            # 決策完成後發射邏輯分析字卡 (與舊 telemetry 緊密相容)
+            # 對話結束後，重新獲取 session 以還原短期歷史對話 (short_history: 最近5句對話內容)
+            short_history = []
+            try:
+                session_obj = await self.session_service.get_session(
+                    app_name="HiHiDiscordBot",
+                    user_id=user_id,
+                    session_id=session_id
+                )
+                if session_obj and session_obj.events:
+                    for ev in session_obj.events:
+                        if ev.content and ev.content.parts:
+                            text_parts = [p.text for p in ev.content.parts if p.text and not getattr(p, 'thought', False)]
+                            if text_parts:
+                                merged_text = " ".join(text_parts).strip()
+                                if merged_text:
+                                    role_name = "User" if ev.author == "user" else ev.author
+                                    short_history.append(f"{role_name}: {merged_text}")
+                    # 只擷取最後 5 句
+                    short_history = short_history[-5:]
+            except Exception as ex_hist:
+                print(f"⚠️ [Short History] 還原短期記憶錯誤: {ex_hist}")
+
+            # 決策完成後發射事後綜合報告卡 (已整合 emit_chat_telemetry 與舊 emit_logic_telemetry)
             from pydantic import BaseModel
             class FakeMemoryState(BaseModel):
                 needs_reply: bool = True
                 current_goal: str = "與親愛的使用者進行貼心交流"
                 suggested_sleep_seconds: int = self.next_sleep_duration
                 sleep_intent: Optional[str] = self.sleep_intent
-            asyncio.create_task(self.telemetry_mirror.emit_logic_telemetry(FakeMemoryState(), telemetry_msg, location_info, self.quota_manager.daily_usage, self.daily_limit_requests, self._last_executed_tools))
+                
+            # 異步發射整合後的 Post-Mortem 大 Embed 卡片
+            asyncio.create_task(self.telemetry_mirror.emit_logic_telemetry(
+                memory_state=FakeMemoryState(),
+                trigger_text=telemetry_msg,
+                location_info=location_info,
+                daily_usage=self.quota_manager.daily_usage,
+                daily_limit=self.daily_limit_requests,
+                trace_events=trace_list,
+                facts_text=facts_text,
+                short_history=short_history,
+                translated_thought=translated_thought,
+                final_speech=response_text,
+                usage_metadata=latest_usage_metadata,
+                interaction_id=interaction_id
+            ))
 
         except Exception as e:
             print(f"❌ [ADK Runner] 執行出錯: {e}")

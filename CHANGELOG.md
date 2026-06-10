@@ -2,6 +2,21 @@
 
 本檔案記錄了專案的所有重大更新與架構變動。這對於 Agent (AI 助手) 理解專案演進至關重要。
 
+## [2026-06-10] - 解決 Discord 機器人啟動 NameError 錯誤 (Hotfix)
+### 🐛 錯誤修復 (Fixes)
+- **修復 `ToolContext` 導入遺漏**：修正 `cogs/hihi/ai_chat.py` 中 `HiHiAgentTool` 的非同步執行方法 `run_async` 參數使用了 `ToolContext` 型別註解，但卻遺漏從 `google.adk.tools` 導入該型別導致的 `NameError`。從而順利解決重啟後 Discord 機器人模組加載失敗、完全無反應的故障。
+
+## [2026-06-10] - 遙測系統重構：實時動態播報與事後綜合報告卡
+### 🚀 效能與系統最佳化 (Performance & System)
+- **實時動態播報 (Live Timeline)**：重構 `_call_adk_runner`，引入時序事件監聽，在大腦推理及子代理執行時實時發射單行緊湊遙測，避免字數超限被 Discord 截斷。
+- **事後綜合報告卡 (Post-Mortem Embed)**：重寫 `emit_logic_telemetry`，將空間座標、觸發訊息、配額狀態、短期對話歷史、長期 Facts、執行軌跡 (Trace) 與翻譯後的大腦思緒 (OS) 完美融合成單張精美大卡片。
+- **自訂 `HiHiAgentTool`**：繼承官方 `AgentTool`，覆寫 `run_async` 攔截子代理的非同步事件與計時，達成對 RAG (FileSearch) 行動與結果的實時觀測，並支援動態 Session 隔離的 Trace 軌跡記錄。
+- **記憶與 DNA 全觀測**：在 Context 中整合前 5 句短期對話與載入的長期 Facts，並新增 `🧬 核心 DNA` 的狀態與字元長度指標，全景掌握記憶加載狀況。
+
+## [2026-06-10] - 重新安裝並升級 Gemini CLI
+### 🚀 效能與系統最佳化 (Performance & System)
+- **升級 Gemini CLI 工具**：以全域管理者權限安裝 `@google/gemini-cli@0.46.0`，以支援最新功能與環境需求。
+
 ## [2026-06-05] - 解決 gemini-3.1-flash-lite 429 資源限制與 Bot 進程重複執行問題
 ### 🐛 錯誤修復 (Fixes) & 🚀 架構與系統升級 (Architecture)
 - **更換 API 金鑰為免費金鑰 1**：將 `.env` 中的 `GEMINI_API_KEY` 替換為備份的第一把免費 API 金鑰，排除第二把金鑰配額被耗盡導致的 429 錯誤。
