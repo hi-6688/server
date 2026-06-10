@@ -79,7 +79,7 @@ async def serve_frontend(full_path: str):
         index_path = os.path.join(DIST_DIR, 'index.html')
         if os.path.exists(index_path):
             return FileResponse(index_path)
-        return JSONResponse(status_code=404, detail="Frontend not built")
+        return JSONResponse(status_code=404, content={"detail": "Frontend not built"})
 
     # 2. 嘗試尋找靜態檔案 (dist)
     dist_path = os.path.join(DIST_DIR, full_path)
@@ -97,4 +97,4 @@ async def serve_frontend(full_path: str):
         if os.path.exists(index_path):
             return FileResponse(index_path)
 
-    return JSONResponse(status_code=404, detail="Not Found")
+    return JSONResponse(status_code=404, content={"detail": "Not Found"})
