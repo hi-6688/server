@@ -167,13 +167,8 @@ class AIChat(commands.Cog):
                     """
                     return await execute_sleep_scheduling(self, seconds, intent)
 
-                # 建立生成設定，啟用大腦深度思考 (generation_config: 啟用思考之生成組態)
-                generation_config = types.GenerateContentConfig(
-                    thinking_config=types.ThinkingConfig(
-                        thinking_level="HIGH",
-                        include_thoughts=True
-                    )
-                )
+                # 建立生成設定，避免免費 Key 下因 Thinking 產生過大 Token 消耗
+                generation_config = types.GenerateContentConfig()
 
                 self.search_agent = Agent(
                     model=self.model_name,
@@ -347,12 +342,9 @@ class AIChat(commands.Cog):
                     if self.hihi_agent.generate_content_config is None:
                         self.hihi_agent.generate_content_config = types.GenerateContentConfig()
                     
-                    # 💡 啟用 Gemini 3.1 官方最新 GA 的 HIGH 推理思維，讓大腦具備更強大的邏輯推理力！
-                    self.hihi_agent.generate_content_config.thinking_config = types.ThinkingConfig(
-                        thinking_level="high",    # 設置思維深度為 "high"
-                        include_thoughts=True     # 允許輸出思維鏈以供情感遙測捕捉
-                    )
-                    print("🧠 [ADK Main Agent] 主大腦已成功啟用 HIGH 推理思維設定！")
+                    # 為主大腦啟用純淨生成設定，避免免費 Key 觸發 429
+                    self.hihi_agent.generate_content_config.thinking_config = None
+                    print("🧠 [ADK Main Agent] 主大腦已成功套用純淨生成設定（停用思考鏈）！")
             except Exception as e:
                 print(f"⚠️ [RAG] 官方 File Search 初始化或同步失敗: {e}")
 
