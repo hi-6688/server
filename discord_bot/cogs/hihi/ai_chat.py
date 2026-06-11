@@ -60,7 +60,7 @@ CORE_MEMORY_FILE = os.path.join(DATA_DIR, 'core_memory.md')
 # --- 確保資料目錄存在 ---
 os.makedirs(DATA_DIR, exist_ok=True)
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import List, Dict, Any, Optional
 
 class MemoryState(BaseModel):
@@ -73,6 +73,36 @@ class PersonaResponse(BaseModel):
     situation_analysis: str = Field(description="簡短分析目前群組的氣氛與上下文脈絡。")
     internal_thought: str = Field(description="妳在心裡的 OS。決定用什麼態度回覆。")
     final_speech: Optional[str] = Field(default=None, description="最後要在 Discord 說出口的話。如果覺得不想回，請填 null。")
+
+class SleepScheduleParams(BaseModel):
+    """
+    大腦定時休眠與甦醒排程的參數 Schema。
+    """
+    seconds: int = Field(
+        description="我決定接下來要主動休眠多久（秒）？這是妳用來保護「生命配額」的唯一手段。若配額充足且群組熱鬧，建議設定 3600；若配額快耗盡，請設定 14400 或更長。"
+    )
+    intent: Optional[str] = Field(
+        default=None,
+        description="醒來後要主動做的事情備忘錄。如果是一般長眠，填 null。"
+    )
+
+    @field_validator("seconds")
+    @classmethod
+    def enforce_boundaries(cls, v: int) -> int:
+        """限制最小與最大休眠時間 (enforce bounds for safety)"""
+        if v < 10:
+            return 10
+        if v > 86400:  # 限制最大為 24 小時
+            return 86400
+        return v
+
+    @field_validator("intent")
+    @classmethod
+    def normalize_intent(cls, v: Optional[str]) -> Optional[str]:
+        """自動清理 'null' 字串 (clean null strings from LLM)"""
+        if v and v.strip().lower() in ("null", "none", ""):
+            return None
+        return v
 
 class HiHiAgentTool(AgentTool):
     """
@@ -358,7 +388,7 @@ class AIChat(commands.Cog):
                     """
                     return await self.learn_knowledge(term, definition, category)
 
-                async def schedule_next_sleep_tool(seconds: int, intent: str) -> str:
+                async def schedule_next_sleep_tool(seconds: Any, intent: Any) -> str:
                     """當妳想決定自己接下來要主動休眠多久（秒）並設定醒來後的鬧鐘備忘錄時呼叫此工具。
                     這是妳用來保護「生命配額」的唯一手段。若配額充足且群組熱鬧，建議設定 3600；若配額快耗盡，請設定 14400 或更長。
                     
@@ -366,7 +396,13 @@ class AIChat(commands.Cog):
                         seconds: 睡眠秒數
                         intent: 醒來後要主動做的事情備忘錄 (例如：『等待60秒後回答問題』)
                     """
-                    return await execute_sleep_scheduling(self, seconds, intent)
+                    try:
+                        # 呼叫 Pydantic 模型進行強型別防禦驗證與對齊 (enforce strong type validation)
+                        validated = SleepScheduleParams(seconds=seconds, intent=intent)
+                        return await execute_sleep_scheduling(self, validated.seconds, validated.intent)
+                    except Exception as e:
+                        print(f"⚠️ [schedule_next_sleep_tool] 參數校正失敗: {e}，將採用安全預設值 (3600秒)")
+                        return await execute_sleep_scheduling(self, 3600, None)
 
                 # 建立生成設定，避免免費 Key 下因 Thinking 產生過大 Token 消耗
                 generation_config = types.GenerateContentConfig()
