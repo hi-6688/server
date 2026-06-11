@@ -2,10 +2,17 @@
 import os
 import asyncio
 from datetime import datetime, timezone, timedelta
-from apscheduler import AsyncScheduler
+from apscheduler import AsyncScheduler, ConflictPolicy
 from apscheduler.datastores.sqlalchemy import SQLAlchemyDataStore
 from apscheduler.triggers.date import DateTrigger
 from sqlalchemy.ext.asyncio import create_async_engine
+
+_global_scheduler_instance = None
+
+async def global_execute_scheduled_wake(intent: str):
+    """全域模組層級函數，避免 APScheduler 序列化綁定方法時連帶 pickle 整個 Bot 導致出錯"""
+    if _global_scheduler_instance:
+        await _global_scheduler_instance.execute_scheduled_wake(intent)
 
 class HeartbeatScheduler:
     """
@@ -17,6 +24,8 @@ class HeartbeatScheduler:
         self.cog_instance = cog_instance
         self.scheduler = None
         self.scheduler_task = None
+        global _global_scheduler_instance
+        _global_scheduler_instance = self
         
     async def start(self):
         """
@@ -28,7 +37,7 @@ class HeartbeatScheduler:
             self.scheduler_task = self.bot.loop.create_task(self.run_scheduler())
         else:
             print("⚠️ [Scheduler] 未配置 DATABASE_URL，無法啟用持久化排程器。")
-
+ 
     def stop(self):
         """
         停止排程器任務。
@@ -36,7 +45,7 @@ class HeartbeatScheduler:
         if self.scheduler_task:
             self.scheduler_task.cancel()
             print("🧹 [Scheduler] 背景排程任務已發出取消信號。")
-
+ 
     async def run_scheduler(self):
         """
         以背景協程方式執行 APScheduler v4.0 的 context manager，確保其生命週期與 Cog 對齊，
@@ -64,7 +73,7 @@ class HeartbeatScheduler:
                 print("🔌 [Scheduler] 正在釋放 SQLAlchemy 連線池...")
                 await engine.dispose()
                 print("🔌 [Scheduler] SQLAlchemy 連線池已成功釋放！")
-
+ 
     async def schedule_next_sleep(self, seconds: int, intent: str = None):
         """
         使用 APScheduler v4.0 動態安排下一次心跳甦醒任務。
@@ -73,18 +82,17 @@ class HeartbeatScheduler:
             print("⚠️ [Scheduler] 排程器未啟動，無法安排睡眠。")
             return
             
-        wakeup_time = datetime.now() + timedelta(seconds=seconds)
+        wakeup_time = datetime.now(timezone.utc) + timedelta(seconds=seconds)
         self.cog_instance.sleep_intent = intent
         self.cog_instance.next_sleep_duration = seconds
         
-        # 4.0 中以 DateTrigger 定義執行時間點
-        # conflict_policy="replace" 實現覆寫更新
+        # conflict_policy=ConflictPolicy.replace 實現覆寫更新
         await self.scheduler.add_schedule(
-            self.execute_scheduled_wake,
+            global_execute_scheduled_wake,
             DateTrigger(run_time=wakeup_time),
             id="hihi_heartbeat_schedule",
             args=[intent],
-            conflict_policy="replace"
+            conflict_policy=ConflictPolicy.replace
         )
         print(f"⏰ [Scheduler] 已安排下一次主動甦醒：{wakeup_time}。備忘錄: '{intent}'")
 
@@ -110,6 +118,16 @@ class HeartbeatScheduler:
             location_info = f"- 伺服器 (Server): {channel.guild.name if channel.guild else '私人訊息 (Private)'}\n- 頻道 (Channel): {channel.name}"
             
             async with channel.typing():
+                # 每次觸發跳時（鬧鐘響起時）背景整理最近活躍用戶的記憶 (Dream Gate)
+                user_id = getattr(self.cog_instance, 'last_active_user_id', None)
+                user_name = getattr(self.cog_instance, 'last_active_user_name', 'Unknown')
+                if user_id:
+                    try:
+                        print(f"🌌 [Scheduler] 甦醒整理記憶中... 用戶: {user_name} ({user_id})")
+                        await self.cog_instance.orchestrator.enter_dream_gate(user_id, user_name)
+                    except Exception as e_dream:
+                        print(f"⚠️ [Scheduler] 甦醒造夢整理記憶失敗: {e_dream}")
+
                 response_text, interaction_id = await self.cog_instance.orchestrator.call_adk_runner(
                     user_id="heartbeat_awakening",
                     session_id=f"discord_{channel.id}",

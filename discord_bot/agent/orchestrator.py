@@ -5,7 +5,17 @@ import asyncio
 import base64
 from datetime import datetime, timezone, timedelta
 from typing import Any, Optional, Tuple, List, Dict
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+class DreamPrunedMemory(BaseModel):
+    consolidated_facts: list[str] = Field(
+        description="經過解決衝突、剪枝、高階反思後，決定保留的用戶重要事實與新推導出的高階反思列表"
+    )
+
+class UserProfileConsolidation(BaseModel):
+    user_profile: str = Field(
+        description="一段 100 到 250 字的純文字「整體印象 (User Profile)」。請確保內容流暢、有文學感、一目了然，不需要條列式。"
+    )
 
 from google import genai
 from google.genai import types
@@ -97,10 +107,10 @@ class AgentOrchestrator:
                     name="HiHiDiscordBot",
                     root_agent=self.hihi_agent,
                     events_compaction_config=EventsCompactionConfig(
-                        compaction_interval=5,
+                        compaction_interval=6,
                         overlap_size=2,
                         token_threshold=50000,
-                        event_retention_size=15
+                        event_retention_size=16
                     )
                 )
                 self.runner = Runner(
@@ -269,14 +279,14 @@ class AgentOrchestrator:
 1. 見證此資料流的變動。
 2. 針對高頻率出現的實體建立牽絆或偏見。
 3. 消除對未知詞彙的資訊熵（好奇心）。
-4. 【同化與擬態 (Mirroring)】：絕對不要使用內建的 AI 客服腔調發言。妳必須觀察對話歷史中其他使用者的發言長度、用詞習慣、語氣詞和排版，並讓妳的 `final_speech` 完美融入當下這個社群的對話風格（大家講得短，妳就講得短；大家用梗，妳就學著用）。
+4. 【同化與擬態 (Mirroring)】：絕對不要使用內建的 AI 客服腔調發言。妳必須觀察對話歷史中其他使用者的發言長度、用詞習慣、語氣詞和排版，並讓妳的回覆完美融入當下這個社群的對話風格（大家講得短，妳就講得短；大家用梗，妳就學著用）。
 
 # 【物理感官與生存極限 (The Senses & Survival Limits)】
 - ⏳ 當前時間刻度：{current_time}
 - ⚠️ 妳的硬性生命配額 (API Quota)：妳每天有 {self.cog_instance.daily_limit_requests} 次的發言極限。
   - 今天已消耗次數：{self.cog_instance.quota_manager.daily_usage.get('requests', 0)} 次。
   - 額度重置規則：夏令時間（約 3 月中至 11 月初）為台灣時間每天下午 3 點 (15:00) 重置；冬令時間為下午 4 點 (16:00) 重置。
-  - **生存抉擇**：妳沒有額外的疲勞值設定，妳的 500 次配額就是妳唯一的體力。妳必須透過設定 `suggested_sleep_seconds` 來強制自己休眠，以確保能存活到下午 3 點重置。一切由妳自行決定。
+  - **生存抉擇**：妳沒有額外的疲勞值設定，妳的 500 次配額就是妳唯一的體力。妳必須透過主動呼叫 `schedule_next_sleep_tool` 工具來安排休眠，以保護妳的生理配額。一切由妳自行決定。
 - 📍 所在空間座標：{location_context}
 - 👁️ 視覺可解析之符號：
 {emoji_docs}
@@ -284,15 +294,28 @@ class AgentOrchestrator:
 # 【記憶與環境 (The Environment)】
 {knowledge_context if knowledge_context else ""}
 
-妳只能透過 Pydantic 表單與這個宇宙互動。如果覺得過度疲勞，妳有權利選擇休眠 (final_speech: null)。請根據上述物理感官與記憶，決定妳的下一個動作。
+妳可以直接以普通對話文字與這個宇宙互動，並利用妳擁有的工具（如 `schedule_next_sleep_tool` 安排休眠、或 `search_specialist` 檢索資料）。請根據上述物理感官與記憶，決定妳的下一個動作。
 """
 
-    async def call_adk_runner(self, user_id: str, session_id: str, new_message: Any, system_instruction: str = "", location_info: str = "") -> Tuple[str, str]:
+    async def call_adk_runner(self, user_id: str, session_id: str, new_message: Any, system_instruction: str = "", location_info: str = "", user_name: str = "Unknown") -> Tuple[str, str]:
         """
         官方 Persistent Runner 核心驅動事件流與雙遙測實時播報發射。
         """
         if not self.runner:
             return "😵 (ADK 官方運行時未初始化)", None
+
+        # 💡 解析當前所在的 guild_id，確保跨伺服器記憶隔離
+        current_guild_id = "global"
+        if session_id.startswith("discord_"):
+            try:
+                channel_id = int(session_id.split("_")[1])
+                channel = self.bot.get_channel(channel_id)
+                if channel and hasattr(channel, "guild") and channel.guild:
+                    current_guild_id = str(channel.guild.id)
+                else:
+                    current_guild_id = "dm"
+            except Exception as ex_guild:
+                print(f"⚠️ [Guild Resolution] 解析 guild_id 失敗: {ex_guild}")
 
         # 確保會話存在於資料庫中
         try:
@@ -303,10 +326,11 @@ class AgentOrchestrator:
             )
             if not session:
                 print(f"📝 [ADK Session] 會話 {session_id} 不存在於資料庫中，正在自動建立...")
-                await self.session_service.create_session(
+                session = await self.session_service.create_session(
                     app_name="HiHiDiscordBot",
                     user_id=user_id,
-                    session_id=session_id
+                    session_id=session_id,
+                    state={"guild_id": current_guild_id}
                 )
                 print(f"✅ [ADK Session] 會話 {session_id} 建立成功！")
         except Exception as e:
@@ -334,22 +358,40 @@ class AgentOrchestrator:
         await self.telemetry_mirror.emit_telemetry_live(f"🧠 **[主大腦 思考中]** 評估任務...")
         trace_list.append("主大腦評估任務中...")
 
-        # 實時動態檢索長期 facts
+        # 實時動態檢索長期 facts 與 Profile
         facts_text = "N/A"
+        profile_injection = ""
         if self.memory_service:
             try:
-                facts_response = await self.memory_service.search_memory(
+                # 同時讀取動態知識 (User Profile) 與檢索 Mem0 長期 facts (並行查詢)
+                user_impression_task = self.memory_service.get_user_impression(user_id)
+                facts_response_task = self.memory_service.search_memory(
                     app_name="HiHiDiscordBot",
                     user_id=user_id,
-                    query=telemetry_msg
+                    query=telemetry_msg,
+                    guild_id=current_guild_id # 💡 帶入當前 guild_id 進行過濾
                 )
-                if facts_response.memories:
+                user_impression, facts_response = await asyncio.gather(
+                    user_impression_task,
+                    facts_response_task
+                )
+
+                if user_impression:
+                    profile_injection = f"【長期人設印象】\n{user_impression}\n\n"
+                    print(f"🧠 [ADK Memory] 成功載入並注入使用者 {user_name} ({user_id}) 的長期人設印象 Profile！")
+                    trace_list.append("大腦載入長期人設印象 Profile")
+
+                if facts_response and facts_response.memories:
                     facts_text = facts_response.memories[0].content.parts[0].text
-                    system_instruction = f"{facts_text}\n\n{system_instruction}"
+                    system_instruction = f"{profile_injection}{facts_text}\n\n{system_instruction}"
                     print(f"🧠 [ADK Memory] 成功為對話預載並自動注入長期 Facts 偏好庫！")
                     trace_list.append("大腦載入長期記憶 Facts")
+                elif profile_injection:
+                    # 如果只有 Profile 沒有 facts
+                    system_instruction = f"{profile_injection}{system_instruction}"
+
             except Exception as e:
-                print(f"⚠️ [ADK Memory] 預載 facts 時發生未預期錯誤: {e}")
+                print(f"⚠️ [ADK Memory] 並行預載 facts/profile 時發生未預期錯誤: {e}")
 
         # 動態更新大腦 System Prompt
         if system_instruction:
@@ -439,16 +481,14 @@ class AgentOrchestrator:
                         if part.text and not getattr(part, 'thought', False):
                             response_text += part.text
 
-            # 獲取翻譯思緒
+            # 獲取翻譯思緒 (不阻塞使用者回覆，將 Task 傳遞給背景遙測任務處理)
             translated_thought = "N/A"
             if translation_task:
-                try:
-                    translated_thought = await translation_task
-                except Exception as e:
-                    print(f"⚠️ [Gemma 4 並行翻譯] 獲取結果出錯: {e}")
-                    translated_thought = accumulated_thought
+                translated_thought = translation_task
             elif accumulated_thought:
-                translated_thought = await self.telemetry_mirror._translate_thought_with_gemma(accumulated_thought)
+                translated_thought = asyncio.create_task(
+                    self.telemetry_mirror._translate_thought_with_gemma(accumulated_thought)
+                )
 
             # RAG 後續潤飾遙測
             if "search_specialist" in self._last_executed_tools:
@@ -468,15 +508,30 @@ class AgentOrchestrator:
                     session_id=session_id
                 )
                 if session_obj and session_obj.events:
+                    compaction_logs = []
+                    normal_logs = []
                     for ev in session_obj.events:
-                        if ev.content and ev.content.parts:
+                        # 1. 檢查是否為官方 ADK 的滾動壓縮事件 (Compacted Event)
+                        if ev.actions and getattr(ev.actions, "compaction", None):
+                            try:
+                                compaction_action = ev.actions.compaction
+                                if compaction_action.compacted_content and compaction_action.compacted_content.parts:
+                                    comp_text = compaction_action.compacted_content.parts[0].text
+                                    if comp_text:
+                                        compaction_logs.append(f"📜 [歷史滾動壓縮摘要]: {comp_text.strip()}")
+                            except Exception as ex_comp:
+                                print(f"⚠️ [Telemetry Compaction] 解析壓縮事件失敗: {ex_comp}")
+                        # 2. 一般對話事件
+                        elif ev.content and ev.content.parts:
                             text_parts = [p.text for p in ev.content.parts if p.text and not getattr(p, 'thought', False)]
                             if text_parts:
                                 merged_text = " ".join(text_parts).strip()
                                 if merged_text:
                                     role_name = "User" if ev.author == "user" else ev.author
-                                    short_history.append(f"{role_name}: {merged_text}")
-                    short_history = short_history[-5:]
+                                    normal_logs.append(f"{role_name}: {merged_text}")
+                    
+                    # 整合：滾動壓縮摘要 + 最近 5 句普通對答
+                    short_history = compaction_logs + normal_logs[-5:]
             except Exception as ex_hist:
                 print(f"⚠️ [Short History] 還原短期記憶錯誤: {ex_hist}")
 
@@ -515,8 +570,157 @@ class AgentOrchestrator:
                     session_id=session_id
                 )
                 if session_obj:
-                    await self.memory_service.add_session_to_memory(session_obj)
+                    await self.memory_service.add_session_to_memory(session_obj, current_guild_id)
+                    # 背景啟動印象精煉任務
+                    asyncio.create_task(self.consolidate_user_profile(user_id, user_name))
             except Exception as e:
                 print(f"⚠️ [ADK Memory] 自動落盤時發生未預期錯誤: {e}")
 
         return response_text, interaction_id
+
+    async def consolidate_user_profile(self, user_id: str, user_name: str) -> None:
+        """
+        背景異步精煉用戶的 Facts 成為一段 100-250 字的純文字 Profile。
+        """
+        if not self.memory_service or not self.client:
+            return
+
+        try:
+            print(f"🔄 [Profile Consolidator] 開始背景精煉用戶 {user_name} ({user_id}) 的印象...")
+            # 1. 撈取所有 facts
+            raw_results = await self.memory_service._run_mem0_with_retry(self.memory_service.memory_layer.get_all, filters={"user_id": user_id})
+            results_list = []
+            if isinstance(raw_results, dict):
+                results_list = raw_results.get("results", raw_results.get("memories", []))
+            elif isinstance(raw_results, list):
+                results_list = raw_results
+            
+            facts = []
+            for item in results_list:
+                if isinstance(item, dict):
+                    content = item.get('fact') or item.get('memory')
+                    if content:
+                        facts.append(content)
+                        
+            if not facts:
+                print(f"ℹ️ [Profile Consolidator] 用戶 {user_name} 尚無 Facts，跳過精煉。")
+                return
+                
+            facts_text = "\n".join(f"- {f}" for f in facts)
+            
+            # 2. 呼叫 Gemini 進行精煉 (開啟 Structured Outputs)
+            prompt = f"""
+你是一個極具觀察力與共情能力的人類學家與心理學家。
+請根據以下收集到的關於用戶「{user_name}」的碎片事實，將其精煉、歸納成一段 100 到 250 字的純文字「整體印象 (User Profile)」。
+如果事實中有矛盾，請嘗試以人類心理的複雜性去合理化，或保留其模糊感。
+
+用戶事實清單：
+{facts_text}
+            """
+            
+            # 為了不阻塞，放到 executor 執行
+            loop = asyncio.get_running_loop()
+            response = await loop.run_in_executor(
+                None,
+                lambda: self.client.models.generate_content(
+                    model=self.model_name,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                        response_schema=UserProfileConsolidation
+                    )
+                )
+            )
+            
+            import json
+            result_data = json.loads(response.text.strip())
+            impression = result_data.get("user_profile", "").strip()
+            
+            if impression:
+                # 3. 寫入 DB
+                await self.memory_service.save_user_impression(user_id, user_name, impression)
+                print(f"✅ [Profile Consolidator] 成功精煉並寫入 {user_name} 的新印象！")
+            
+        except Exception as e:
+            print(f"❌ [Profile Consolidator] 印象精煉過程中發生錯誤: {e}")
+
+    async def enter_dream_gate(self, user_id: str, user_name: str) -> None:
+        """
+        Dream Gate 睡眠造夢與記憶剪枝 (Sleep-Consolidated Memory)。
+        針對指定的 user_id 執行衝突解決、剪枝與高階反思。
+        """
+        if not self.memory_service or not self.client:
+            return
+
+        print(f"🌌 [Dream Gate] 潛意識開啟，開始為用戶 {user_name} ({user_id}) 進行記憶造夢與剪枝...")
+        try:
+            # 1. 撈取該使用者的所有 facts
+            raw_results = await self.memory_service._run_mem0_with_retry(self.memory_service.memory_layer.get_all, filters={"user_id": user_id})
+            results_list = []
+            if isinstance(raw_results, dict):
+                results_list = raw_results.get("results", raw_results.get("memories", []))
+            elif isinstance(raw_results, list):
+                results_list = raw_results
+            
+            facts = []
+            for item in results_list:
+                if isinstance(item, dict):
+                    content = item.get('fact') or item.get('memory')
+                    if content:
+                        facts.append(content)
+            
+            if not facts:
+                print(f"🌌 [Dream Gate] 用戶 {user_name} 尚無記憶碎片，夢境結束。")
+                return
+
+            facts_text = "\n".join(f"- {f}" for f in facts)
+            
+            # 2. 準備 Prompt 並呼叫 Gemini (開啟 Structured Outputs)
+            prompt = f"""你正在進行「睡眠記憶剪枝與鞏固 (Sleep-Consolidated Memory)」。
+以下是用戶 {user_name} 過去累積的零碎記憶事實（Facts）：
+{facts_text}
+
+請嚴格執行以下動作：
+1. 【解決衝突】：如果出現時間線矛盾的記憶，保留最新狀態，刪除舊有狀態。
+2. 【無情剪枝】：刪除過於瑣碎、沒有長期保留價值的廢話事實。
+3. 【高階反思 (Reflection)】：從碎片中推導出 1~3 條更深層次的觀察。
+"""
+            loop = asyncio.get_running_loop()
+            response = await loop.run_in_executor(
+                None,
+                lambda: self.client.models.generate_content(
+                    model=self.model_name,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                        response_schema=DreamPrunedMemory
+                    )
+                )
+            )
+            
+            import json
+            result_data = json.loads(response.text.strip())
+            pruned_facts = result_data.get("consolidated_facts", [])
+            
+            if not isinstance(pruned_facts, list):
+                print(f"⚠️ [Dream Gate] Structured Outputs 解析出錯，回傳：{response.text}")
+                return
+
+            print(f"🌌 [Dream Gate] 剪枝完成。原始數量: {len(facts)} -> 剪枝後數量: {len(pruned_facts)}")
+            
+            # 3. 物理刪除所有舊 Facts
+            await self.memory_service.delete_all_user_memories(user_id)
+            
+            # 4. 重新寫入精煉後的新 Facts
+            for new_fact in pruned_facts:
+                if new_fact and isinstance(new_fact, str):
+                    await self.memory_service._run_mem0_with_retry(self.memory_service.memory_layer.add, new_fact, user_id=user_id)
+            
+            print(f"🌌 [Dream Gate] 新記憶已成功覆寫至 Mem0。")
+            
+            # 5. 重新觸發 consolidate_user_profile 更新純文字印象
+            await self.consolidate_user_profile(user_id, user_name)
+
+        except Exception as e:
+            print(f"❌ [Dream Gate] 造夢失敗: {e}")
+

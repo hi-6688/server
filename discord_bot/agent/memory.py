@@ -12,7 +12,8 @@ Google ADK BaseMemoryService 實現 (Mem0 v3 原生裝配直連版)
 
 from __future__ import annotations
 import asyncio
-from typing import TYPE_CHECKING, Any, List, Dict
+import asyncpg
+from typing import TYPE_CHECKING, Any, List, Dict, Optional
 from google.genai import types
 from google.adk.memory.base_memory_service import BaseMemoryService, SearchMemoryResponse
 from google.adk.memory.memory_entry import MemoryEntry
@@ -101,14 +102,16 @@ class Mem0MemoryService(BaseMemoryService):
         app_name: str,
         user_id: str,
         query: str,
+        guild_id: Optional[str] = None, # 💡 新增 guild_id 參數，用於跨伺服器隱私隔離
     ) -> SearchMemoryResponse:
         """
         【自動檢索與注入技術】
         當 Runner 啟動對話時，ADK 會在底層自動調用此函數。
-        我們在這裡直接調用 Mem0 撈取該使用者的 Facts，並以 MemoryEntry 回傳。
+        我們在這裡直接調用 Mem0 撈取該使用者的 Facts，在 Python 記憶體中做「軟過濾」隔離不同伺服器的事實，
+        並附帶 ID 注入事實中回傳給 AI。
         """
         try:
-            # 直接調用 Mem0 獲取該使用者的所有事實
+            # 撈取該使用者的所有長期事實清單
             raw_results = await self._run_mem0_with_retry(self.memory_layer.get_all, filters={"user_id": user_id})
             results_list = []
             if isinstance(raw_results, dict):
@@ -120,17 +123,25 @@ class Mem0MemoryService(BaseMemoryService):
             for item in results_list:
                 if isinstance(item, dict):
                     content = item.get('fact') or item.get('memory')
-                    if content:
-                        facts.append(content)
+                    # 💡 跨伺服器隱私隔離「軟過濾」邏輯：
+                    # 如果記憶不含 guild_id、或者標記為 "global" 全域、或者與當前伺服器 guild_id 一致，則允許載入。
+                    metadata = item.get('metadata', {}) or {}
+                    fact_guild_id = metadata.get('guild_id')
+                    
+                    if not fact_guild_id or fact_guild_id == "global" or (guild_id and str(fact_guild_id) == str(guild_id)):
+                        if content:
+                            fact_id = item.get('id', 'unknown')
+                            facts.append((fact_id, content))
             
             if not facts:
-                print(f"🔍 [ADK Memory] 檢索用戶 {user_id} 記憶完成：無已存 Facts。")
+                print(f"🔍 [ADK Memory] 檢索用戶 {user_id} 記憶完成：無已存 Facts (過濾後)。")
                 return SearchMemoryResponse(memories=[])
 
-            facts_text = "【長期已知事實與偏好庫】\n" + "\n".join(f"- {fact}" for fact in facts)
-            print(f"🔍 [ADK Memory] 檢索用戶 {user_id} 記憶完成，共載入 {len(facts)} 條 Facts。")
+            # 💡 格式化 Facts 清單，將 Memory ID 注入最前端，供 AI 閱讀以進行歷史溯源
+            facts_text = "【長期已知事實與偏好庫】\n" + "\n".join(f"- [id: {fid}] {fact}" for fid, fact in facts)
+            print(f"🔍 [ADK Memory] 檢索用戶 {user_id} 記憶完成，共載入 {len(facts)} 條 Facts (已注入 ID)。")
 
-            # 包裝成 ADK 規格的 MemoryEntry (types.Content)
+            # 包裝成 ADK 規格的 MemoryEntry
             content = types.Content(
                 parts=[types.Part.from_text(text=facts_text)],
                 role="user"
@@ -149,6 +160,7 @@ class Mem0MemoryService(BaseMemoryService):
     async def add_session_to_memory(
         self,
         session: Session,
+        guild_id: Optional[str] = None
     ) -> None:
         """
         【對話結束自動落盤技術】
@@ -180,11 +192,48 @@ class Mem0MemoryService(BaseMemoryService):
                 content_str = " ".join(parts_text).strip()
                 if content_str:
                     print(f"💾 [ADK Memory] 偵測到對話結束，正在自動提取 facts 落盤: {user_id} -> '{content_str[:25]}...'")
-                    # 直接呼叫 Mem0 進行增量提煉與寫入
-                    await self._run_mem0_with_retry(self.memory_layer.add, content_str, user_id=user_id)
+                    
+                    # 💡 優先使用傳入的 guild_id，若無則自 session.state 中讀取
+                    resolved_guild_id = guild_id or (session.state.get("guild_id") if session.state else None)
+                    metadata = {"guild_id": resolved_guild_id} if resolved_guild_id else None
+                    
+                    # 直接呼叫 Mem0 進行增量提煉與寫入，並附加 metadata 標籤
+                    await self._run_mem0_with_retry(
+                        self.memory_layer.add, 
+                        content_str, 
+                        user_id=user_id,
+                        metadata=metadata
+                    )
 
         except Exception as e:
             print(f"❌ [ADK Memory] 自動落盤錯誤: {e}")
+
+    async def get_memory_history(self, memory_id: str) -> str:
+        """
+        獲取某條事實 ID 的歷史版本與演變時間軸。
+        """
+        try:
+            # 異步呼叫官方 history 方法，包含 429 退避重試
+            raw_history = await self._run_mem0_with_retry(self.memory_layer.history, memory_id)
+            if not raw_history:
+                return f"🔍 找不到與記憶 ID `{memory_id}` 相關的歷史變更紀錄。"
+            
+            history_lines = [f"📊 記憶 ID `{memory_id}` 的歷史演變軌跡："]
+            
+            # Mem0 history 通常回傳一個 list 的 dict
+            if isinstance(raw_history, list):
+                for idx, record in enumerate(raw_history):
+                    timestamp = record.get("created_at") or record.get("updated_at") or "未知時間"
+                    event_type = record.get("event") or record.get("action") or "更新"
+                    fact_val = record.get("fact") or record.get("memory") or "無內容"
+                    history_lines.append(f"  > {idx+1}. [{timestamp}] 操作: `{event_type}`\n    * 內容: \"{fact_val}\"")
+            else:
+                history_lines.append(f"  > {str(raw_history)}")
+                
+            return "\n".join(history_lines)
+        except Exception as e:
+            print(f"❌ [ADK MemoryService] 獲取記憶歷史失敗: {e}")
+            return f"❌ 獲取記憶歷史記錄失敗：`{e}`"
 
     async def remove_fact(self, user_id: str, fact: str):
         """
@@ -234,3 +283,49 @@ class Mem0MemoryService(BaseMemoryService):
         except Exception as e:
             print(f"❌ [Mem0] 事實語意搜尋錯誤: {e}")
             return []
+
+    async def get_user_impression(self, user_id: str) -> Optional[str]:
+        """
+        讀取用戶的動態知識 Profile。
+        """
+        try:
+            conn = await asyncpg.connect(self.db_url)
+            try:
+                row = await conn.fetchrow(
+                    "SELECT impression FROM user_impressions WHERE user_id = $1", 
+                    user_id
+                )
+                if row:
+                    return row['impression']
+                return None
+            finally:
+                await conn.close()
+        except Exception as e:
+            print(f"❌ [ADK Memory] 讀取 user_impressions 失敗: {e}")
+            return None
+
+    async def save_user_impression(self, user_id: str, user_name: str, impression: str) -> None:
+        """
+        儲存或更新用戶的動態知識 Profile。
+        """
+        try:
+            conn = await asyncpg.connect(self.db_url)
+            try:
+                await conn.execute(
+                    '''
+                    INSERT INTO user_impressions (user_id, user_name, impression, last_updated)
+                    VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+                    ON CONFLICT (user_id) 
+                    DO UPDATE SET 
+                        user_name = EXCLUDED.user_name,
+                        impression = EXCLUDED.impression,
+                        last_updated = CURRENT_TIMESTAMP
+                    ''',
+                    user_id, user_name, impression
+                )
+                print(f"💾 [ADK Memory] 成功儲存用戶 {user_name} ({user_id}) 的印象 Profile")
+            finally:
+                await conn.close()
+        except Exception as e:
+            print(f"❌ [ADK Memory] 儲存 user_impressions 失敗: {e}")
+
