@@ -8,6 +8,6 @@ google-auth
 asyncpg
 psycopg2-binary
 google-adk==2.1.0
-mem0ai==2.0.4
+mem0ai==2.0.5
 apscheduler==4.0.0a6
 
