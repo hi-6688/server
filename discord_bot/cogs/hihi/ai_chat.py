@@ -436,6 +436,7 @@ class AIChat(commands.Cog):
         """
         以背景協程方式執行 APScheduler v4.0 的 context manager，確保其生命週期與 Cog 對齊。
         """
+        engine = None  # 初始化資料庫引擎變數以防未成功建立 (database engine initialization)
         try:
             db_url = os.getenv("DATABASE_URL")
             cleaned_db_url = db_url.replace("postgres://", "postgresql+asyncpg://").replace("?sslmode=require", "")
@@ -452,6 +453,11 @@ class AIChat(commands.Cog):
             print("🧹 [APScheduler] 背景排程任務被取消，已安全退出。")
         except Exception as e:
             print(f"❌ [APScheduler] 排程器運行出錯: {e}")
+        finally:
+            # 確保結束或異常時 100% 物理釋放連線池 (ensure connection pool is disposed)
+            if engine:
+                print("🔌 [APScheduler] 正在釋放 SQLAlchemy 連線池...")
+                await engine.dispose()
 
     async def _init_ai(self):
         # 0. 啟動官方 OpenTelemetry 遙測追蹤
