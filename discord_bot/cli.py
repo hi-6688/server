@@ -3,6 +3,7 @@ import os
 import sys
 from datetime import datetime
 import dotenv
+import discord
 
 # Load environment variables
 dotenv.load_dotenv(os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env'))
@@ -101,7 +102,7 @@ async def main():
     print("⏳ Waiting for AI initialization...")
     await asyncio.sleep(2) 
     
-    if not ai_chat.client:
+    if not ai_chat.orchestrator.client:
         print("❌ AI Client failed to initialize. Check GEMINI_API_KEY.")
         return
 
