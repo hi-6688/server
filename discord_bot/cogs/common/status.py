@@ -38,6 +38,8 @@ class Status(commands.Cog):
             self.bot_name = "嗨嗨"
         elif mode == 'CONCH':
             self.bot_name = "神奇嗨螺"
+        elif mode == 'TEST':
+            self.bot_name = "測試機"
         else:
             self.bot_name = "機器人"
 

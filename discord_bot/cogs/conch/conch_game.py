@@ -55,8 +55,15 @@ class ConchGame(commands.Cog):
             return
             
         try:
-            self.client = genai.Client(api_key=api_key)
-            print("🐚 [ConchGame] 模組已載入 (Client: google.genai, Model: models/gemini-2.5-flash)")
+            api_base = os.getenv("GEMINI_API_BASE")
+            if api_base:
+                self.client = genai.Client(
+                    api_key=api_key,
+                    http_options=types.HttpOptions(base_url=api_base)
+                )
+            else:
+                self.client = genai.Client(api_key=api_key)
+            print("🐚 [ConchGame] 模組已載入 (Client: google.genai, Model: models/gemini-3.1-flash-lite)")
         except Exception as e:
             print(f"❌ [ConchGame] Client 初始化失敗: {e}")
 
@@ -138,7 +145,7 @@ class ConchGame(commands.Cog):
                 # 4. 呼叫 Gemini AI (使用 Structured Output)
                 # response_mime_type + response_schema 強制模型只能回傳 Enum 中的值
                 response = await self.client.aio.models.generate_content(
-                    model="models/gemini-2.5-flash",
+                    model="models/gemini-3.1-flash-lite",
                     contents=prompt,
                     config=types.GenerateContentConfig(
                         response_mime_type="text/x.enum",
