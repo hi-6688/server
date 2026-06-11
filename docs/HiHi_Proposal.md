@@ -1,7 +1,8 @@
 # 專案企劃書：Discord 數位生命體「嗨嗨 (HiHi)」
 
-> **版本**: 7.0 (Official ADK Framework & Semantic Windows)
-> **最後更新**: 2026-05-26
+> **版本**: 9.0 (Modularized AI Agent & APScheduler 4.0 Persistence)
+> **最後更新**: 2026-06-11
+
 
 ## 1. 專案概述 (Executive Summary)
 本計畫旨在創建一個具備「獨立人格」與「長期記憶」的 Discord 機器人。與傳統的「助理型 AI」不同，「嗨嗨」定位為伺服器中的一名 **「數位生命體」**，具備觀察、主動發言、時間感知與情緒表達能力，並受限於真實的物理算力極限。
@@ -13,37 +14,44 @@
 ### 2.1 AI 模型選擇 (Model Selection)
 我們採用 **「單一模型、全子彈管線 (Unified Pipeline)」** 架構，徹底捨棄昂貴的巨型模型，專注壓榨輕量級模型的極限效能。
 
-*   **全域唯一大腦：Gemini 3.1 Flash Lite**
-    *   **定位**: 憑藉其極高的性價比與速度，包辦本系統的「記憶前處理」、「角色扮演發言」、「L2 情節壓縮」與「打標籤」所有工作。
-    *   **設計考量**: 統一模型能確保 Prompt 語感的高度一致性，徹底消除跨 API 的延遲與格式轉換風險，確保在 4GB RAM 與免費 API 極限內穩定生存。
+*   **全域唯一大腦模型：Gemini 3.1 Flash Lite**
+    *   **定位與分工**: 主大腦與子大腦皆統一使用 `gemini-3.1-flash-lite`。主大腦開啟高級推理思維（`thinking_level="high"`）專職處理情感心理 OS、情商發言與長期記憶；子大腦（搜尋專家）則保持極速的一般檢索模式。
+    *   **設計考量**: 統一模型能確保 Prompt 語感的高度一致性，徹底消除跨 API 的延遲與格式轉換風險。透過多智能體分工，還能完美節省主大腦昂貴的高級推理 Token，確保在免費 API 極限內穩定生存。
 *   **語意檢索核心：Gemini Embedding 2**
     *   **定位**: 負責將記憶轉化為 768 維度向量，供 `pgvector` 進行高維度搜尋。
 
-### 2.2 Agentic 架構 (Google ADK Framework)
-嗨嗨已全面轉移至官方的 **Google Agent Development Kit (ADK)** 架構，取代了過去手刻的「非同步兩階段管線 (Two-Stage Pipeline)」。透過原生框架的支援，AI 能在單一迴圈內同時兼顧「邏輯操作」與「角色扮演」，大幅降低了 API 延遲並提高了系統穩定性。
+### 2.2 Agentic 架構 (Multi-Agent Specialist Agent Pattern)
+嗨嗨已全面轉移至官方的 **Google Agent Development Kit (ADK)** 的 **多智能體委派架構 (Specialist Agent Pattern)**，並完成大一統模組化重構，將 AI 架構代碼收攏至獨立的 `discord_bot/agent/` 套件目錄中。
 
 ```
-Discord 訊息 → ADK Runner (ReAct Loop：思考 -> 工具調用 -> 觀察) → 最終輸出
+Discord 訊息 → 主大腦 HiHiv3Agent (High 推理) ──[呼叫 AgentTool]──> 搜尋專家 search_specialist (Google 官方 File Search Store RAG)
 ```
 
-*   **單一思考迴圈 (Unified ReAct Loop)**：AI 會在內部循環中自主判斷何時調用工具、何時需要進一步搜尋記憶，最終在確認資訊充足後進行發言。
-*   **原生狀態管理 (Session Management)**：對話狀態與歷史由 ADK Session 原生接管，取代了手動的 Pydantic 表單切分，減少了注意力渙散與狀態丟失的風險。
+*   **套件模組化拆分**：
+    *   `orchestrator.py`：大腦編排器，負責 Gemini Client 呼叫、思考鏈 (Thought) 提取、Gemma 4 背景並發翻譯、與 ADK Runner 的生命週期。
+    *   `scheduler.py`：心跳排程器，負責 APScheduler 4.0 異步排程的生命週期與資料庫連線釋放安全。
+    *   `tools.py`、`schemas.py`、`memory.py`、`telemetry.py`、`config.py`：各自解耦的 AI 工具、驗證模型、記憶對接、遙測播報與會話配置。
+*   **多智能體協同 (Specialist Agent Pattern)**：
+    *   **主大腦 (HiHiv3Agent)**：專注於「擬人情感 OS、高情商發言、長期記憶保存」。主大腦的 tools 列表中只有自訂 Local Functions（記憶函數與搜尋專家委派工具），無 any 內建 Remote 工具。主大腦啟用了 `thinking_level="high"` 以獲取深度的邏輯推理與內心世界 OS。
+    *   **搜尋專家 (search_specialist)**：作為主大腦的委派子 Agent，無狀態且冷靜理性。它的 tools 中掛載了 Google 官方的 `File Search` 雲端向量庫。它以極速普通模式運行，將去噪後的客觀 facts 回傳給主大腦。
+*   **AFC 滿血運行與 Patch 拔除**：藉由多智能體在 Request 級別的分離，主大腦與搜尋專家的 tools 均完美符合 `google-genai` SDK 對於「單一 Tool 物件」的規範。自動函數呼叫 (AFC) 100% 滿血運行，且我們已徹底物理移除所有的 Monkey Patch 動態補丁！
+*   **原生狀態管理 (Session Management)**：對話狀態與歷史由 ADK Session 原生接管，歷史直接在 PostgreSQL 中流式落盤。
 
-> 💡 關於最新 ADK 管線的實作細節與 Tool 調用細節，請參閱實際程式碼 (如 `ai_chat.py` 與 `google.adk` 模組)。
+> 💡 關於最新 ADK 管線的實作細節與 Tool 調用細節，請參閱實際程式碼 (如 `agent/orchestrator.py` 與 `google.adk` 模組)。
 
-**內建工具 (Tools)**：
-| 工具名稱 | 用途 |
-|---|---|
-| `save_memory` | 儲存重要的長期記憶 (觀察/事件) |
-| `manage_fact` | 管理使用者個人事實 (CRUD，含 Data/Impression 分類) |
-| `search_memory` | 語意搜尋過去的記憶與對話 (Reference-based RAG) |
-| `learn_knowledge` | 學習新詞彙/梗/知識 (存入 RAG 知識庫) |
+**內建與委派工具 (Tools)**：
+| 工具名稱 | 類型 | 用途 |
+|---|---|---|
+| `manage_fact_tool` | 自訂函數 (Local) | 管理使用者個人事實 (CRUD，含 Data/Impression 分類) |
+| `learn_knowledge_tool` | 自訂函數 (Local) | 學習新詞彙/梗/知識 (上傳並同步至 Google 官方雲端 File Search Store) |
+| `schedule_next_sleep_tool` | 自訂函數 (Local) | 讓 AI 決定自己接下來要主動休眠多久並寫下鬧鐘備忘錄 |
+| `search_specialist` | 智能體委派 (AgentTool) | 委派搜尋專家進行雲端 File Search 百科檢索 (由 HiHiAgentTool 包裝) |
 
 > 💡 **長期記憶寫入實作現狀備註**：
-> 已完全拆除自製的 `Background Memory Queue` 異步佇列，全面回歸 Google 與 Mem0 官方最推崇的 **100% 同步/非同步強一致性等待**。大腦呼叫 `save_memory` 時會以強一致性 `await` 方式同步落盤至 PostgreSQL，徹底消除了靜默丟失與重啟導致的 RAM 記憶蒸發風險。
+> 已完全拆除自製的 `Background Memory Queue` 異步佇列，全面回歸 Google 與 Mem0 官方最推崇的 **100% 同步/非同步強一致性等待**。大腦會調用 Mem0 v3 智慧記憶服務以強一致性 `await` 方式同步落盤至 PostgreSQL，徹底消除了靜默丟失與重啟導致的 RAM 記憶蒸發風險。
 
-### 2.3 記憶系統架構 (Memory System v6.0 - Three-Tier Hybrid Semantic Architecture)
-記憶系統為適應 4GB RAM 生產環境極限，全面對接 Google ADK 與 Mem0 官方架構，升級為高度解耦的三層式大滿貫記憶體系：
+### 2.3 記憶系統架構 (Memory System v7.0 - Three-Tier Hybrid Semantic Architecture)
+記憶系統為適應 4GB RAM 生產環境極限，全面對接 Google ADK 與 Mem0 官方架載，升級為高度解耦的三層式大滿貫記憶體系：
 
 #### L1: 短期會話工作記憶 (ADK Session Managed Window)
 *   **官方持久化會話託管 (Session Management)**：完全拋棄了手動拼接與維護歷史的自造輪子，全面託管給 **Google ADK 官方 `DatabaseSessionService`**。大腦的短期工作對話歷史在資料庫中流式落盤。
@@ -55,9 +63,10 @@ Discord 訊息 → ADK Runner (ReAct Loop：思考 -> 工具調用 -> 觀察) �
 > 💡 **L2 實作現狀**：中期對話情節壓縮機制已被 ADK 官方持久化結構完美兼容，歷史直接在 PostgreSQL 中滾動，後續可隨時開啟 ADK 的 Session Summary 提取功能。
 
 #### L3: 長期語意 Facts 記憶與百科 RAG (Agentic Long-Term Memory)
-*   **長期事實與偏好 (Mem0 Personalization)**：基於 **Mem0 v3 + PostgreSQL pgvector (768d)** 的正統架構，讓 Agent 通過主動 `Tool-calling`（如 `save_memory` / `manage_fact`）實時同步寫入與讀取用戶個人事實，達成強一致性落盤。
-*   **百科式知識庫 RAG (Knowledge RAG)**：自建結合向量與 Full-Text FTS 的 **PostgreSQL Hybrid Search 檢索與 RRF 排序系統**，並透過 `search_memory` 工具提供「調閱發生時之前 10 句原始對話」的時光機時空回溯（Parent-Child Retrieval），徹底消除大模型的記憶幻覺。
-> 💡 **L3 實作現狀**：已完整實作 Mem0 v3 的 pgvector 長期 Facts 對接，並 100% 通過 Tool-calling 機制掛載至官方 Agent，實現了大腦「主動」掌控、強一致性同步/非同步等待寫入的語義檢索。
+*   **長期事實與偏好 (Mem0 Personalization)**：基於 **Mem0 v3 + PostgreSQL pgvector (768d)** 的正統架構，由 `Mem0MemoryService` 原生對接 ADK `BaseMemoryService`。讓 Agent 通過主動 `Tool-calling`（如 `manage_fact_tool`）或對話結束自動回調（`add_session_to_memory`）實時同步寫入與讀取用戶個人事實，達成強一致性落盤。
+*   **多智能體記憶隔離防污染 (Stateless & Scoped Memory Isolation)**：完美對齊 Mem0 官方最新最佳實踐。主大腦讀寫全局 `user_id` 情感事實記憶；而負責檢索的子 Agent `search_specialist` 被設定為 **完全無狀態 (Stateless)**，不掛載任何 Mem0 寫入與搜尋回調，物理上 100% 避免了長期記憶庫被檢索時產生的網頁雜訊污染。
+*   **百科式知識庫 RAG (Knowledge RAG)**：自建百科同步機制。AI 通過 `learn_knowledge_tool` 學習新知識時，會自動同步寫入本地文字庫，並即時上傳上架至 **Google 官方的 File Search Store** 中，由 ADK 子代理直接進行高維度雲端向量檢索。
+> 💡 **L3 實作現狀**：已完整實作 Mem0 v3 的 pgvector 長期 Facts 對接，並透過 AgentTool 與 Scoped 隔離機制掛載，在不污染記憶的前提下實現了強大的語義檢索。
 
 ---
 
@@ -75,8 +84,8 @@ Discord 訊息 → ADK Runner (ReAct Loop：思考 -> 工具調用 -> 觀察) �
 *   **圖片理解**：讀取使用者上傳的圖片 (二進位直接傳送，上限 8MB)。
 *   **貼圖辨識**：讀取 PNG/APNG 格式的 Discord 貼圖。
 *   **圖片重複偵測**：SHA256 Hash，提醒「這張圖之前誰傳過」。
-*   **連結解析**：自動抓取 URL 內容 (Title + Body 摘要)。
-*   > 💡 **多媒體實作現狀**：已完整實作「圖片理解」、「貼圖辨識」、「圖片重複偵測」與「連結自動解析」。且圖片與貼圖二進位傳輸已配合最新 `google-genai` SDK 原生化重構（直接傳遞二進位資料 `types.Part.from_bytes`），無須經過手動 base64 轉碼。
+*   **連結解析 (URL & YouTube Loader)**：自動抓取 URL 內容。當貼上 YouTube 影片網址時，會自動透過 `oembed` API 獲取影片標題與作者，並利用評論下載器增量抓取 5 條觀眾熱門評論，將資訊去噪拼接後餵給大腦。
+*   > 💡 **多媒體實作現狀**：已完整實作「圖片理解」、「貼圖辨識」、「圖片重複偵測」與「連結自動去噪解析」。且圖片與貼圖二進位傳輸已配合最新 `google-genai` SDK 原生化重構（直接傳遞二進位資料 `types.Part.from_bytes`），無須經過手動 base64 轉碼。
 
 ### 3.4 表達能力
 *   **專屬表情包 (Application Emojis)**：使用 `[表情代碼]` 語法，回應前自動替換為實際 Emoji ID。
@@ -120,11 +129,14 @@ Discord 訊息 → ADK Runner (ReAct Loop：思考 -> 工具調用 -> 觀察) �
 
 ## 6. Cog 模組說明
 
-### 6.1 `ai_chat.py` — AI 核心
-嗨嗨的靈魂所在，基於 Google ADK Framework 打造，包含統一的 ReAct 迴圈、無狀態記憶擷取、System Prompt 注入、全域配額監控與實時遙測字卡發射器。
+### 6.1 `ai_chat.py` — AI 訊息控制器
+負責 Discord 訊息事件捕獲、去抖緩衝批次處理、圖片/貼圖/YouTube 連結解析等 Discord 通訊層面，並以 `AgentOrchestrator` 與 `HeartbeatScheduler` 組件為核心進行大腦推理與生理排程的委派，代碼已完全實現低耦合解耦。
 
-### 6.2 其他管理模組
-*   `minecraft.py` / `terraria.py` / `conch_game.py` / `status.py` / `vm_admin.py`：負責伺服器管理、遊戲狀態與系統狀態監聽。
+### 6.2 `agent/` — 大一統 AI 大腦套件
+*   `orchestrator.py` (大腦編排器)：主掌 Google ADK Runner/Agent 與 ReAct 推理、思考鏈捕獲、記憶與知識對接。
+*   `scheduler.py` (心跳排程器)：主掌 APScheduler 4.0 任務持久化與 Misfire 甦醒。
+*   `tools.py` (代理工具庫)：封裝委派與自訂工具。
+*   `memory.py` / `telemetry.py` / `config.py` / `schemas.py`：大腦長期記憶、遙測播報、資料庫會話與驗證模型。
 
 ---
 
