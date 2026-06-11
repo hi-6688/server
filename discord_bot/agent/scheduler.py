@@ -114,7 +114,10 @@ class HeartbeatScheduler:
             # 使用大腦編排器取得系統 System Prompt
             base_prompt = await self.cog_instance.orchestrator.get_system_prompt("", f"頻道：{channel.name}", "", "")
             
-            awaken_hint = f"*(時間來到了 {current_time}。休眠結束，腦海中浮現了先前的備忘錄：「{intent}」)*" if intent else f"*(時間來到了 {current_time})*"
+            awaken_hint = (
+                f"*(時間來到了 {current_time}。休眠已順利結束並甦醒。你睡前留下的備忘錄為：「{intent}」。請根據這份備忘錄的指示回覆使用者。注意：這項睡眠與測試已經完成，除非使用者有新要求，否則不需再次重複安排相同的休眠)*"
+                if intent else f"*(時間來到了 {current_time})*"
+            )
             location_info = f"- 伺服器 (Server): {channel.guild.name if channel.guild else '私人訊息 (Private)'}\n- 頻道 (Channel): {channel.name}"
             
             async with channel.typing():

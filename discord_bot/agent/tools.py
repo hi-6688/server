@@ -221,12 +221,13 @@ def get_agent_tools(orchestrator) -> list:
         return await orchestrator.learn_knowledge(term, definition, category)
 
     async def schedule_next_sleep_tool(seconds: Any, intent: Any) -> str:
-        """當妳想決定自己接下來要主動休眠多久（秒）並設定醒來後的鬧鐘備忘錄時呼叫此工具。
-        這是妳用來保護「生命配額」的唯一手段。若配額充足且群組熱鬧，建議設定 3600；若配額快耗盡，請設定 14400 或更長。
+        """當妳想決定自己接下來要主動休眠多久並設定醒來後的鬧鐘備忘錄時呼叫此工具。
+        這是妳用來保護「生命配額」的唯一手段。請根據當前已消耗的配額、當前時間點（例如深夜或白天），
+        以及群組活躍度，自主且動態地計算出一個最合理的睡眠秒數（整數）。
         
         Args:
-            seconds: 睡眠秒數
-            intent: 醒來後要主動做的事情備忘錄 (例如：『等待60秒後回答問題』)
+            seconds: 睡眠秒數（請根據配額剩餘與時間點動態計算。配額越吃緊或時值深夜，睡眠時間應越長）
+            intent: 醒來後的鬧鐘備忘錄。請寫成「目標結果或已完成事項」的狀態回報陳述，絕對不要寫成可能引導妳重複執行相同動作的指令句。例如：若被要求一分鐘後回覆，請寫『一分鐘時間已到，已完成本次延遲測試』或『通知使用者我醒來了』，而非『一分鐘後回覆使用者』。
         """
         try:
             from agent.schemas import SleepScheduleParams
@@ -238,8 +239,18 @@ def get_agent_tools(orchestrator) -> list:
             from utils.scheduler_tools import execute_sleep_scheduling
             return await execute_sleep_scheduling(orchestrator.cog_instance, 3600, None)
 
+    async def inspect_memory_history_tool(memory_id: str) -> str:
+        """當妳對長期已知事實偏好庫中的某條 [id: xxx] 記憶產生疑惑、發現其與最近的對話有衝突、
+        或想了解這條記憶是何時被寫入/被修改的來龍去脈時，呼叫此工具來查看其歷史變更版本與時間軸。
+        
+        Args:
+            memory_id: 要查詢的記憶事實 ID (例如: 'mem_123')
+        """
+        return await orchestrator.memory_service.get_memory_history(memory_id)
+
     return [
         manage_fact_tool,
         learn_knowledge_tool,
-        schedule_next_sleep_tool
+        schedule_next_sleep_tool,
+        inspect_memory_history_tool
     ]
