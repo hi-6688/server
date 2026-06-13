@@ -435,6 +435,13 @@ class AgentOrchestrator:
             translation_task = None
             latest_usage_metadata = None
 
+            # 💡 新增細粒度步驟追蹤器，將大腦的各個階段步驟化
+            current_step = 1
+            step_states = {
+                "thinking": False,
+                "generating": False
+            }
+
             # 呼叫 ADK 官方非同步生成器執行推理與 Tools 循環
             async for event in self.runner.run_async(
                 user_id=user_id,
@@ -442,11 +449,27 @@ class AgentOrchestrator:
                 new_message=msg_content
             ):
                 is_current_thought = False
+                has_thought_part = False
+                has_text_part = False
+
                 if event.content and event.content.parts:
                     for part in event.content.parts:
                         if getattr(part, 'thought', False) is True and part.text:
                             accumulated_thought += part.text
                             is_current_thought = True
+                            has_thought_part = True
+                        elif part.text and not getattr(part, 'thought', False):
+                            response_text += part.text
+                            has_text_part = True
+
+                # 1. 步驟遙測：大腦開始進行深度思考
+                if has_thought_part and not step_states["thinking"]:
+                    await self.telemetry_mirror.emit_telemetry_live(
+                        f"🧠 **[步驟 {current_step}：大腦推理]** AI 正在進行深度推理與思考..."
+                    )
+                    trace_list.append(f"步驟 {current_step}：大腦深度思考")
+                    step_states["thinking"] = True
+                    current_step += 1
 
                 # Gemma 並行翻譯管道重疊
                 if accumulated_thought and not is_current_thought and not translation_task:
@@ -454,23 +477,43 @@ class AgentOrchestrator:
                         self.telemetry_mirror._translate_thought_with_gemma(accumulated_thought)
                     )
 
-                # 即時工具調用語意捕獲
+                # 2. 步驟遙測：即時工具調用（在非 partial 時，代表呼叫動作確定）
                 func_calls = event.get_function_calls()
-                if func_calls:
+                if func_calls and not event.partial:
                     for fc in func_calls:
                         fc_args = fc.args if hasattr(fc, 'args') else {}
                         if fc.name == "search_specialist":
                             await self.telemetry_mirror.emit_telemetry_live(
-                                "🤝 **[任務委派]** 主大腦呼叫了工具：`AgentTool(search_specialist)`。將控制權轉交子代理。"
+                                f"🤝 **[步驟 {current_step}：任務委派]** 主大腦呼叫了工具：`AgentTool(search_specialist)`，將控制權轉交子代理。"
                             )
-                            trace_list.append("HiHiv3Agent -> 呼叫 -> search_specialist")
+                            trace_list.append(f"步驟 {current_step}：委派任務給 search_specialist")
                             self._last_executed_tools.append("search_specialist")
                         else:
                             await self.telemetry_mirror.emit_telemetry_live(
-                                f"🔧 **[主大腦 行動]** 呼叫了工具：`{fc.name}`\n  * 參數: `{fc_args}`"
+                                f"🔧 **[步驟 {current_step}：執行工具]** 呼叫了工具：`{fc.name}`\n  * 參數: `{fc_args}`"
                             )
-                            trace_list.append(f"HiHiv3Agent -> 呼叫 -> {fc.name}")
+                            trace_list.append(f"步驟 {current_step}：執行工具 {fc.name}")
                             self._last_executed_tools.append(fc.name)
+                    current_step += 1
+
+                # 3. 步驟遙測：工具回傳結果（Event 中包含 function_response，在非 partial 時發送）
+                func_responses = event.get_function_responses()
+                if func_responses and not event.partial:
+                    for fr in func_responses:
+                        await self.telemetry_mirror.emit_telemetry_live(
+                            f"📥 **[步驟 {current_step}：工具回傳]** 工具 `{fr.name}` (ID: `{fr.id}`) 執行成功，結果已送回大腦推理！"
+                        )
+                        trace_list.append(f"步驟 {current_step}：工具 {fr.name} 執行成功回傳")
+                    current_step += 1
+
+                # 4. 步驟遙測：大腦開始生成最終回答（非 thought 的正文）
+                if has_text_part and not step_states["generating"] and event.partial:
+                    await self.telemetry_mirror.emit_telemetry_live(
+                        f"✍️ **[步驟 {current_step}：正文生成]** AI 正在生成最終擬人化回答..."
+                    )
+                    trace_list.append(f"步驟 {current_step}：最終答案生成")
+                    step_states["generating"] = True
+                    current_step += 1
 
                 # Token 統計與互動 ID 提取
                 if getattr(event, 'usage_metadata', None):
@@ -479,11 +522,6 @@ class AgentOrchestrator:
                     interaction_id = event.interaction_id
                 elif event.id and not interaction_id:
                     interaction_id = event.id
-
-                if event.content and event.content.parts:
-                    for part in event.content.parts:
-                        if part.text and not getattr(part, 'thought', False):
-                            response_text += part.text
 
             # 獲取翻譯思緒 (不阻塞使用者回覆，將 Task 傳遞給背景遙測任務處理)
             translated_thought = "N/A"
