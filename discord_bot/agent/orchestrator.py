@@ -223,11 +223,12 @@ class AgentOrchestrator:
         print(f"🔧 [Orchestrator Tool] manage_fact: action={action}, user_id={user_id}, category={category}, content={content}")
         full_fact = f"[{category}] {content}"
         
+        current_guild_id = getattr(self, "_current_guild_id", "global")
         if action == "add":
-            await self.memory_service._run_mem0_with_retry(self.memory_service.memory_layer.add, full_fact, user_id=user_id)
+            await self.memory_service.add_memory(full_fact, user_id=user_id, guild_id=current_guild_id)
             return f"✅ 已記錄事實: {user_id} - {full_fact}"
         elif action == "delete":
-            await self.memory_service.remove_fact(user_id, full_fact)
+            await self.memory_service.remove_fact(user_id, full_fact, guild_id=current_guild_id)
             return f"🗑️ 已刪除事實: {user_id} - {full_fact}"
         else:
             return "❌ 未知操作。請使用 'add' 或 'delete'。"
@@ -316,6 +317,9 @@ class AgentOrchestrator:
                     current_guild_id = "dm"
             except Exception as ex_guild:
                 print(f"⚠️ [Guild Resolution] 解析 guild_id 失敗: {ex_guild}")
+
+        # 暫存當前 guild_id 供大腦 manage_fact 工具呼叫時取得
+        self._current_guild_id = current_guild_id
 
         # 確保會話存在於資料庫中
         try:

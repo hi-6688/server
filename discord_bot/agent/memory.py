@@ -85,13 +85,39 @@ class Mem0MemoryService(BaseMemoryService):
                     raise e
         raise RuntimeError("Mem0 呼叫因 API 限流多次重試失敗。")
 
+    def _resolve_namespace(self, user_id: str, guild_id: Optional[str] = None) -> str:
+        """解析物理隔離的 namespace user_id"""
+        if not guild_id or guild_id == "global":
+            return f"{user_id}_global"
+        return f"{user_id}_guild_{guild_id}"
+
+    async def add_memory(self, content: str, user_id: str, guild_id: Optional[str] = None):
+        """將事實寫入對應的物理隔離命名空間"""
+        target_user_id = self._resolve_namespace(user_id, guild_id)
+        metadata = {"guild_id": guild_id or "global"}
+        await self._run_mem0_with_retry(
+            self.memory_layer.add, 
+            content, 
+            user_id=target_user_id, 
+            metadata=metadata
+        )
+
     async def delete_all_user_memories(self, user_id: str):
         """
         物理抹除該使用者的所有隱私長期記憶，符合 GDPR 一鍵遺忘規範。
+        由於我們採用物理隔離的 Namespace，這會一次性刪除所有開頭為 user_id 的資料庫事實。
         """
         try:
-            await self._run_mem0_with_retry(self.memory_layer.delete_all, user_id=user_id)
-            print(f"🧹 [ADK MemoryService] 用戶 {user_id} 的長期記憶事實已被物理清空！")
+            import asyncpg
+            conn = await asyncpg.connect(self.db_url)
+            try:
+                # 使用 PostgreSQL 的 jsonb 欄位提取運算子 ->> 來匹配 user_id 開頭的所有事實
+                query = "DELETE FROM hihi_mem0_facts WHERE payload ->> 'user_id' LIKE $1"
+                like_pattern = f"{user_id}%"
+                await conn.execute(query, like_pattern)
+                print(f"🧹 [ADK MemoryService] 用戶 {user_id} 的長期記憶事實（所有伺服器與全域）已被物理清空！")
+            finally:
+                await conn.close()
         except Exception as e:
             print(f"❌ [ADK MemoryService] 物理抹除用戶 {user_id} 記憶失敗: {e}")
             raise e
@@ -102,36 +128,43 @@ class Mem0MemoryService(BaseMemoryService):
         app_name: str,
         user_id: str,
         query: str,
-        guild_id: Optional[str] = None, # 💡 新增 guild_id 參數，用於跨伺服器隱私隔離
+        guild_id: Optional[str] = None,
     ) -> SearchMemoryResponse:
         """
-        【自動檢索與注入技術】
-        當 Runner 啟動對話時，ADK 會在底層自動調用此函數。
-        我們在這裡直接調用 Mem0 撈取該使用者的 Facts，在 Python 記憶體中做「軟過濾」隔離不同伺服器的事實，
+        【自動檢索與注入技術 - 物理隔離版】
+        我們在這裡直接調用 Mem0 並行撈取該伺服器專屬的記憶與全域通用記憶，
         並附帶 ID 注入事實中回傳給 AI。
         """
         try:
-            # 撈取該使用者的所有長期事實清單
-            raw_results = await self._run_mem0_with_retry(self.memory_layer.get_all, filters={"user_id": user_id})
+            tasks = []
+            
+            # 1. 全域通用記憶查詢
+            global_user = self._resolve_namespace(user_id, "global")
+            tasks.append(self._run_mem0_with_retry(self.memory_layer.get_all, filters={"user_id": global_user}))
+            
+            # 2. 當前伺服器專屬記憶查詢
+            has_guild = guild_id and guild_id != "global"
+            if has_guild:
+                guild_user = self._resolve_namespace(user_id, guild_id)
+                tasks.append(self._run_mem0_with_retry(self.memory_layer.get_all, filters={"user_id": guild_user}))
+            
+            # 並行撈取所有 facts
+            query_results = await asyncio.gather(*tasks)
+            
             results_list = []
-            if isinstance(raw_results, dict):
-                results_list = raw_results.get("results", raw_results.get("memories", []))
-            elif isinstance(raw_results, list):
-                results_list = raw_results
+            for raw_results in query_results:
+                if isinstance(raw_results, dict):
+                    results_list.extend(raw_results.get("results", raw_results.get("memories", [])))
+                elif isinstance(raw_results, list):
+                    results_list.extend(raw_results)
             
             facts = []
             for item in results_list:
                 if isinstance(item, dict):
                     content = item.get('fact') or item.get('memory')
-                    # 💡 跨伺服器隱私隔離「軟過濾」邏輯：
-                    # 如果記憶不含 guild_id、或者標記為 "global" 全域、或者與當前伺服器 guild_id 一致，則允許載入。
-                    metadata = item.get('metadata', {}) or {}
-                    fact_guild_id = metadata.get('guild_id')
-                    
-                    if not fact_guild_id or fact_guild_id == "global" or (guild_id and str(fact_guild_id) == str(guild_id)):
-                        if content:
-                            fact_id = item.get('id', 'unknown')
-                            facts.append((fact_id, content))
+                    if content:
+                        fact_id = item.get('id', 'unknown')
+                        facts.append((fact_id, content))
             
             if not facts:
                 print(f"🔍 [ADK Memory] 檢索用戶 {user_id} 記憶完成：無已存 Facts (過濾後)。")
@@ -195,14 +228,12 @@ class Mem0MemoryService(BaseMemoryService):
                     
                     # 💡 優先使用傳入的 guild_id，若無則自 session.state 中讀取
                     resolved_guild_id = guild_id or (session.state.get("guild_id") if session.state else None)
-                    metadata = {"guild_id": resolved_guild_id} if resolved_guild_id else None
                     
-                    # 直接呼叫 Mem0 進行增量提煉與寫入，並附加 metadata 標籤
-                    await self._run_mem0_with_retry(
-                        self.memory_layer.add, 
+                    # 透過 add_memory 呼叫進行物理隔離寫入
+                    await self.add_memory(
                         content_str, 
                         user_id=user_id,
-                        metadata=metadata
+                        guild_id=resolved_guild_id
                     )
 
         except Exception as e:
@@ -235,20 +266,33 @@ class Mem0MemoryService(BaseMemoryService):
             print(f"❌ [ADK MemoryService] 獲取記憶歷史失敗: {e}")
             return f"❌ 獲取記憶歷史記錄失敗：`{e}`"
 
-    async def remove_fact(self, user_id: str, fact: str):
+    async def remove_fact(self, user_id: str, fact: str, guild_id: Optional[str] = None):
         """
         模糊刪除事實 (Fuzzy Delete)：
-        透過 Mem0 語意搜尋該用戶最相近的事實 ID，並調用 delete 物理抹除。
+        透過 Mem0 語意搜尋該用戶專屬與全域命名空間中最相近的事實 ID，並調用 delete 物理抹除。
         """
         try:
-            raw_results = await self._run_mem0_with_retry(self.memory_layer.search, fact, filters={"user_id": user_id})
+            tasks = []
+            global_user = self._resolve_namespace(user_id, "global")
+            tasks.append(self._run_mem0_with_retry(self.memory_layer.search, fact, filters={"user_id": global_user}))
+            
+            has_guild = guild_id and guild_id != "global"
+            if has_guild:
+                guild_user = self._resolve_namespace(user_id, guild_id)
+                tasks.append(self._run_mem0_with_retry(self.memory_layer.search, fact, filters={"user_id": guild_user}))
+                
+            search_results = await asyncio.gather(*tasks)
+            
             results_list = []
-            if isinstance(raw_results, dict):
-                results_list = raw_results.get("results", raw_results.get("memories", []))
-            elif isinstance(raw_results, list):
-                results_list = raw_results
+            for raw_results in search_results:
+                if isinstance(raw_results, dict):
+                    results_list.extend(raw_results.get("results", raw_results.get("memories", [])))
+                elif isinstance(raw_results, list):
+                    results_list.extend(raw_results)
             
             if results_list:
+                # 按照相似度排序，取得最相似的
+                results_list.sort(key=lambda x: x.get("similarity", 0.0), reverse=True)
                 first_item = results_list[0]
                 if isinstance(first_item, dict) and 'id' in first_item:
                     memory_id = first_item['id']
