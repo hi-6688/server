@@ -1,7 +1,15 @@
 # -*- coding: utf-8 -*-
 import discord
 import os
+import asyncio
 from datetime import datetime, timezone, timedelta
+from pydantic import BaseModel, Field
+from google.genai import types
+
+class TranslationResult(BaseModel):
+    translated_text: str = Field(
+        description="翻譯成繁體中文（台灣）後的內容。請僅包含翻譯後的內容本身。"
+    )
 
 class TelemetryMirror:
     def __init__(self, bot, inner_world_channel_id: int, client=None):
@@ -17,19 +25,21 @@ class TelemetryMirror:
             
         try:
             # 建立翻譯專屬的提示詞 (prompt: Gemma 翻譯專用引導詞)
-            prompt = (
-                "請將以下 AI 的英文思考過程翻譯為流暢、自然的繁體中文（台灣）。"
-                "請僅回傳翻譯後的內容，不要有任何前導詞、說明或額外的 Markdown 格式。\n\n"
-                f"英文思考內容：\n{thought_text}"
-            )
+            prompt = f"請將以下 AI 的英文思考過程翻譯為流暢、自然的繁體中文（台灣）。\n\n英文思考內容：\n{thought_text}"
             
             # 使用非同步 Client 呼叫 Gemma 4 26B (response: 翻譯模型生成之結果)
             response = await self.client.aio.models.generate_content(
                 model="models/gemma-4-26b-a4b-it",
-                contents=prompt
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=TranslationResult
+                )
             )
             if response and response.text:
-                return response.text.strip()
+                import json
+                result_data = json.loads(response.text.strip())
+                return result_data.get("translated_text", "").strip()
         except Exception as e:
             print(f"⚠️ [Gemma 4 翻譯] 失敗: {e}，將回退展示原始英文思緒。")
         return thought_text
@@ -59,7 +69,8 @@ class TelemetryMirror:
         translated_thought="N/A",
         final_speech="🤐 保持沉默 (未發言)",
         usage_metadata=None,
-        interaction_id=None
+        interaction_id=None,
+        user_profile="N/A" # 💡 新增用戶人設印象 Profile 參數
     ):
         """
         發射事後綜合報告卡 (Post-Mortem Embed)。
@@ -72,7 +83,16 @@ class TelemetryMirror:
         
         try:
             # 建立大腦呢喃內容區塊，放在 Description 享受 4000 字元超大空間 (quoted_os: 內心 OS)
-            os_thought = translated_thought if translated_thought else "N/A"
+            os_thought = "N/A"
+            if isinstance(translated_thought, asyncio.Task) or asyncio.iscoroutine(translated_thought):
+                try:
+                    os_thought = await translated_thought
+                except Exception as ex_trans:
+                    print(f"⚠️ [Telemetry] 獲取翻譯思緒失敗: {ex_trans}")
+                    os_thought = "N/A"
+            else:
+                os_thought = translated_thought if translated_thought else "N/A"
+
             if os_thought == "N/A" or not os_thought.strip():
                 os_thought = "💡 官方新版 API (Interactions v2.0) 已將思考過程限制為安全驗證簽名 (Signature)，目前未對外開放明文讀取。"
             
@@ -131,7 +151,11 @@ class TelemetryMirror:
             if facts_text and facts_text != "N/A":
                 facts_str = "\n".join([f"> {line}" for line in facts_text.split("\n") if line.strip()])
                 
-            context_val = f"**短期對話記憶** (最近 5 句):\n{history_str}\n\n**長期事實偏好**:\n{facts_str}"
+            user_profile_str = "N/A"
+            if user_profile and user_profile != "N/A":
+                user_profile_str = "\n".join([f"> {line}" for line in user_profile.split("\n") if line.strip()])
+
+            context_val = f"**滾動壓縮對話摘要**:\n{history_str}\n\n**長期人設印象 (Profile)**:\n{user_profile_str}\n\n**長期事實偏好**:\n{facts_str}"
             if len(context_val) > 1024:
                 context_val = context_val[:1000] + "\n... (記憶載入庫超長截斷)"
             embed.add_field(name="📥 [Context] 記憶載入庫", value=context_val, inline=False)

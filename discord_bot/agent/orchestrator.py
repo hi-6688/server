@@ -364,6 +364,7 @@ class AgentOrchestrator:
 
         # 實時動態檢索長期 facts 與 Profile
         facts_text = "N/A"
+        user_impression = "N/A"
         profile_injection = ""
         if self.memory_service:
             try:
@@ -572,8 +573,8 @@ class AgentOrchestrator:
                                     role_name = "User" if ev.author == "user" else ev.author
                                     normal_logs.append(f"{role_name}: {merged_text}")
                     
-                    # 整合：滾動壓縮摘要 + 最近 5 句普通對答
-                    short_history = compaction_logs + normal_logs[-5:]
+                    # 整合：只保留滾動壓縮摘要，不顯示最近普通對答
+                    short_history = compaction_logs
             except Exception as ex_hist:
                 print(f"⚠️ [Short History] 還原短期記憶錯誤: {ex_hist}")
 
@@ -596,7 +597,8 @@ class AgentOrchestrator:
                 translated_thought=translated_thought,
                 final_speech=response_text,
                 usage_metadata=latest_usage_metadata,
-                interaction_id=interaction_id
+                interaction_id=interaction_id,
+                user_profile=user_impression # 💡 新增傳入用戶印象 Profile 記憶
             ))
 
         except Exception as e:
