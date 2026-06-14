@@ -614,7 +614,8 @@ class AgentOrchestrator:
                     session_id=session_id
                 )
                 if session_obj:
-                    await self.memory_service.add_session_to_memory(session_obj, current_guild_id)
+                    # 💡 改為背景異步執行，避免 Mem0 提煉事實與 SQL 寫入阻塞對話回覆
+                    asyncio.create_task(self.memory_service.add_session_to_memory(session_obj, current_guild_id))
                     # 背景啟動印象精煉任務
                     asyncio.create_task(self.consolidate_user_profile(user_id, user_name))
             except Exception as e:
