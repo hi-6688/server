@@ -2,6 +2,12 @@
 
 本檔案記錄了專案的所有重大更新與架構變動。這對於 Agent (AI 助手) 理解專案演進至關重要。
 
+## [2026-06-14] - 部署 FRP 內網穿透服務以支援 Termux SSH 遙連
+### 🚀 架構與系統升級 (Architecture)
+- **部署 FRP 伺服器端 (frps)**：下載並配置最新的 `frp` (v0.69.1) 至 `/home/hi6688/servers/configs/frp/`，生成隨機高強度 Token 進行身份驗證，防止未授權連線。
+- **配置 systemd 開機自啟動服務**：編寫並部署 `frps.service` 至 `/etc/systemd/system/`，實現 FRP 服務的背景守護與開機自啟。
+- **防火牆規則查驗**：確認本機 UFW 防火牆狀態，準備放行 TCP 7000 (FRP 控制埠) 與 TCP 6000 (SSH 穿透埠)。
+
 ## [2026-06-10] - 遷移至 APScheduler 4.0 異步排程與 PostgreSQL 持久化
 ### 🚀 架構與系統升級 (Architecture)
 - **APScheduler 4.0.0a6 深度整合**：全面廢除原本在 `ai_chat.py` 中自行撰寫的異步心跳迴圈（`_heartbeat_loop`）、玩家感官吵醒事件（`sensory_interrupt_event`）與手動資料庫掃描器（`Crash-recovery Scanner`）等繁瑣的自造輪子。

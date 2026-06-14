@@ -1,0 +1,6 @@
+# frps.toml
+bindPort = 7000
+
+# 身份驗證，防止未授權連線
+auth.method = "token"
+auth.token = "2a1a462e6c7b2594fcf73cf0c7de0b74"

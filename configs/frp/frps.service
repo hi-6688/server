@@ -1,0 +1,14 @@
+[Unit]
+Description=FRP Server Service
+After=network.target
+
+[Service]
+Type=simple
+User=hi6688
+WorkingDirectory=/home/hi6688/servers/configs/frp
+ExecStart=/home/hi6688/servers/configs/frp/frps -c /home/hi6688/servers/configs/frp/frps.toml
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

@@ -50,8 +50,11 @@
     - 針對 `gemini-embedding-2` 截斷為 768 維向量時的 L2 歸一化修正，解決 pgvector 相似度失真問題。
 - [x] **P3: Async Heartbeat Engine (心跳引擎)**
     - 建立背景無窮迴圈 `asyncio.Task`，實作主動甦醒、防衛性休眠及獨立時間軸。
-    - 修復生理時鐘與中斷排程解耦 Bug，藉由 `sensory_interrupt_event` 與 `schedule_update_event` 雙事件排除驚醒與感官中斷的混淆問題。
- 
+- [x] **P1: FRP 內網穿透通道建置 (FRP SSH Tunnel Setup)**
+    - **部署 FRP 伺服器端**：下載並部署最新的 `frp` (v0.69.1) 至 `/home/hi6688/servers/configs/frp/`，設定強安全金鑰（Token）。
+    - **設定 systemd 自啟動服務**：建立並啟用 `frps.service` 系統服務，確保服務開機自動執行。
+    - **放行埠口通訊**：確認本機 UFW 防火牆，預留 TCP 7000 與 TCP 6000 通道。
+
 - [x] **`web_interface/` 目錄清理與重構** (已完成)
     - 舊版 HTML/JS 移至 `legacy/`
     - 偵錯腳本移至 `scripts/`
