@@ -1,7 +1,7 @@
 # 專案企劃書：Discord 數位生命體「嗨嗨 (HiHi)」
 
-> **版本**: 9.0 (Modularized AI Agent & APScheduler 4.0 Persistence)
-> **最後更新**: 2026-06-11
+> **版本**: 10.0 (Mem0 v3 Namespace Isolation & Async Write Optimization)
+> **最後更新**: 2026-06-16
 
 
 ## 1. 專案概述 (Executive Summary)
@@ -14,8 +14,8 @@
 ### 2.1 AI 模型選擇 (Model Selection)
 我們採用 **「單一模型、全子彈管線 (Unified Pipeline)」** 架構，徹底捨棄昂貴的巨型模型，專注壓榨輕量級模型的極限效能。
 
-*   **全域唯一大腦模型：Gemini 3.1 Flash Lite**
-    *   **定位與分工**: 主大腦與子大腦皆統一使用 `gemini-3.1-flash-lite`。主大腦開啟高級推理思維（`thinking_level="high"`）專職處理情感心理 OS、情商發言與長期記憶；子大腦（搜尋專家）則保持極速的一般檢索模式。
+*   **全域主要大腦模型：Gemini 3.1 Flash Lite (可動態配置)**
+    *   **定位與分工**: 預設主大腦與子大腦皆統一使用 `gemini-3.1-flash-lite`（可透過環境變數 `AI_MODEL_NAME` 彈性指定）。主大腦開啟高級推理思維（`thinking_level="high"`）專職處理情感心理 OS、情商發言與長期記憶；子大腦（搜尋專家）則保持極速的一般檢索模式。
     *   **設計考量**: 統一模型能確保 Prompt 語感的高度一致性，徹底消除跨 API 的延遲與格式轉換風險。透過多智能體分工，還能完美節省主大腦昂貴的高級推理 Token，確保在免費 API 極限內穩定生存。
 *   **語意檢索核心：Gemini Embedding 2**
     *   **定位**: 負責將記憶轉化為 768 維度向量，供 `pgvector` 進行高維度搜尋。
@@ -47,8 +47,8 @@ Discord 訊息 → 主大腦 HiHiv3Agent (High 推理) ──[呼叫 AgentTool]�
 | `schedule_next_sleep_tool` | 自訂函數 (Local) | 讓 AI 決定自己接下來要主動休眠多久並寫下鬧鐘備忘錄 |
 | `search_specialist` | 智能體委派 (AgentTool) | 委派搜尋專家進行雲端 File Search 百科檢索 (由 HiHiAgentTool 包裝) |
 
-> 💡 **長期記憶寫入實作現狀備註**：
-> 已完全拆除自製的 `Background Memory Queue` 異步佇列，全面回歸 Google 與 Mem0 官方最推崇的 **100% 同步/非同步強一致性等待**。大腦會調用 Mem0 v3 智慧記憶服務以強一致性 `await` 方式同步落盤至 PostgreSQL，徹底消除了靜默丟失與重啟導致的 RAM 記憶蒸發風險。
+> 💡 **長期記憶寫入實作現狀備註 (非同步優化版)**：
+> 大腦對話結束時的長期記憶提煉已全面優化為 **`asyncio.create_task(...)` 背景非同步委派執行**。這徹底解決了以往每次對話結束時主執行緒死等 Mem0 提煉而導致的 20 秒尾部卡頓，Bot 實現了零延遲秒回，而記憶寫入與落盤則安全地留置背景非同步完成。
 
 ### 2.3 記憶系統架構 (Memory System v7.0 - Three-Tier Hybrid Semantic Architecture)
 記憶系統為適應 4GB RAM 生產環境極限，全面對接 Google ADK 與 Mem0 官方架載，升級為高度解耦的三層式大滿貫記憶體系：
@@ -63,8 +63,8 @@ Discord 訊息 → 主大腦 HiHiv3Agent (High 推理) ──[呼叫 AgentTool]�
 > 💡 **L2 實作現狀**：中期對話情節壓縮機制已被 ADK 官方持久化結構完美兼容，歷史直接在 PostgreSQL 中滾動，後續可隨時開啟 ADK 的 Session Summary 提取功能。
 
 #### L3: 長期語意 Facts 記憶與百科 RAG (Agentic Long-Term Memory)
-*   **長期事實與偏好 (Mem0 Personalization)**：基於 **Mem0 v3 + PostgreSQL pgvector (768d)** 的正統架構，由 `Mem0MemoryService` 原生對接 ADK `BaseMemoryService`。讓 Agent 通過主動 `Tool-calling`（如 `manage_fact_tool`）或對話結束自動回調（`add_session_to_memory`）實時同步寫入與讀取用戶個人事實，達成強一致性落盤。
-*   **多智能體記憶隔離防污染 (Stateless & Scoped Memory Isolation)**：完美對齊 Mem0 官方最新最佳實踐。主大腦讀寫全局 `user_id` 情感事實記憶；而負責檢索的子 Agent `search_specialist` 被設定為 **完全無狀態 (Stateless)**，不掛載任何 Mem0 寫入與搜尋回調，物理上 100% 避免了長期記憶庫被檢索時產生的網頁雜訊污染。
+*   **長期事實與偏好 (Mem0 Personalization & Namespace Isolation)**：基於 **Mem0 v3 + PostgreSQL pgvector (768d)** 的正統架構，由 `Mem0MemoryService` 原生對接 ADK `BaseMemoryService`。主大腦在對話時，會同時並行檢索全域空間 `{user_id}_global` 與當前伺服器專屬空間 `{user_id}_guild_{guild_id}`，並合併結果。而記憶落盤時會依據對話來源物理分流寫入對應的命名空間，達成真正的伺服器物理隔離。
+*   **多智能體記憶隔離防污染 (Stateless & Scoped Memory Isolation)**：完美對齊 Mem0 官方最新最佳實踐。主大腦讀寫與檢索對應 Scoped 下的長期 Facts；而負責檢索的子 Agent `search_specialist` 被設定為 **完全無狀態 (Stateless)**，不掛載任何 Mem0 寫入與搜尋回調，物理上 100% 避免了長期記憶庫被檢索時產生的網頁雜訊污染。
 *   **百科式知識庫 RAG (Knowledge RAG)**：自建百科同步機制。AI 通過 `learn_knowledge_tool` 學習新知識時，會自動同步寫入本地文字庫，並即時上傳上架至 **Google 官方的 File Search Store** 中，由 ADK 子代理直接進行高維度雲端向量檢索。
 > 💡 **L3 實作現狀**：已完整實作 Mem0 v3 的 pgvector 長期 Facts 對接，並透過 AgentTool 與 Scoped 隔離機制掛載，在不污染記憶的前提下實現了強大的語義檢索。
 
@@ -102,6 +102,7 @@ Discord 訊息 → 主大腦 HiHiv3Agent (High 推理) ──[呼叫 AgentTool]�
 *   設立僅造物主可見的專屬 Discord 頻道 (`INNER_WORLD_CHANNEL_ID`)。配合 ADK 管線，遙測系統將實時發射字卡：
     *   **[工具執行實時遙測]**：在 AI 思考過程中，若有調用工具（如 `search_memory`、`save_memory`），將即時印出黃色的工具呼叫字卡。
     *   **[最終思考與發言決策]**：包含內心氣氛分析、私密 OS (`[ChatGenerator 情感 OS]`)，以及 `[物理行動輸出]` (最終要在 Discord 說出口的發言內容) 和邏輯分析 (`[LogicRouter 邏輯決策]`)。
+    *   > 💡 **遙測面板實作現狀優化**：為防長對話訊息洗板，已簡化最近 5 句普通對答的冗長日誌，改為僅展示滾動壓縮摘要。同時，在遙測卡片中新增展示該使用者的「長期人設印象 Profile」，方便實時監控大腦印象更新。
 
 ### 4.3 自主生理時鐘與鬧鐘排程 (Advanced Scheduler)
 *   賦予 AI 真正的「時間感知」與「未來規劃」能力。AI 可透過 `suggested_sleep_seconds` 與 `sleep_intent` 決定自己下一次醒來的時間與目的。
@@ -148,7 +149,7 @@ Discord 訊息 → 主大腦 HiHiv3Agent (High 推理) ──[呼叫 AgentTool]�
     *   > 💡 **核心記憶實作現狀備註**：核心記憶已成功注入至 System Prompt 最頂端，作為 AI 大腦最核心的行為約束，已正式生效。
 2.  **🔵 表層記憶 (Adaptive Memory)**
     *   **儲存**：PostgreSQL (memories / user_facts / knowledge)。AI 透過 Function Calling 自動維護。
-    *   > 💡 **表層記憶實作現狀備註 (v9.0/v10.0 記憶大滿貫升級)**：已全面遷移至 **Mem0 v3 智慧記憶引擎 + 本地 PostgreSQL (pgvector)**。不再使用硬性 SQL 相似度比對，而是全面啟用 Mem0 官方的時間衰減 (Memory Decay)、增量提取 (ADD-Only)、語義衝突消解 (Temporal Reasoning) 與實體連結 (Entity Linking)。並同步實裝了符合 GDPR 隱私保護的 `!forget_me` 物理銷毀指令。
+    *   > 💡 **表層記憶實作現狀備註 (v10.0 物理隔離與非同步優化版)**：已全面遷移至 **Mem0 v3 智慧記憶引擎 + 本地 PostgreSQL (pgvector)**。除了啟用時間衰減 (Memory Decay) 與實體連結等，更引入了 **`_global` 與 `_guild_` 的物理命名空間隔離架構**，徹底防止跨伺服器記憶污染。寫入落盤已全面非同步化，並提供了 GDPR 隱私權的 `!forget_me` 物理銷毀指令。
 
 ### 7.2 以人為主體 (User-Centric)
 嗨嗨的記憶圍繞每一個使用者旋轉，事實按 `user_id` 分類管理。
