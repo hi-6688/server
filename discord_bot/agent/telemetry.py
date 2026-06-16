@@ -23,10 +23,8 @@ class TelemetryMirror:
         if not self.client or not thought_text or thought_text == "N/A":
             return thought_text
             
+        prompt = f"請將以下 AI 的英文思考過程翻譯為流暢、自然的繁體中文（台灣）。\n\n英文思考內容：\n{thought_text}"
         try:
-            # 建立翻譯專屬的提示詞 (prompt: Gemma 翻譯專用引導詞)
-            prompt = f"請將以下 AI 的英文思考過程翻譯為流暢、自然的繁體中文（台灣）。\n\n英文思考內容：\n{thought_text}"
-            
             # 使用非同步 Client 呼叫 Gemma 4 26B (response: 翻譯模型生成之結果)
             response = await self.client.aio.models.generate_content(
                 model="models/gemma-4-26b-a4b-it",
@@ -41,16 +39,31 @@ class TelemetryMirror:
                 result_data = json.loads(response.text.strip())
                 return result_data.get("translated_text", "").strip()
         except Exception as e:
-            print(f"⚠️ [Gemma 4 翻譯] 失敗: {e}，將回退展示原始英文思緒。")
+            print(f"⚠️ [Gemma 4 翻譯] 失敗: {e}，正在降級嘗試使用 gemini-3.1-flash-lite...")
+            try:
+                response = await self.client.aio.models.generate_content(
+                    model="gemini-3.1-flash-lite",
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                        response_schema=TranslationResult
+                    )
+                )
+                if response and response.text:
+                    import json
+                    result_data = json.loads(response.text.strip())
+                    return result_data.get("translated_text", "").strip()
+            except Exception as fallback_err:
+                print(f"❌ [Gemini Fallback 翻譯思緒] 失敗: {fallback_err}")
         return thought_text
             
     async def _translate_generic_with_gemma(self, text: str, instruction: str) -> str:
-        """使用 Gemma-4-26b 進行通用翻譯的非同步函數"""
+        """使用 Gemma-4-26b 進行通用翻譯，並支援 gemini-3.1-flash-lite 降級"""
         if not self.client or not text or text == "N/A" or not text.strip():
             return text
             
+        prompt = f"{instruction}\n\n需要翻譯的內容：\n{text}"
         try:
-            prompt = f"{instruction}\n\n需要翻譯的內容：\n{text}"
             response = await self.client.aio.models.generate_content(
                 model="models/gemma-4-26b-a4b-it",
                 contents=prompt,
@@ -64,7 +77,22 @@ class TelemetryMirror:
                 result_data = json.loads(response.text.strip())
                 return result_data.get("translated_text", "").strip()
         except Exception as e:
-            print(f"⚠️ [Gemma 4 通用翻譯] 失敗: {e}")
+            print(f"⚠️ [Gemma 4 通用翻譯] 失敗: {e}，正在降級嘗試使用 gemini-3.1-flash-lite...")
+            try:
+                response = await self.client.aio.models.generate_content(
+                    model="gemini-3.1-flash-lite",
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                        response_schema=TranslationResult
+                    )
+                )
+                if response and response.text:
+                    import json
+                    result_data = json.loads(response.text.strip())
+                    return result_data.get("translated_text", "").strip()
+            except Exception as fallback_err:
+                print(f"❌ [Gemini Fallback 通用翻譯] 失敗: {fallback_err}")
         return text
  
     async def _get_channel(self):
