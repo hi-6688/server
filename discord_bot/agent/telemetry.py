@@ -43,7 +43,30 @@ class TelemetryMirror:
         except Exception as e:
             print(f"⚠️ [Gemma 4 翻譯] 失敗: {e}，將回退展示原始英文思緒。")
         return thought_text
-
+            
+    async def _translate_generic_with_gemma(self, text: str, instruction: str) -> str:
+        """使用 Gemma-4-26b 進行通用翻譯的非同步函數"""
+        if not self.client or not text or text == "N/A" or not text.strip():
+            return text
+            
+        try:
+            prompt = f"{instruction}\n\n需要翻譯的內容：\n{text}"
+            response = await self.client.aio.models.generate_content(
+                model="models/gemma-4-26b-a4b-it",
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=TranslationResult
+                )
+            )
+            if response and response.text:
+                import json
+                result_data = json.loads(response.text.strip())
+                return result_data.get("translated_text", "").strip()
+        except Exception as e:
+            print(f"⚠️ [Gemma 4 通用翻譯] 失敗: {e}")
+        return text
+ 
     async def _get_channel(self):
         if not self.inner_world_channel_id:
             return None
@@ -82,16 +105,34 @@ class TelemetryMirror:
             return
         
         try:
-            # 建立大腦呢喃內容區塊，放在 Description 享受 4000 字元超大空間 (quoted_os: 內心 OS)
-            os_thought = "N/A"
+            # 建立並行翻譯任務：OS 呢喃 + 長期 facts + 人設印象 Profile
+            translation_tasks = []
+            
+            # 1. 翻譯 OS 呢喃
             if isinstance(translated_thought, asyncio.Task) or asyncio.iscoroutine(translated_thought):
-                try:
-                    os_thought = await translated_thought
-                except Exception as ex_trans:
-                    print(f"⚠️ [Telemetry] 獲取翻譯思緒失敗: {ex_trans}")
-                    os_thought = "N/A"
+                translation_tasks.append(translated_thought)
             else:
-                os_thought = translated_thought if translated_thought else "N/A"
+                async def _pass(val): return val
+                translation_tasks.append(_pass(translated_thought if translated_thought else "N/A"))
+                
+            # 2. 翻譯長期事實偏好
+            async def _trans_facts(text):
+                if not text or text == "N/A" or not text.strip():
+                    return text
+                instruction = "請將以下 AI 記錄的關於該用戶的長期事實偏好（通常為英文）翻譯為自然流暢的繁體中文（台灣）。請務必保留原本的列表格式與 ID，例如：`- [id: xxx] 內容`。若原本即為中文，請保持不變。"
+                return await self._translate_generic_with_gemma(text, instruction)
+            translation_tasks.append(_trans_facts(facts_text))
+            
+            # 3. 翻譯人設印象
+            async def _trans_profile(text):
+                if not text or text == "N/A" or not text.strip():
+                    return text
+                instruction = "請將以下 AI 記錄的關於該用戶的人設印象（通常為英文）翻譯為自然流暢的繁體中文（台灣）。請保留 Markdown 格式。若原本即為中文，請保持不變。"
+                return await self._translate_generic_with_gemma(text, instruction)
+            translation_tasks.append(_trans_profile(user_profile))
+            
+            # 並行執行所有翻譯
+            os_thought, translated_facts, translated_profile = await asyncio.gather(*translation_tasks)
 
             if os_thought == "N/A" or not os_thought.strip():
                 os_thought = "💡 官方新版 API (Interactions v2.0) 已將思考過程限制為安全驗證簽名 (Signature)，目前未對外開放明文讀取。"
@@ -141,24 +182,31 @@ class TelemetryMirror:
                 vitals += f"\n⏰ 鬧鐘備忘錄: `{memory_state.sleep_intent}`"
             embed.add_field(name="⚡ 配額、休眠與 DNA 狀態", value=vitals, inline=False)
             
-            # 3. 📥 [Context] 記憶載入庫 (短期對話記憶 + 長期事實)
+            # 3. 📥 [Context] 記憶載入庫拆分為三個獨立 Field
+            # (1) 滾動對話摘要
             history_str = "N/A"
             if short_history:
                 formatted_history = [f"> {idx+1}. {line[:120]}" for idx, line in enumerate(short_history)]
                 history_str = "\n".join(formatted_history)
-                
-            facts_str = "N/A"
-            if facts_text and facts_text != "N/A":
-                facts_str = "\n".join([f"> {line}" for line in facts_text.split("\n") if line.strip()])
-                
-            user_profile_str = "N/A"
-            if user_profile and user_profile != "N/A":
-                user_profile_str = "\n".join([f"> {line}" for line in user_profile.split("\n") if line.strip()])
-
-            context_val = f"**滾動壓縮對話摘要**:\n{history_str}\n\n**長期人設印象 (Profile)**:\n{user_profile_str}\n\n**長期事實偏好**:\n{facts_str}"
-            if len(context_val) > 1024:
-                context_val = context_val[:1000] + "\n... (記憶載入庫超長截斷)"
-            embed.add_field(name="📥 [Context] 記憶載入庫", value=context_val, inline=False)
+            if len(history_str) > 1024:
+                history_str = history_str[:1000] + "\n... (對話摘要超長截斷)"
+            embed.add_field(name="💬 滾動對話摘要", value=history_str, inline=False)
+            
+            # (2) 長期人設印象 (Profile) - 帶翻譯
+            profile_val = "N/A"
+            if translated_profile and translated_profile != "N/A":
+                profile_val = "\n".join([f"> {line}" for line in translated_profile.split("\n") if line.strip()])
+            if len(profile_val) > 1024:
+                profile_val = profile_val[:1000] + "\n... (人設印象超長截斷)"
+            embed.add_field(name="👤 長期人設印象 (Profile)", value=profile_val, inline=False)
+            
+            # (3) 長期事實偏好 (Facts) - 帶翻譯
+            facts_val = "N/A"
+            if translated_facts and translated_facts != "N/A":
+                facts_val = "\n".join([f"> {line}" for line in translated_facts.split("\n") if line.strip()])
+            if len(facts_val) > 1024:
+                facts_val = facts_val[:1000] + "\n... (長期事實超長截斷)"
+            embed.add_field(name="📚 長期事實偏好 (Facts)", value=facts_val, inline=False)
             
             # 4. 🚀 執行軌跡 (Trace)
             trace_str = "N/A"
