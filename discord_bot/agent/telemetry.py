@@ -24,7 +24,7 @@ class TelemetryMirror:
             return thought_text
             
         prompt = f"請將以下 AI 的英文思考過程翻譯為流暢、自然的繁體中文（台灣）。\n\n英文思考內容：\n{thought_text}"
-        max_attempts = 2
+        max_attempts = 3
         for attempt in range(max_attempts):
             try:
                 # 使用非同步 Client 呼叫 Gemma 4 26B (response: 翻譯模型生成之結果)
@@ -43,7 +43,8 @@ class TelemetryMirror:
             except Exception as e:
                 print(f"⚠️ [Gemma 4 翻譯] 嘗試 {attempt + 1}/{max_attempts} 失敗: {e}")
                 if attempt < max_attempts - 1:
-                    await asyncio.sleep(1) # 稍作等待後重試
+                    wait_sec = attempt + 1
+                    await asyncio.sleep(wait_sec) # 遞增式等待後重試
         return thought_text
             
     async def _translate_generic_with_gemma(self, text: str, instruction: str) -> str:
@@ -52,7 +53,7 @@ class TelemetryMirror:
             return text
             
         prompt = f"{instruction}\n\n需要翻譯的內容：\n{text}"
-        max_attempts = 2
+        max_attempts = 3
         for attempt in range(max_attempts):
             try:
                 response = await self.client.aio.models.generate_content(
@@ -70,7 +71,8 @@ class TelemetryMirror:
             except Exception as e:
                 print(f"⚠️ [Gemma 4 通用翻譯] 嘗試 {attempt + 1}/{max_attempts} 失敗: {e}")
                 if attempt < max_attempts - 1:
-                    await asyncio.sleep(1) # 稍作等待後重試
+                    wait_sec = attempt + 1
+                    await asyncio.sleep(wait_sec) # 遞增式等待後重試
         return text
  
     async def _get_channel(self):
