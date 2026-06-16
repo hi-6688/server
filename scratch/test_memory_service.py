@@ -23,23 +23,30 @@ else:
 sys.path.append("/home/hi6688/servers")
 sys.path.append("/home/hi6688/servers/discord_bot")
 
-from utils.memory_manager import MemoryManager
-from utils.memory_service import Mem0MemoryService
+from agent.memory import Mem0MemoryService
 
 # 模擬 Session 結構以供測試
 class MockPart:
     def __init__(self, text):
         self.text = text
 
+class MockContent:
+    def __init__(self, parts):
+        self.parts = parts
+
 class MockTurn:
     def __init__(self, role, parts):
         self.role = role
-        self.parts = parts
+        self.author = role
+        self.content = MockContent(parts)
 
 class MockSession:
     def __init__(self, session_id, history=None):
         self.session_id = session_id
         self.history = history or []
+        self.events = history or []
+        self.user_id = session_id
+        self.state = {}
 
 async def main():
     db_url = os.getenv("DATABASE_URL")
@@ -49,13 +56,8 @@ async def main():
         print("❌ 錯誤：未設定 DATABASE_URL 或 GEMINI_API_KEY，測試中止。")
         return
 
-    print("🔌 正在初始化 MemoryManager...")
-    mm = MemoryManager(db_url=db_url, google_api_key=api_key)
-    await mm.init_pool(min_size=1, max_size=2)
-    print("🧠 MemoryManager 初始化完成且連線池已啟動。")
-
     print("\n🛠️ 正在初始化 Mem0MemoryService 原生記憶服務...")
-    memory_service = Mem0MemoryService(mm)
+    memory_service = Mem0MemoryService(db_url=db_url, google_api_key=api_key)
     print("✅ Mem0MemoryService 原生對接成功。")
 
     # 定義一個獨立的測試 user_id
@@ -65,17 +67,18 @@ async def main():
         # 🧪 測試一：手動插入一筆長期事實，驗證 search_memory 能否原生檢索並包裹為 ADK 回傳
         print("\n🧪 [TEST 1] 測試原生記憶檢索 search_memory ...")
         
-        # 先清除該 user 的可能舊事實，確保乾淨
-        # 使用 mm.memory_layer.delete_all 或是 delete
         try:
-            mm.memory_layer.delete_all(user_id=test_user_id)
+            await memory_service.delete_all_user_memories(test_user_id)
             print("🧹 已清理測試用戶的舊記憶庫")
         except Exception as e:
             print(f"⚠️ 清理舊記憶時發生錯誤（可能是首次測試）：{e}")
 
         test_fact = "這個測試用戶喜歡吃草莓冰淇淋，並且有一隻叫小橘的貓。"
         print(f"💾 正在為測試用戶 {test_user_id} 寫入事實: '{test_fact}'")
-        await mm.add_fact(user_id=test_user_id, fact=test_fact)
+        await memory_service.add_memory(
+            test_fact, 
+            user_id=test_user_id
+        )
 
         # 呼叫 search_memory 進行檢索
         print(f"🔍 正在調用 search_memory 檢索長期記憶...")
@@ -117,13 +120,29 @@ async def main():
 
         # 檢索事實庫，驗證是否成功提煉出新事實
         print("🔍 重新檢索事實庫以驗證落盤事實...")
-        all_facts = await mm.get_facts(user_id=test_user_id)
+        raw_results = await memory_service._run_mem0_with_retry(
+            memory_service.memory_layer.get_all, 
+            filters={"user_id": test_user_id}
+        )
+        
+        results_list = []
+        if isinstance(raw_results, dict):
+            results_list = raw_results.get("results", raw_results.get("memories", []))
+        elif isinstance(raw_results, list):
+            results_list = raw_results
+
+        all_facts = []
+        for item in results_list:
+            if isinstance(item, dict):
+                content = item.get('fact') or item.get('memory')
+                if content:
+                    all_facts.append(content)
+
         print(f"📋 目前該用戶的事實庫總共有 {len(all_facts)} 筆事實：")
         for idx, f in enumerate(all_facts):
             print(f"   {idx + 1}. {f}")
 
         # 驗證新事實是否已被提取並儲存
-        # 比如是否提煉出 "夜跑"、"酸痛" 或 "腿酸" 相關的語意 facts (相容中英文)
         keywords = ["夜跑", "酸痛", "跑步", "腿", "run", "sore", "leg", "night"]
         has_new_fact = any(any(k in f.lower() for k in keywords) for f in all_facts)
         assert has_new_fact, "事實提取落盤失敗，未能找到夜跑相關的新事實"
@@ -133,15 +152,10 @@ async def main():
         # 清理測試數據，保持資料庫純淨
         print("\n🧹 正在清理測試產生的事實數據...")
         try:
-            mm.memory_layer.delete_all(user_id=test_user_id)
+            await memory_service.delete_all_user_memories(test_user_id)
             print("✅ 測試數據清理完畢。")
         except Exception as e:
             print(f"⚠️ 清理測試數據失敗: {e}")
-
-        # 關閉連線池
-        print("🔌 正在關閉資料庫連線池...")
-        await mm.close_pool()
-        print("✅ 連線池已安全關閉。")
 
 if __name__ == "__main__":
     asyncio.run(main())
