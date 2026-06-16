@@ -24,25 +24,12 @@ class TelemetryMirror:
             return thought_text
             
         prompt = f"請將以下 AI 的英文思考過程翻譯為流暢、自然的繁體中文（台灣）。\n\n英文思考內容：\n{thought_text}"
-        try:
-            # 使用非同步 Client 呼叫 Gemma 4 26B (response: 翻譯模型生成之結果)
-            response = await self.client.aio.models.generate_content(
-                model="models/gemma-4-26b-a4b-it",
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    response_schema=TranslationResult
-                )
-            )
-            if response and response.text:
-                import json
-                result_data = json.loads(response.text.strip())
-                return result_data.get("translated_text", "").strip()
-        except Exception as e:
-            print(f"⚠️ [Gemma 4 翻譯] 失敗: {e}，正在降級嘗試使用 gemini-3.1-flash-lite...")
+        max_attempts = 2
+        for attempt in range(max_attempts):
             try:
+                # 使用非同步 Client 呼叫 Gemma 4 26B (response: 翻譯模型生成之結果)
                 response = await self.client.aio.models.generate_content(
-                    model="gemini-3.1-flash-lite",
+                    model="models/gemma-4-26b-a4b-it",
                     contents=prompt,
                     config=types.GenerateContentConfig(
                         response_mime_type="application/json",
@@ -53,34 +40,23 @@ class TelemetryMirror:
                     import json
                     result_data = json.loads(response.text.strip())
                     return result_data.get("translated_text", "").strip()
-            except Exception as fallback_err:
-                print(f"❌ [Gemini Fallback 翻譯思緒] 失敗: {fallback_err}")
+            except Exception as e:
+                print(f"⚠️ [Gemma 4 翻譯] 嘗試 {attempt + 1}/{max_attempts} 失敗: {e}")
+                if attempt < max_attempts - 1:
+                    await asyncio.sleep(1) # 稍作等待後重試
         return thought_text
             
     async def _translate_generic_with_gemma(self, text: str, instruction: str) -> str:
-        """使用 Gemma-4-26b 進行通用翻譯，並支援 gemini-3.1-flash-lite 降級"""
+        """使用 Gemma-4-26b 進行通用翻譯，並支援失敗時重試"""
         if not self.client or not text or text == "N/A" or not text.strip():
             return text
             
         prompt = f"{instruction}\n\n需要翻譯的內容：\n{text}"
-        try:
-            response = await self.client.aio.models.generate_content(
-                model="models/gemma-4-26b-a4b-it",
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    response_schema=TranslationResult
-                )
-            )
-            if response and response.text:
-                import json
-                result_data = json.loads(response.text.strip())
-                return result_data.get("translated_text", "").strip()
-        except Exception as e:
-            print(f"⚠️ [Gemma 4 通用翻譯] 失敗: {e}，正在降級嘗試使用 gemini-3.1-flash-lite...")
+        max_attempts = 2
+        for attempt in range(max_attempts):
             try:
                 response = await self.client.aio.models.generate_content(
-                    model="gemini-3.1-flash-lite",
+                    model="models/gemma-4-26b-a4b-it",
                     contents=prompt,
                     config=types.GenerateContentConfig(
                         response_mime_type="application/json",
@@ -91,8 +67,10 @@ class TelemetryMirror:
                     import json
                     result_data = json.loads(response.text.strip())
                     return result_data.get("translated_text", "").strip()
-            except Exception as fallback_err:
-                print(f"❌ [Gemini Fallback 通用翻譯] 失敗: {fallback_err}")
+            except Exception as e:
+                print(f"⚠️ [Gemma 4 通用翻譯] 嘗試 {attempt + 1}/{max_attempts} 失敗: {e}")
+                if attempt < max_attempts - 1:
+                    await asyncio.sleep(1) # 稍作等待後重試
         return text
  
     async def _get_channel(self):
