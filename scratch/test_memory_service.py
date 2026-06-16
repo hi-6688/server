@@ -122,7 +122,7 @@ async def main():
         print("🔍 重新檢索事實庫以驗證落盤事實...")
         raw_results = await memory_service._run_mem0_with_retry(
             memory_service.memory_layer.get_all, 
-            filters={"user_id": test_user_id}
+            filters={"user_id": f"{test_user_id}_global"}
         )
         
         results_list = []
