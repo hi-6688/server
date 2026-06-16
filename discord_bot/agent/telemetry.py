@@ -23,23 +23,17 @@ class TelemetryMirror:
         if not self.client or not thought_text or thought_text == "N/A":
             return thought_text
             
-        prompt = f"請將以下 AI 的英文思考過程翻譯為流暢、自然的繁體中文（台灣）。\n\n英文思考內容：\n{thought_text}"
+        prompt = f"請將以下 AI 的英文思考過程翻譯為流暢、自然的繁體中文（台灣）。請直接輸出翻譯後的繁體中文內容本身即可，絕對不要包含任何引導文字、前言、後語或額外的引號標記：\n\n{thought_text}"
         max_attempts = 3
         for attempt in range(max_attempts):
             try:
                 # 使用非同步 Client 呼叫 Gemma 4 26B (response: 翻譯模型生成之結果)
                 response = await self.client.aio.models.generate_content(
                     model="models/gemma-4-26b-a4b-it",
-                    contents=prompt,
-                    config=types.GenerateContentConfig(
-                        response_mime_type="application/json",
-                        response_schema=TranslationResult
-                    )
+                    contents=prompt
                 )
                 if response and response.text:
-                    import json
-                    result_data = json.loads(response.text.strip())
-                    return result_data.get("translated_text", "").strip()
+                    return response.text.strip()
             except Exception as e:
                 print(f"⚠️ [Gemma 4 翻譯] 嘗試 {attempt + 1}/{max_attempts} 失敗: {e}")
                 if attempt < max_attempts - 1:
@@ -52,22 +46,16 @@ class TelemetryMirror:
         if not self.client or not text or text == "N/A" or not text.strip():
             return text
             
-        prompt = f"{instruction}\n\n需要翻譯的內容：\n{text}"
+        prompt = f"{instruction}\n\n請直接輸出翻譯後的繁體中文內容本身即可，絕對不要包含任何引導文字、前言或後語。\n\n需要翻譯的內容：\n{text}"
         max_attempts = 3
         for attempt in range(max_attempts):
             try:
                 response = await self.client.aio.models.generate_content(
                     model="models/gemma-4-26b-a4b-it",
-                    contents=prompt,
-                    config=types.GenerateContentConfig(
-                        response_mime_type="application/json",
-                        response_schema=TranslationResult
-                    )
+                    contents=prompt
                 )
                 if response and response.text:
-                    import json
-                    result_data = json.loads(response.text.strip())
-                    return result_data.get("translated_text", "").strip()
+                    return response.text.strip()
             except Exception as e:
                 print(f"⚠️ [Gemma 4 通用翻譯] 嘗試 {attempt + 1}/{max_attempts} 失敗: {e}")
                 if attempt < max_attempts - 1:
