@@ -23,14 +23,19 @@ class TelemetryMirror:
         if not self.client or not thought_text or thought_text == "N/A":
             return thought_text
             
-        prompt = f"請將以下 AI 的英文思考過程翻譯為流暢、自然的繁體中文（台灣）。請直接輸出翻譯後的繁體中文內容本身即可，絕對不要包含任何引導文字、前言、後語或額外的引號標記：\n\n{thought_text}"
+        prompt = f"請將以下 AI 的英文思考過程翻譯為流暢、自然的繁體中文（台灣）。請直接輸出翻譯後的繁體中文內容本身即可，絕對不要包含 any 引導文字、前言、後語或額外的引號標記：\n\n{thought_text}"
         max_attempts = 3
         for attempt in range(max_attempts):
             try:
                 # 使用非同步 Client 呼叫 Gemma 4 26B (response: 翻譯模型生成之結果)
                 response = await self.client.aio.models.generate_content(
                     model="models/gemma-4-26b-a4b-it",
-                    contents=prompt
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        thinking_config=types.ThinkingConfig(
+                            thinking_budget=0  # 強制關閉思考，以極速直譯
+                        )
+                    )
                 )
                 if response and response.text:
                     return response.text.strip()
@@ -52,7 +57,12 @@ class TelemetryMirror:
             try:
                 response = await self.client.aio.models.generate_content(
                     model="models/gemma-4-26b-a4b-it",
-                    contents=prompt
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        thinking_config=types.ThinkingConfig(
+                            thinking_budget=0  # 強制關閉思考，以極速直譯
+                        )
+                    )
                 )
                 if response and response.text:
                     return response.text.strip()
