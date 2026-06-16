@@ -2,6 +2,10 @@
 
 本檔案記錄了專案的所有重大更新與架構變動。這對於 Agent (AI 助手) 理解專案演進至關重要。
 
+## [2026-06-16] - 檢查並確認 Antigravity CLI 更新
+### 🚀 效能與系統最佳化 (Performance & System)
+- **確認 Antigravity CLI 處於最新版**：執行 `agy update`，確認系統目前使用的 Antigravity CLI (`agy`) 已維持在最新版本 (`v1.0.8`)。
+
 ## [2026-06-14] - 部署 FRP 內網穿透服務以支援 Termux SSH 遙連
 ### 🚀 架構與系統升級 (Architecture)
 - **部署 FRP 伺服器端 (frps)**：下載並配置最新的 `frp` (v0.69.1) 至 `/home/hi6688/servers/configs/frp/`，生成隨機高強度 Token 進行身份驗證，防止未授權連線。
