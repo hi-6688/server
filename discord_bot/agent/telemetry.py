@@ -30,12 +30,7 @@ class TelemetryMirror:
                 # 使用非同步 Client 呼叫 Gemma 4 26B (response: 翻譯模型生成之結果)
                 response = await self.client.aio.models.generate_content(
                     model="models/gemma-4-26b-a4b-it",
-                    contents=prompt,
-                    config=types.GenerateContentConfig(
-                        thinking_config=types.ThinkingConfig(
-                            thinking_budget=0  # 強制關閉思考，以極速直譯
-                        )
-                    )
+                    contents=prompt
                 )
                 if response and response.text:
                     return response.text.strip()
@@ -57,12 +52,7 @@ class TelemetryMirror:
             try:
                 response = await self.client.aio.models.generate_content(
                     model="models/gemma-4-26b-a4b-it",
-                    contents=prompt,
-                    config=types.GenerateContentConfig(
-                        thinking_config=types.ThinkingConfig(
-                            thinking_budget=0  # 強制關閉思考，以極速直譯
-                        )
-                    )
+                    contents=prompt
                 )
                 if response and response.text:
                     return response.text.strip()
