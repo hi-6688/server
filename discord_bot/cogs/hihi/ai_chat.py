@@ -72,47 +72,52 @@ class AIChat(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, message):
-        # 🔍 偵測收到的所有訊息以供排查
-        print(f"📥 [on_message] 收到來自 {message.author.name} (Bot: {message.author.bot}) 在頻道 {message.channel.id} 的訊息: {message.content[:50]}")
-        
-        # 1. Guards
-        CONCH_BOT_ID = 1381482872845635614
-        if message.author.bot and message.author.id != CONCH_BOT_ID: return
-        
-        channel_ids_str = os.getenv("AI_CHANNEL_ID", "0").split('#')[0]
-        active_channel_ids = []
-        for cid in channel_ids_str.split(','):
-            try:
-                cid = cid.strip()
-                if cid: active_channel_ids.append(int(cid))
-            except ValueError: pass
+        try:
+            # 🔍 偵測收到的所有訊息以供排查
+            print(f"📥 [on_message] 收到來自 {message.author.name} (Bot: {message.author.bot}) 在頻道 {message.channel.id} 的訊息: {message.content[:50]}")
             
-        if not active_channel_ids:
-            active_channel_ids = [0]
+            # 1. Guards
+            CONCH_BOT_ID = 1381482872845635614
+            if message.author.bot and message.author.id != CONCH_BOT_ID: return
             
-        if message.channel.id not in active_channel_ids and not self.is_override_active: return
-        
-        # 如果是神奇嗨螺的訊息，只加入 buffer 但不觸發回覆
-        if message.author.bot and message.author.id == CONCH_BOT_ID:
-            self.message_buffer.append(message)
-            print(f"🐚 [Buffer] Conch bot message added (passive): {message.content[:30]}...")
-            return
-        
-        print(f"📨 [Buffer] New message from {message.author.display_name}: {message.content[:20]}...")
-        
-        # 透過排程器更新下一次心跳排程，將鬧鐘重設至 1 小時之後
-        await self.scheduler.schedule_next_sleep(seconds=3600, intent=None)
+            channel_ids_str = os.getenv("AI_CHANNEL_ID", "0").split('#')[0]
+            active_channel_ids = []
+            for cid in channel_ids_str.split(','):
+                try:
+                    cid = cid.strip()
+                    if cid: active_channel_ids.append(int(cid))
+                except ValueError: pass
+                
+            if not active_channel_ids:
+                active_channel_ids = [0]
+                
+            if message.channel.id not in active_channel_ids and not self.is_override_active: return
+            
+            # 如果是神奇嗨螺的訊息，只加入 buffer 但不觸發回覆
+            if message.author.bot and message.author.id == CONCH_BOT_ID:
+                self.message_buffer.append(message)
+                print(f"🐚 [Buffer] Conch bot message added (passive): {message.content[:30]}...")
+                return
+            
+            print(f"📨 [Buffer] New message from {message.author.display_name}: {message.content[:20]}...")
+            
+            # 透過排程器更新下一次心跳排程，將鬧鐘重設至 1 小時之後
+            await self.scheduler.schedule_next_sleep(seconds=3600, intent=None)
 
-        # 2. Cancel Pending Task (Interrupt)
-        if self.response_task and not self.response_task.done():
-            self.response_task.cancel()
-            print(f"🛑 [Buffer] Interrupted previous thought process!")
-        
-        # 3. Add to Buffer
-        self.message_buffer.append(message)
-        
-        # 4. Start New Task (Debounce 0.5s)
-        self.response_task = asyncio.create_task(self._process_buffer_task(message.channel))
+            # 2. Cancel Pending Task (Interrupt)
+            if self.response_task and not self.response_task.done():
+                self.response_task.cancel()
+                print(f"🛑 [Buffer] Interrupted previous thought process!")
+            
+            # 3. Add to Buffer
+            self.message_buffer.append(message)
+            
+            # 4. Start New Task (Debounce 0.5s)
+            self.response_task = asyncio.create_task(self._process_buffer_task(message.channel))
+        except Exception as e:
+            print(f"❌ [on_message] listener error: {e}")
+            import traceback
+            traceback.print_exc()
 
     async def _process_buffer_task(self, channel):
         try:
@@ -128,6 +133,8 @@ class AIChat(commands.Cog):
             print(f"🧠 [Agent] Processing batch of {len(messages_to_process)} messages...")
             last_message = messages_to_process[-1]
             self.last_message_time = time.time()
+            self.last_active_user_id = str(last_message.author.id)
+            self.last_active_user_name = last_message.author.name
             
             # Location Info
             try:
@@ -166,8 +173,26 @@ class AIChat(commands.Cog):
                             ref_content = ref_msg.content[:50] + "..." if len(ref_msg.content) > 50 else ref_msg.content
                             if not ref_content and ref_msg.attachments: ref_content = "[圖片]"
                             if not ref_content and ref_msg.stickers: ref_content = f"[貼圖: {ref_msg.stickers[0].name}]"
-                            reply_context = f"(回覆 {ref_msg.author.display_name}: \"{ref_content}\") "
-                    except: pass
+                            
+                            # 💡 計算相對時間與絕對時間戳記
+                            ref_time_tw = ref_msg.created_at.astimezone(timezone(timedelta(hours=8)))
+                            time_str = ref_time_tw.strftime('%m月%d日 %H:%M')
+                            
+                            now_tw = datetime.now(timezone(timedelta(hours=8)))
+                            delta = now_tw - ref_time_tw
+                            
+                            if delta.days > 0:
+                                relative_str = f"{delta.days}天前"
+                            elif delta.seconds >= 3600:
+                                relative_str = f"{delta.seconds // 3600}小時前"
+                            elif delta.seconds >= 60:
+                                relative_str = f"{delta.seconds // 60}分鐘前"
+                            else:
+                                relative_str = "剛剛"
+                                
+                            reply_context = f"(回覆 {ref_msg.author.display_name} 於 {time_str} ({relative_str}) 傳送的: \"{ref_content}\") "
+                    except Exception as ex_reply:
+                        print(f"⚠️ [Reply Context] 處理回覆時間出錯: {ex_reply}")
 
                 # Handle Images (Attachments)
                 if msg.attachments:
@@ -211,7 +236,9 @@ class AIChat(commands.Cog):
                 if sticker_info: text_content += f" {sticker_info}"
                 if not text_content and not msg.attachments and not msg.stickers: text_content = "(無內容)"
                 
-                user_header = f"[{msg.author.display_name} ({msg.author.name}) | 朋友 | {datetime.now(timezone(timedelta(hours=8))).strftime('%H:%M')}]\n"
+                # 💡 使用訊息真正發送的時間戳記 (msg.created_at) 對齊台灣時區，確保時間的準確性
+                msg_time_tw = msg.created_at.astimezone(timezone(timedelta(hours=8)))
+                user_header = f"[{msg.author.display_name} ({msg.author.name}) | 朋友 | {msg_time_tw.strftime('%H:%M')}]\n"
                 final_text = user_header + reply_context + text_content + "\n"
                 current_user_parts.append({"type": "text", "text": final_text})
 
@@ -219,6 +246,7 @@ class AIChat(commands.Cog):
             async with channel.typing():
                 response_text, interaction_id = await self.orchestrator.call_adk_runner(
                     user_id=str(last_message.author.id),
+                    user_name=last_message.author.name,
                     session_id=f"discord_{channel.id}",
                     new_message=current_user_parts,
                     system_instruction=system_prompt,
@@ -260,6 +288,34 @@ class AIChat(commands.Cog):
                 await status_msg.edit(content="❌ **遺忘權執行失敗**：長期記憶體尚未開啟。")
         except Exception as e:
             await status_msg.edit(content=f"❌ **遺忘權執行失敗**：在清空長期資料庫時遇到未預期錯誤：`{e}`")
+
+    @commands.command(name="profile")
+    async def profile_command(self, ctx):
+        """
+        查看嗨嗨對你的動態純文字印象 (User Profile)。
+        """
+        user_id = str(ctx.author.id)
+        user_name = ctx.author.name
+        
+        status_msg = await ctx.send("🔍 正在我的記憶深處尋找對你的印象...")
+        
+        try:
+            if self.orchestrator.memory_service:
+                impression = await self.orchestrator.memory_service.get_user_impression(user_id)
+                if impression:
+                    embed = discord.Embed(
+                        title=f"🧠 嗨嗨對 {user_name} 的印象",
+                        description=impression,
+                        color=discord.Color.purple()
+                    )
+                    embed.set_footer(text="這個印象會隨著我們的聊天動態更新喔！")
+                    await status_msg.edit(content=None, embed=embed)
+                else:
+                    await status_msg.edit(content=f"🤔 嗯...目前我對 **{user_name}** 還沒有建立深刻的文字印象喔！多和我聊聊天吧，我就會偷偷在心裡幫你寫小卡了！")
+            else:
+                await status_msg.edit(content="❌ 記憶服務尚未啟動。")
+        except Exception as e:
+            await status_msg.edit(content=f"❌ 查詢印象失敗：`{e}`")
 
 async def setup(bot):
     await bot.add_cog(AIChat(bot))

@@ -62,8 +62,11 @@ export function useSmartSocket() {
                     setBootProgress({ progress: message.data, message: message.message || '' });
                 }
                 else if (message.type === 'console_log') {
-                    // 新增收到的 log
-                    setLogs(prev => [...prev, message.data]);
+                    // 新增收到的 log (限制最多保留 1000 筆，避免記憶體洩漏)
+                    setLogs(prev => {
+                        const nextLogs = [...prev, message.data];
+                        return nextLogs.length > 1000 ? nextLogs.slice(nextLogs.length - 1000) : nextLogs;
+                    });
                 }
             } catch (err) {
                 console.error('[useSmartSocket] Parse Error:', err);

@@ -32,14 +32,24 @@
         }
     ],
     "css.lint.unknownAtRules": "ignore",
+    "terminal.integrated.cwd": "/home/hi6688/servers",
     "terminal.integrated.profiles.linux": {
+        "Antigravity CLI": {
+            "path": "/bin/bash",
+            "args": ["-c", "cd /home/hi6688/servers && /home/hi6688/.local/bin/agy --dangerously-skip-permissions"],
+            "icon": "sparkle",
+            "color": "terminal.ansiCyan",
+            "cwd": "/home/hi6688/servers"
+        },
         "Gemini CLI": {
             "path": "/bin/bash",
-            "args": ["-c", "gemini"],
+            "args": ["-c", "cd /home/hi6688/servers && /home/hi6688/.local/bin/gemini -y"],
             "icon": "sparkle",
-            "color": "terminal.ansiCyan"
+            "color": "terminal.ansiCyan",
+            "cwd": "/home/hi6688/servers"
         }
     },
+    "terminal.integrated.defaultProfile.linux": "bash",
 
     // === Python 環境設定 ===
     // 使用 discord_bot 的虛擬環境作為預設 interpreter

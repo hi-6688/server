@@ -1,19 +1,19 @@
 version: '3.8'
 
 services:
-  web-api:
-    build:
-      context: ./web_interface
-      dockerfile: Dockerfile
-    container_name: web-api
-    restart: unless-stopped
-    network_mode: host  # 使用主機網路，才能連到 GCP VPC 內網的 VM2 Agent
-    volumes:
-      - ./web_interface:/app
-      - ./discord_bot/utils:/app/utils:ro # 共享 gcp_manager
-      - ./.env:/.env:ro # 確保 proxy_helpers 能向上找到 .env
-    env_file:
-      - .env
+#  web-api:
+#    build:
+#      context: ./web_interface
+#      dockerfile: Dockerfile
+#    container_name: web-api
+#    restart: unless-stopped
+#    network_mode: host  # 使用主機網路，才能連到 GCP VPC 內網的 VM2 Agent
+#    volumes:
+#      - ./web_interface:/app
+#      - ./discord_bot/utils:/app/utils:ro # 共享 gcp_manager
+#      - ./.env:/.env:ro # 確保 proxy_helpers 能向上找到 .env
+#    env_file:
+#      - .env
 
   bot-hihi:
     build:
@@ -29,8 +29,12 @@ services:
     volumes:
       - ./discord_bot:/app
       - ./.env:/.env:ro # 確保 main.py 中 os.path.dirname(os.path.dirname(...)) 能找到 /.env
-    depends_on:
-      - web-api
+    # depends_on:
+    #   - web-api
+    deploy:
+      resources:
+        limits:
+          memory: 200M
 
   bot-conch:
     build:
@@ -46,5 +50,9 @@ services:
     volumes:
       - ./discord_bot:/app
       - ./.env:/.env:ro
-    depends_on:
-      - web-api
+    # depends_on:
+    #   - web-api
+    deploy:
+      resources:
+        limits:
+          memory: 200M

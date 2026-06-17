@@ -4,7 +4,7 @@
 
 ## [2026-06-17] - Hermes-Agent 替代評估與計畫書發布
 ### 🚀 架構與系統升級 (Architecture)
-- **完成 Hermes-Agent 與 Google ADK 參數對照**：編寫並發布 [implementation_plan.md](file:///home/hi6688/.gemini/antigravity-ide/brain/f507483e-b47b-4903-9965-cc19ca3fcfd4/implementation_plan.md)，詳列 Discord 傳輸、GenAI SDK、記憶（mem0）、內建 Loop 與遙測系統的參數對照與遷移評估。
+- **完成 Hermes-Agent 與 Google ADK 參數對照**：編寫並發布 [implementation_plan.md](file:///home/hi6688/.gemini/antigravity-ide/brain/f507483e-b47b-4903-9965-cc19ca3fcfd4/implementation_plan.md)，詳列 Discord 傳輸、GenAI SDK、長期/中短期記憶與 Context 壓縮、內建 Loop 與遙測系統的參數對照與遷移評估。
 - **環境沙盒部署完成**：已在 `/home/hi6688/servers/venv_hermes` 虛擬環境下完成 `hermes-agent` 全套依賴與主程式的安裝。
 - **記憶系統機制深度解析**：對比了 ADK 原生對接的 PostgreSQL Mem0 v3 實體鏈結圖譜，與 Hermes 採用的 Markdown 靜態注入、Nudge/Flush 觸發與 SQLite FTS5 全文檢索之架構差異。
 

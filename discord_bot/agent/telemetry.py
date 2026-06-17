@@ -23,7 +23,7 @@ class TelemetryMirror:
         if not self.client or not thought_text or thought_text == "N/A":
             return thought_text
             
-        prompt = f"請將以下 AI 的英文思考過程翻譯為流暢、自然的繁體中文（台灣）。請直接輸出翻譯後的繁體中文內容本身即可，絕對不要包含 any 引導文字、前言、後語或額外的引號標記：\n\n{thought_text}"
+        prompt = f"請將以下 AI 的英文思考過程翻譯為流暢、自然的繁體中文（台灣）。請直接輸出翻譯後的繁體中文內容本身即可，絕對不要包含任何引導文字、前言、後語或額外的引號標記：\n\n{thought_text}"
         max_attempts = 3
         for attempt in range(max_attempts):
             try:

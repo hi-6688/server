@@ -94,3 +94,4 @@ web_interface/.backup_cache/
 
 .gemini/
 gha-creds-*.json
+/discord_bot/logs/*.log

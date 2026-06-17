@@ -12,6 +12,8 @@ import glob
 
 PORT = 9999
 API_KEY = "hihi_secret_key_2026"  # Simple security token
+auto_shutdown_enabled = True # 預設開啟 10分鐘休眠
+
 
 # ==========================================
 # 智慧型串流全域變數 (Smart Connection)
@@ -48,6 +50,7 @@ class AgentHandler(http.server.BaseHTTPRequestHandler):
             self.wfile.write(b"Invalid JSON")
             return
 
+        global auto_shutdown_enabled
         action = data.get('action')
         
         if action == "execute_command":
@@ -198,6 +201,18 @@ class AgentHandler(http.server.BaseHTTPRequestHandler):
         elif action == "stop_stream":
             stop_streaming_to_vm1()
             self._send_json({"status": "success", "message": "Streaming stopped"})
+            
+        elif action == "disable_auto_shutdown":
+            auto_shutdown_enabled = False
+            cancel_timer()
+            self._send_json({"status": "success", "message": "Auto shutdown disabled"})
+            
+        elif action == "enable_auto_shutdown":
+            auto_shutdown_enabled = True
+            self._send_json({"status": "success", "message": "Auto shutdown enabled"})
+
+        elif action == "get_agent_info":
+            self._send_json({"status": "success", "auto_shutdown_enabled": auto_shutdown_enabled})
                 
         else:
             self.send_response(400)
@@ -342,7 +357,10 @@ def trigger_auto_shutdown():
 
 def reset_timer():
     """重置或啟動 10 分鐘計時炸彈"""
-    global shutdown_timer
+    global shutdown_timer, auto_shutdown_enabled
+    if not auto_shutdown_enabled:
+        print("[AutoShutdown] Auto shutdown is DISABLED by admin. Skipping timer.")
+        return
     with shutdown_lock:
         if shutdown_timer is not None:
             shutdown_timer.cancel()
