@@ -73,7 +73,7 @@ async def migrate_facts():
             try:
                 # 獲取或建立 Peer 實體
                 # peer: Honcho 使用者 Peer 實例
-                peer = honcho_client.peer(clean_peer_id)
+                peer = honcho_client.peer(clean_peer_id, metadata={})
                 
                 # 獲取 Peer 自我結論範疇
                 # conclusions_scope: 結論範疇實例
