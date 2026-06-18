@@ -42,7 +42,7 @@ class AgentOrchestrator:
         self.model_name = os.getenv("AI_MODEL_NAME", "gemini-3.1-flash-lite").split('#')[0].strip()
         
         # 專案路徑設定
-        self.project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        self.project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         self.data_dir = os.path.join(self.project_root, 'data', 'hihi')
         self.core_memory_file = os.path.join(self.data_dir, 'core_memory.md')
         
