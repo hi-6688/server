@@ -2,10 +2,11 @@
 
 本檔案記錄了專案的所有重大更新與架構變動。這對於 Agent (AI 助手) 理解專案演進至關重要。
 
-## [2026-06-18] - 記憶雙軌架構確認與 Honcho 整合規劃
+## [2026-06-18] - 完全遷移至 Hermes-Agent + Honcho 架構計畫書發布
 ### 🚀 架構與系統升級 (Architecture)
-- **確認記憶雙軌架構與 Honcho 整合**：決定保留 Discord Bot + PostgreSQL + Mem0 做為主記憶庫（保護情感隱私與遊戲事實數據），並在 [implementation_plan.md](file:///home/hi6688/.gemini/antigravity-ide/brain/f507483e-b47b-4903-9965-cc19ca3fcfd4/implementation_plan.md) 中為 `hermes-agent` 沙盒配置並引導 `Honcho` 的依賴安裝與環境設定，完成開發者專屬心智模型之全域共享規劃。
-- **睡眠固化機制設計 (Sleep Cycle)**：在計畫書中新增 Honcho 睡眠與 Dialectic Consolidation 機制的深度解析。同時，為現有 Discord Bot 設計自研的「本地睡眠反思任務」模擬方案，利用 APScheduler 4.0 在深夜觸發大腦對今日對話與 Postgres Facts 的辯證清理與去重固化。
+- **發布全面遷移計畫書**：應使用者要求，發布並覆寫 [implementation_plan.md](file:///home/hi6688/.gemini/antigravity-ide/brain/f507483e-b47b-4903-9965-cc19ca3fcfd4/implementation_plan.md) 技術評估與遷移計劃書，專注於將舊 ADK 專案徹底遷移至 Hermes-Agent + Honcho 架構。
+- **配置與遷移路徑規劃**：詳細規劃 Discord Gateway 的 YAML 整合配置、Honcho 記憶（包含 `writeFrequency: "session"` 睡眠固化機制）設定，以及自研 `migrate_to_honcho.py` 將 PostgreSQL Mem0 長期記憶與印象數據庫遷移至 Honcho 結論之腳本大綱。
+- **遙測系統轉接方案**：設計透過監聽會話日誌 JSON 來將大腦思緒即時推送至 Discord `#心裡世界` 頻道的遙測轉接機制。
 
 ## [2026-06-17] - Hermes-Agent 替代評估與計畫書發布
 ### 🚀 架構與系統升級 (Architecture)

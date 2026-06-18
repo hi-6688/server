@@ -6,9 +6,9 @@
 *嗨嗨 v7.0 核心架構升級與系統修復*
 
 - [/] **P1: NousResearch Hermes-Agent 替代 Google ADK 技術評估與遷移計畫**
-    - **對照計劃書與 Honcho 整合規劃**：編寫並發布 [implementation_plan.md](file:///home/hi6688/.gemini/antigravity-ide/brain/f507483e-b47b-4903-9965-cc19ca3fcfd4/implementation_plan.md)，確認採行「雙軌記憶與睡眠固化機制（Postgres Mem0 + Honcho CLI 聯邦 + 深夜睡眠反思排程）」與子代理模式。
-    - **環境隔離與部署**：於 `/home/hi6688/servers/venv_hermes` 部署獨立的 `hermes-agent` 與 `honcho-ai` 執行沙盒。
-    - **雙軌整合策略設計**：設計 Gemini ADK 主大腦呼叫 Hermes-Agent 子代理的適配器模式。
+    - **完全遷移計劃書與 Honcho 整合規劃**：編寫並發布 [implementation_plan.md](file:///home/hi6688/.gemini/antigravity-ide/brain/f507483e-b47b-4903-9965-cc19ca3fcfd4/implementation_plan.md)，決定將舊 ADK 專案徹底完全遷移至 Hermes-Agent + Honcho 架構。
+    - **記憶搬遷與環境部署**：於 `/home/hi6688/servers/venv_hermes` 部署獨立的 `hermes-agent` 與 `honcho-ai`，規劃自研 `migrate_to_honcho.py` 將 PostgreSQL Mem0 長期記憶數據完整導出並遷移至 Honcho 結論。
+    - **Discord Gateway 與遙測轉接設計**：規劃利用 Hermes 內建 Messaging Gateway 接管 Discord 傳輸，並透過監聽會話日誌 JSON 來將大腦思緒即時推送至 Discord `#心裡世界` 頻道的遙測轉接機制。
 
 - [x] **P0: 遷移至 APScheduler 4.0 異步排程與 PostgreSQL 持久化**
     - **排程引擎升級**：全面廢除原本在 `ai_chat.py` 中自行撰寫的異步心跳迴圈（`_heartbeat_loop`）與 `Crash-recovery Scanner` 手動資料庫比對邏輯，大一統至 APScheduler 4.0 (`4.0.0a6`) 異步框架。
