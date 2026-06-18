@@ -5,6 +5,7 @@
 ## [2026-06-18] - 記憶雙軌架構確認與 Honcho 整合規劃
 ### 🚀 架構與系統升級 (Architecture)
 - **確認記憶雙軌架構與 Honcho 整合**：決定保留 Discord Bot + PostgreSQL + Mem0 做為主記憶庫（保護情感隱私與遊戲事實數據），並在 [implementation_plan.md](file:///home/hi6688/.gemini/antigravity-ide/brain/f507483e-b47b-4903-9965-cc19ca3fcfd4/implementation_plan.md) 中為 `hermes-agent` 沙盒配置並引導 `Honcho` 的依賴安裝與環境設定，完成開發者專屬心智模型之全域共享規劃。
+- **睡眠固化機制設計 (Sleep Cycle)**：在計畫書中新增 Honcho 睡眠與 Dialectic Consolidation 機制的深度解析。同時，為現有 Discord Bot 設計自研的「本地睡眠反思任務」模擬方案，利用 APScheduler 4.0 在深夜觸發大腦對今日對話與 Postgres Facts 的辯證清理與去重固化。
 
 ## [2026-06-17] - Hermes-Agent 替代評估與計畫書發布
 ### 🚀 架構與系統升級 (Architecture)
