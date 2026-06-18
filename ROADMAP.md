@@ -6,9 +6,9 @@
 *嗨嗨 v7.0 核心架構升級與系統修復*
 
 - [/] **P1: NousResearch Hermes-Agent 替代 Google ADK 技術評估與遷移計畫**
-    - **完全遷移計劃書與 Honcho 整合規劃**：編寫並發布 [implementation_plan.md](file:///home/hi6688/.gemini/antigravity-ide/brain/f507483e-b47b-4903-9965-cc19ca3fcfd4/implementation_plan.md)，決定將舊 ADK 專案徹底完全遷移至 Hermes-Agent + Honcho 架構。
-    - **記憶搬遷與環境部署**：於 `/home/hi6688/servers/venv_hermes` 部署獨立的 `hermes-agent` 與 `honcho-ai`，規劃自研 `migrate_to_honcho.py` 將 PostgreSQL Mem0 長期記憶數據完整導出並遷移至 Honcho 結論。
-    - **Discord Gateway 與遙測轉接設計**：規劃利用 Hermes 內建 Messaging Gateway 接管 Discord 傳輸，並透過監聽會話日誌 JSON 來將大腦思緒即時推送至 Discord `#心裡世界` 頻道的遙測轉接機制。
+    - **完全本地自建計畫書發布**：編寫並發布 [implementation_plan.md](file:///home/hi6688/.gemini/antigravity-ide/brain/f507483e-b47b-4903-9965-cc19ca3fcfd4/implementation_plan.md)，決定採行「100% 本地自建開源架構」（Self-Hosted Honcho Server + Hermes-Agent），不依賴 SaaS 雲端。
+    - **本地自建環境部署與記憶搬遷**：規劃於主機使用 Docker Compose 部署開源 Honcho 服務端，並透過自研 `migrate_to_honcho.py` 腳本（已更新為本地免密碼/BaseURL 對接）將 Postgres Facts 導入本地。
+    - **Discord Gateway 與遙測設計**：由 Hermes 內建的 Messaging Gateway 接管 Discord 傳輸，並規劃透過監聽會話日誌 JSON 來將大腦思緒即時推送至 Discord `#心裡世界` 頻道的遙測轉接機制。
 
 - [x] **P0: 遷移至 APScheduler 4.0 異步排程與 PostgreSQL 持久化**
     - **排程引擎升級**：全面廢除原本在 `ai_chat.py` 中自行撰寫的異步心跳迴圈（`_heartbeat_loop`）與 `Crash-recovery Scanner` 手動資料庫比對邏輯，大一統至 APScheduler 4.0 (`4.0.0a6`) 異步框架。

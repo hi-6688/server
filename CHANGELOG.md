@@ -2,10 +2,11 @@
 
 本檔案記錄了專案的所有重大更新與架構變動。這對於 Agent (AI 助手) 理解專案演進至關重要。
 
-## [2026-06-18] - 完全遷移至 Hermes-Agent + Honcho 架構計畫書發布
+## [2026-06-18] - 完全遷移至本地自建開源 Hermes-Agent + Honcho 架構計畫發布
 ### 🚀 架構與系統升級 (Architecture)
-- **發布全面遷移計畫書**：應使用者要求，發布並覆寫 [implementation_plan.md](file:///home/hi6688/.gemini/antigravity-ide/brain/f507483e-b47b-4903-9965-cc19ca3fcfd4/implementation_plan.md) 技術評估與遷移計劃書，專注於將舊 ADK 專案徹底遷移至 Hermes-Agent + Honcho 架構。
-- **配置與遷移路徑規劃**：詳細規劃 Discord Gateway 的 YAML 整合配置、Honcho 記憶（包含 `writeFrequency: "session"` 睡眠固化機制）設定，以及自研 `migrate_to_honcho.py` 將 PostgreSQL Mem0 長期記憶與印象數據庫遷移至 Honcho 結論之腳本大綱。
+- **發布 100% 本地自建遷移計畫書**：應使用者要求，將計畫書覆寫為 [implementation_plan.md](file:///home/hi6688/.gemini/antigravity-ide/brain/f507483e-b47b-4903-9965-cc19ca3fcfd4/implementation_plan.md)，全面採行「完全本地自建自託管（Self-Hosted）」架構，捨棄外部 SaaS 雲端，保障極致的資料主權與隱私。
+- **本地 Honcho Server (Docker) 部署規劃**：計畫於伺服器上以 Docker Compose 部署完全開源的 Honcho 服務端，關閉驗證並提供本地 Gemini 大腦金鑰以實現自主睡眠固化（Sleep Cycle）。
+- **更新一鍵遷移腳本**：更新 [migrate_to_honcho.py](file:///home/hi6688/servers/scripts/migration/migrate_to_honcho.py) 腳本，改為對接本地自建端點 `http://localhost:8000` 並支援免金鑰驗證，用以搬遷 Postgres 的 Mem0 Facts 至本地 Honcho 結論。
 - **遙測系統轉接方案**：設計透過監聽會話日誌 JSON 來將大腦思緒即時推送至 Discord `#心裡世界` 頻道的遙測轉接機制。
 
 ## [2026-06-17] - Hermes-Agent 替代評估與計畫書發布
