@@ -2,6 +2,13 @@
 
 本檔案記錄了專案的所有重大更新與架構變動。這對於 Agent (AI 助手) 理解專案演進至關重要。
 
+## [2026-06-18] - 清除內建開發型人設與引導詞
+### 🔧 設定與提示詞淨化 (Configuration & Prompts)
+- **清空/改寫 prompt_builder.py 中的開發輔助詞**：清空了 `HERMES_AGENT_HELP_GUIDANCE`、`TASK_COMPLETION_GUIDANCE`、`GOOGLE_MODEL_OPERATIONAL_GUIDANCE`，並將 `DEFAULT_AGENT_IDENTITY` 改為 HiHi 的基礎聊天身份設定。
+- **淨化記憶引導詞**：將 `MEMORY_GUIDANCE` 修改為極簡功能性規則說明，完全不包含任何具體對話或生活範例，防止範例污染。
+- **全域停用寫程式模式 (coding_context)**：在 `~/.hermes/config.yaml` 中新增了 `agent.coding_context: "off"` 配置，以防止大腦在偵測到 codebase 時自動載入 senior engineer 寫程式人設。
+- **重啟服務與驗證**：重啟了 `hermes_bot` systemd 服務，並通過 CLI oneshot 測試，成功證實大腦不再提及寫程式、處理檔案等生產力助手功能，回歸趣味聊天伴侶定位。
+
 ## [2026-06-18] - 完全遷移至本地自建開源 Hermes-Agent + Honcho 架構計畫發布
 ### 🚀 架構與系統升級 (Architecture)
 - **發布 100% 本地自建遷移計畫書**：應使用者要求，將計畫書覆寫為 [implementation_plan.md](file:///home/hi6688/.gemini/antigravity-ide/brain/f507483e-b47b-4903-9965-cc19ca3fcfd4/implementation_plan.md)，全面採行「完全本地自建自託管（Self-Hosted）」架構，捨棄外部 SaaS 雲端，保障極致的資料主權與隱私。
