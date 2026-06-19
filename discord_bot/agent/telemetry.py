@@ -131,7 +131,7 @@ class TelemetryMirror:
             os_thought, translated_facts, translated_profile = await asyncio.gather(*translation_tasks)
 
             if os_thought == "N/A" or not os_thought.strip():
-                os_thought = "💡 官方新版 API (Interactions v2.0) 已將思考過程限制為安全驗證簽名 (Signature)，目前未對外開放明文讀取。"
+                os_thought = "💡 本輪對話大腦未產生顯性思緒呢喃（可能由於模型未開啟長思考，或回覆較為直接）。"
             
             quoted_os = "\n".join([f"> {line}" for line in os_thought.split("\n")])
             if len(quoted_os) > 3500:

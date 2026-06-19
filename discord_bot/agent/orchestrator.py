@@ -18,6 +18,7 @@ sys.path.insert(0, "/home/hi6688/servers/hermes-agent")
 from run_agent import AIAgent
 # Honcho: Honcho 客戶端 SDK 主類別
 from honcho import Honcho
+from google import genai
 
 # 導入 Discord 相關遙測模組
 from agent.telemetry import TelemetryMirror
@@ -57,9 +58,17 @@ class AgentOrchestrator:
             print(f"❌ [Orchestrator] Honcho 客戶端啟動失敗: {e}")
             self.honcho_client = None
 
+        # 初始化 Google GenAI 客戶端，用以處理遙測卡片的翻譯功能
+        try:
+            self.genai_client = genai.Client(api_key=self.api_key)
+            print("🤖 [Orchestrator] Gemini 官方 SDK 客戶端啟動成功")
+        except Exception as e_genai:
+            print(f"⚠️ [Orchestrator] Gemini 官方 SDK 客戶端啟動失敗: {e_genai}")
+            self.genai_client = None
+
         self.inner_world_channel_id = int(os.getenv("INNER_WORLD_CHANNEL_ID", 0))
         # telemetry_mirror: 遙測發射器實體
-        self.telemetry_mirror = TelemetryMirror(bot=self.bot, inner_world_channel_id=self.inner_world_channel_id, client=None)
+        self.telemetry_mirror = TelemetryMirror(bot=self.bot, inner_world_channel_id=self.inner_world_channel_id, client=self.genai_client)
         
         # 為了使 cogs/hihi/ai_chat.py 相容，將 memory_service 指向 self
         # memory_service: 偽裝的記憶服務
@@ -78,14 +87,6 @@ class AgentOrchestrator:
         """
         初始化 Hermes-Agent 環境（相容接口）。
         """
-        # 1. 啟動 Opentelemetry
-        try:
-            from google.adk.telemetry.setup import maybe_set_otel_providers
-            maybe_set_otel_providers()
-            print("📊 [Telemetry] Opentelemetry 系統啟動成功！")
-        except Exception as e:
-            print(f"⚠️ [Telemetry] 遙測啟動失敗: {e}")
-        
         print("🤖 [Orchestrator] Hermes-Agent 協調器初始化完成。")
 
     async def get_system_prompt(self, facts_context: str = "", location_context: str = "", knowledge_context: str = "", self_identity: str = "") -> str:
@@ -175,6 +176,8 @@ class AgentOrchestrator:
         accumulated_thought = []
         # current_step: 思考與工具執行之步驟索引
         current_step = 1
+        # accumulated_trace: 記憶體內即時軌跡收集（徹底避免 ATOF 讀檔 Race Condition）
+        accumulated_trace = []
 
         def on_thinking(text: str) -> None:
             nonlocal current_step
@@ -191,8 +194,10 @@ class AgentOrchestrator:
 
         def on_tool_start(tool_name: str, arguments: dict) -> None:
             nonlocal current_step
+            msg = f"調用工具 `{tool_name}`，參數: `{arguments}`"
+            accumulated_trace.append(msg)
             asyncio.run_coroutine_threadsafe(
-                self.telemetry_mirror.emit_telemetry_live(f"🔧 **[步驟 {current_step}：執行工具]** 呼叫了工具：`{tool_name}`\n  * 參數: `{arguments}`"),
+                self.telemetry_mirror.emit_telemetry_live(f"🔧 **[步驟 {current_step}：執行工具]** {msg}"),
                 loop
             )
             current_step += 1
@@ -201,6 +206,7 @@ class AgentOrchestrator:
             nonlocal current_step
             # 截短工具輸出以防洗版
             short_output = output[:200] + "..." if len(output) > 200 else output
+            accumulated_trace.append(f"工具結果 `{short_output}`")
             asyncio.run_coroutine_threadsafe(
                 self.telemetry_mirror.emit_telemetry_live(f"📥 **[步驟 {current_step}：工具回傳]** 工具 `{tool_name}` 執行成功，結果已送回大腦推理！\n  * 輸出: `{short_output}`"),
                 loop
@@ -269,31 +275,6 @@ class AgentOrchestrator:
         # interaction_id: 對話交互 ID
         interaction_id = result.get("session_id", session_id)
         
-        # 讀取軌跡日誌 ATOF 並轉換成 trace_events
-        # trace_events: 供遙測卡片展示的執行步驟清單
-        trace_events = []
-        try:
-            log_dir = "/home/hi6688/servers/discord_bot/logs"
-            traj_file = os.path.join(log_dir, f"trajectory-{session_id}.json")
-            if os.path.exists(traj_file):
-                with open(traj_file, "r", encoding="utf-8") as f:
-                    traj_data = json.load(f)
-                steps = traj_data.get("steps", [])
-                for step in steps:
-                    if "tool_calls" in step:
-                        for tc in step["tool_calls"]:
-                            trace_events.append(f"調用工具 `{tc.get('function_name')}`，參數: `{tc.get('arguments')}`")
-                    if "observation" in step and step["observation"]:
-                        results = step["observation"].get("results", [])
-                        for res in results:
-                            content = res.get("content", "")
-                            short_c = content[:120] + "..." if len(content) > 120 else content
-                            trace_events.append(f"工具結果 `{short_c}`")
-                    if "message" in step and step["message"]:
-                        trace_events.append(f"大腦輸出回覆正文")
-        except Exception as ex_traj:
-            print(f"⚠️ [ATOF Trajectory] 讀取解析失敗: {ex_traj}")
-
         # 整合發射綜合邏測報告卡片
         # final_thought: 大腦英文思緒純文字
         final_thought = "".join(accumulated_thought) if accumulated_thought else "N/A"
@@ -333,7 +314,7 @@ class AgentOrchestrator:
             location_info=location_info,
             daily_usage=self.cog_instance.quota_manager.daily_usage,
             daily_limit=self.cog_instance.daily_limit_requests,
-            trace_events=trace_events if trace_events else ["大腦直接生成擬人化回覆"],
+            trace_events=accumulated_trace if accumulated_trace else ["大腦直接生成擬人化回覆"],
             facts_text=facts_text,
             short_history=short_history,
             translated_thought=translation_task,
