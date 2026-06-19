@@ -60,7 +60,11 @@ class AgentOrchestrator:
 
         # 初始化 Google GenAI 客戶端，用以處理遙測卡片的翻譯功能
         try:
-            self.genai_client = genai.Client(api_key=self.api_key)
+            from google.genai import types
+            self.genai_client = genai.Client(
+                api_key=self.api_key,
+                http_options=types.HttpOptions(timeout=30_000)
+            )
             print("🤖 [Orchestrator] Gemini 官方 SDK 客戶端啟動成功")
         except Exception as e_genai:
             print(f"⚠️ [Orchestrator] Gemini 官方 SDK 客戶端啟動失敗: {e_genai}")

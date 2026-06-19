@@ -27,14 +27,11 @@ class TelemetryMirror:
         max_attempts = 3
         for attempt in range(max_attempts):
             try:
-                # 使用 asyncio.wait_for 限制同步 SDK 呼叫的最長等待時間為 25.0 秒，確保 API 有足夠時間生成 (response: 翻譯模型生成之結果)
-                response = await asyncio.wait_for(
-                    asyncio.to_thread(
-                        self.client.models.generate_content,
-                        model="models/gemma-4-26b-a4b-it",
-                        contents=prompt
-                    ),
-                    timeout=25.0
+                # 呼叫官方 SDK，其超時時間已在 Client 初始化時由 http_options 官方設定為 30 秒 (response: 翻譯模型生成之結果)
+                response = await asyncio.to_thread(
+                    self.client.models.generate_content,
+                    model="models/gemma-4-26b-a4b-it",
+                    contents=prompt
                 )
                 if response and response.text:
                     return response.text.strip()
@@ -54,14 +51,11 @@ class TelemetryMirror:
         max_attempts = 3
         for attempt in range(max_attempts):
             try:
-                # 使用 asyncio.wait_for 限制同步 SDK 呼叫的最長等待時間為 25.0 秒，確保 API 有足夠時間生成
-                response = await asyncio.wait_for(
-                    asyncio.to_thread(
-                        self.client.models.generate_content,
-                        model="models/gemma-4-26b-a4b-it",
-                        contents=prompt
-                    ),
-                    timeout=25.0
+                # 呼叫官方 SDK，其超時時間已在 Client 初始化時由 http_options 官方設定為 30 秒
+                response = await asyncio.to_thread(
+                    self.client.models.generate_content,
+                    model="models/gemma-4-26b-a4b-it",
+                    contents=prompt
                 )
                 if response and response.text:
                     return response.text.strip()
