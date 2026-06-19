@@ -189,7 +189,7 @@ class TelemetryMirror:
             except Exception as ex_dna:
                 print(f"⚠️ [Telemetry DNA] 讀取核心記憶失敗: {ex_dna}")
             
-            vitals = f"{color_emoji} 消耗配額: **{req} / {limit}** ({pct:.1f}%)\n"
+            vitals = f"{color_emoji} 消耗配額: **{req} 次** (無限制)\n"
             vitals += f"💤 自主休眠決策: **{memory_state.suggested_sleep_seconds} 秒**\n"
             vitals += f"{core_dna_status}"
             if memory_state.sleep_intent:

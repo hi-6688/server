@@ -25,7 +25,7 @@ class QuotaManager:
 
     def check_and_increment(self) -> bool:
         """
-        檢查配額，如果未滿則遞增並儲存，返回 True；如果已滿則返回 False。
+        記錄並遞增發言次數，目前已取消額度限制，恆返回 True。
         """
         quota_date_str = datetime.now(ZoneInfo("America/Los_Angeles")).strftime('%Y-%m-%d')
         
@@ -33,15 +33,7 @@ class QuotaManager:
         if self.daily_usage.get("date") != quota_date_str:
             self.daily_usage = {"date": quota_date_str, "requests": 0, "tokens": 0}
             
-        # 超限防禦
-        if self.daily_usage["requests"] >= self.daily_limit:
-            print(f"🚨 [Global Ledger] 物理超限！今日額度已用完 ({self.daily_usage['requests']}/{self.daily_limit})")
-            return False
-            
-        if self.daily_usage["requests"] >= (self.daily_limit * 0.9):
-            print(f"⚠️ [Global Ledger] 警告：今日額度已達 90% ({self.daily_usage['requests']}/{self.daily_limit})")
-            
         self.daily_usage["requests"] += 1
         self._save_usage()
-        print(f"📊 [Global Ledger] 今日累積呼叫: {self.daily_usage['requests']} 次 / {self.daily_limit} 次上限")
+        print(f"📊 [Global Ledger] 今日累積呼叫: {self.daily_usage['requests']} 次 (無額度限制)")
         return True
