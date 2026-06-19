@@ -312,26 +312,31 @@ class AgentOrchestrator:
         except Exception as ex_hist:
             print(f"⚠️ [Honcho History] 還原短期記憶錯誤: {ex_hist}")
 
-        try:
-            await self.telemetry_mirror.emit_logic_telemetry(
-                memory_state=FakeMemoryState(),
-                trigger_text=telemetry_msg,
-                location_info=location_info,
-                daily_usage=self.cog_instance.quota_manager.daily_usage,
-                daily_limit=self.cog_instance.daily_limit_requests,
-                trace_events=accumulated_trace if accumulated_trace else ["大腦直接生成擬人化回覆"],
-                facts_text=facts_text,
-                short_history=short_history,
-                translated_thought=translation_task,
-                final_speech=response_text,
-                usage_metadata=None,
-                interaction_id=interaction_id,
-                user_profile=user_profile
-            )
-        except Exception as ex_telemetry:
-            print(f"⚠️ [Orchestrator Telemetry] 發射過程拋出未捕獲例外: {ex_telemetry}")
-            import traceback
-            traceback.print_exc()
+        # 定義背景發射協程，以實現完全非同步發射遙測大卡片，避免因翻譯與傳輸造成大腦回話延遲
+        async def run_telemetry_async():
+            try:
+                await self.telemetry_mirror.emit_logic_telemetry(
+                    memory_state=FakeMemoryState(),
+                    trigger_text=telemetry_msg,
+                    location_info=location_info,
+                    daily_usage=self.cog_instance.quota_manager.daily_usage,
+                    daily_limit=self.cog_instance.daily_limit_requests,
+                    trace_events=accumulated_trace if accumulated_trace else ["大腦直接生成擬人化回覆"],
+                    facts_text=facts_text,
+                    short_history=short_history,
+                    translated_thought=translation_task,
+                    final_speech=response_text,
+                    usage_metadata=None,
+                    interaction_id=interaction_id,
+                    user_profile=user_profile
+                )
+            except Exception as ex_telemetry:
+                print(f"⚠️ [Orchestrator Telemetry] 背景發射過程拋出例外: {ex_telemetry}")
+                import traceback
+                traceback.print_exc()
+
+        # 註冊為背景 Task 執行，不阻塞大腦回話 return
+        asyncio.create_task(run_telemetry_async())
 
         return response_text, interaction_id
 

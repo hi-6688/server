@@ -27,16 +27,19 @@ class TelemetryMirror:
         max_attempts = 3
         for attempt in range(max_attempts):
             try:
-                # 使用 asyncio.to_thread 執行同步 SDK 呼叫，徹底防範非同步 API 掛起 (response: 翻譯模型生成之結果)
-                response = await asyncio.to_thread(
-                    self.client.models.generate_content,
-                    model="models/gemma-4-26b-a4b-it",
-                    contents=prompt
+                # 使用 asyncio.wait_for 限制同步 SDK 呼叫的最長等待時間為 8.0 秒，保障背景任務絕不掛起 (response: 翻譯模型生成之結果)
+                response = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        self.client.models.generate_content,
+                        model="models/gemma-4-26b-a4b-it",
+                        contents=prompt
+                    ),
+                    timeout=8.0
                 )
                 if response and response.text:
                     return response.text.strip()
             except Exception as e:
-                print(f"⚠️ [Gemma 4 翻譯] 嘗試 {attempt + 1}/{max_attempts} 失敗: {e}")
+                print(f"⚠️ [Gemma 4 翻譯] 嘗試 {attempt + 1}/{max_attempts} 失敗或超時: {e}")
                 if attempt < max_attempts - 1:
                     wait_sec = attempt + 1
                     await asyncio.sleep(wait_sec) # 遞增式等待後重試
@@ -51,16 +54,19 @@ class TelemetryMirror:
         max_attempts = 3
         for attempt in range(max_attempts):
             try:
-                # 使用 asyncio.to_thread 執行同步 SDK 呼叫，徹底防範非同步 API 掛起
-                response = await asyncio.to_thread(
-                    self.client.models.generate_content,
-                    model="models/gemma-4-26b-a4b-it",
-                    contents=prompt
+                # 使用 asyncio.wait_for 限制同步 SDK 呼叫的最長等待時間為 8.0 秒，保障背景任務絕不掛起
+                response = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        self.client.models.generate_content,
+                        model="models/gemma-4-26b-a4b-it",
+                        contents=prompt
+                    ),
+                    timeout=8.0
                 )
                 if response and response.text:
                     return response.text.strip()
             except Exception as e:
-                print(f"⚠️ [Gemma 4 通用翻譯] 嘗試 {attempt + 1}/{max_attempts} 失敗: {e}")
+                print(f"⚠️ [Gemma 4 通用翻譯] 嘗試 {attempt + 1}/{max_attempts} 失敗或超時: {e}")
                 if attempt < max_attempts - 1:
                     wait_sec = attempt + 1
                     await asyncio.sleep(wait_sec) # 遞增式等待後重試
