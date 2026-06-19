@@ -247,8 +247,11 @@ class AgentOrchestrator:
 
         # 6. 呼叫 AIAgent
         # agent: 當前對話專屬的 AI Agent 實體
+        # provider: 顯式指定提供商，以開啟長思考模式並獲取思緒 callback
+        provider = "gemini" if self.model_name.startswith("gemini") else "auto"
         agent = AIAgent(
             model=self.model_name,
+            provider=provider,
             load_soul_identity=True,
             enabled_toolsets=["memory", "core"],
             thinking_callback=on_thinking,
@@ -309,21 +312,26 @@ class AgentOrchestrator:
         except Exception as ex_hist:
             print(f"⚠️ [Honcho History] 還原短期記憶錯誤: {ex_hist}")
 
-        asyncio.create_task(self.telemetry_mirror.emit_logic_telemetry(
-            memory_state=FakeMemoryState(),
-            trigger_text=telemetry_msg,
-            location_info=location_info,
-            daily_usage=self.cog_instance.quota_manager.daily_usage,
-            daily_limit=self.cog_instance.daily_limit_requests,
-            trace_events=accumulated_trace if accumulated_trace else ["大腦直接生成擬人化回覆"],
-            facts_text=facts_text,
-            short_history=short_history,
-            translated_thought=translation_task,
-            final_speech=response_text,
-            usage_metadata=None,
-            interaction_id=interaction_id,
-            user_profile=user_profile
-        ))
+        try:
+            await self.telemetry_mirror.emit_logic_telemetry(
+                memory_state=FakeMemoryState(),
+                trigger_text=telemetry_msg,
+                location_info=location_info,
+                daily_usage=self.cog_instance.quota_manager.daily_usage,
+                daily_limit=self.cog_instance.daily_limit_requests,
+                trace_events=accumulated_trace if accumulated_trace else ["大腦直接生成擬人化回覆"],
+                facts_text=facts_text,
+                short_history=short_history,
+                translated_thought=translation_task,
+                final_speech=response_text,
+                usage_metadata=None,
+                interaction_id=interaction_id,
+                user_profile=user_profile
+            )
+        except Exception as ex_telemetry:
+            print(f"⚠️ [Orchestrator Telemetry] 發射過程拋出未捕獲例外: {ex_telemetry}")
+            import traceback
+            traceback.print_exc()
 
         return response_text, interaction_id
 

@@ -23,12 +23,13 @@ class TelemetryMirror:
         if not self.client or not thought_text or thought_text == "N/A":
             return thought_text
             
-        prompt = f"請將以下 AI 的英文思考過程翻譯為流暢、自然的繁體中文（台灣）。請直接輸出翻譯後的繁體中文內容本身即可，絕對不要包含任何引導文字、前言、後語或額外的引號標記：\n\n{thought_text}"
+        prompt = f"請將以下 AI 的英文思考過程翻譯為流暢、自然的繁體中文（台灣）。請直接輸出翻譯後的繁體中文內容本身即可，絕對不要包含 any 引導文字、前言、後語或額外的引號標記：\n\n{thought_text}"
         max_attempts = 3
         for attempt in range(max_attempts):
             try:
-                # 使用非同步 Client 呼叫 Gemma 4 26B (response: 翻譯模型生成之結果)
-                response = await self.client.aio.models.generate_content(
+                # 使用 asyncio.to_thread 執行同步 SDK 呼叫，徹底防範非同步 API 掛起 (response: 翻譯模型生成之結果)
+                response = await asyncio.to_thread(
+                    self.client.models.generate_content,
                     model="models/gemma-4-26b-a4b-it",
                     contents=prompt
                 )
@@ -50,7 +51,9 @@ class TelemetryMirror:
         max_attempts = 3
         for attempt in range(max_attempts):
             try:
-                response = await self.client.aio.models.generate_content(
+                # 使用 asyncio.to_thread 執行同步 SDK 呼叫，徹底防範非同步 API 掛起
+                response = await asyncio.to_thread(
+                    self.client.models.generate_content,
                     model="models/gemma-4-26b-a4b-it",
                     contents=prompt
                 )
@@ -67,9 +70,11 @@ class TelemetryMirror:
         if not self.inner_world_channel_id:
             return None
         channel = self.bot.get_channel(self.inner_world_channel_id)
+        print(f"DEBUG: _get_channel matching with id={self.inner_world_channel_id}, channel={channel}")
         if not channel:
             try:
                 channel = await self.bot.fetch_channel(self.inner_world_channel_id)
+                print(f"DEBUG: _get_channel fetch with id={self.inner_world_channel_id}, channel={channel}")
             except Exception as e:
                 print(f"⚠️ 遙測失敗：找不到頻道 ({self.inner_world_channel_id}): {e}")
                 return None
@@ -96,7 +101,9 @@ class TelemetryMirror:
         將空間座標、觸發訊息、配額與休眠、記憶載入庫 (短期/長期/核心DNA)、執行軌跡 (Trace) 以及大腦內部呢喃 (OS)
         以視覺化層級整合在一張精美的卡片中發送。
         """
+        print(f"DEBUG: emit_logic_telemetry started with trigger_text={repr(trigger_text)}")
         channel = await self._get_channel()
+        print(f"DEBUG: emit_logic_telemetry got channel={channel}")
         if not channel:
             return
         
@@ -149,9 +156,18 @@ class TelemetryMirror:
                 timestamp=datetime.now(timezone(timedelta(hours=8)))
             )
             
+            # 防禦性空值處理 (loc_str: 確保空間座標為字串, trig_str: 確保觸發訊息為字串)
+            loc_str = str(location_info or "").strip()
+            if not loc_str:
+                loc_str = "位置未知"
+            
+            trig_str = str(trigger_text or "").strip()
+            if not trig_str:
+                trig_str = "(無觸發訊息)"
+
             # 1. 空間座標與觸發源 (並排 inline=True)
-            short_trigger = trigger_text[:100] + "..." if len(trigger_text) > 100 else trigger_text
-            embed.add_field(name="📍 空間座標", value=f"```\n{location_info.strip()}\n```" if location_info else "```位置未知```", inline=True)
+            short_trigger = trig_str[:100] + "..." if len(trig_str) > 100 else trig_str
+            embed.add_field(name="📍 空間座標", value=f"```\n{loc_str}\n```", inline=True)
             embed.add_field(name="🎯 觸發訊息", value=f"```\n{short_trigger}\n```", inline=True)
             
             # 2. 生存指標與生理調控
@@ -249,6 +265,8 @@ class TelemetryMirror:
             await channel.send(embed=embed)
         except Exception as e:
             print(f"⚠️ 綜合邏測發送錯誤: {e}")
+            import traceback
+            traceback.print_exc()
 
     async def emit_telemetry_live(self, content):
         """實時遙測，用於播報工具執行等單行訊息。"""
