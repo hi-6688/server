@@ -5,7 +5,7 @@ import os
 import aiohttp
 import asyncio
 from dotenv import load_dotenv
-from utils.gcp_manager import GCPManager
+from hihi_utils.gcp_manager import GCPManager
 
 load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), '.env'))
 

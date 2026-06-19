@@ -1,44 +1,40 @@
 # -*- coding: utf-8 -*-
 import os
+import sys
 import time
 import asyncio
-import base64
+import json
 from datetime import datetime, timezone, timedelta
 from typing import Any, Optional, Tuple, List, Dict
 from pydantic import BaseModel, Field
 
-class DreamPrunedMemory(BaseModel):
-    consolidated_facts: list[str] = Field(
-        description="經過解決衝突、剪枝、高階反思後，決定保留的用戶重要事實與新推導出的高階反思列表"
-    )
+# 移除 honcho 後端源碼路徑，防止 utils 模組命名空間導入衝突
+# sys.path: 系統導入路徑清單
+sys.path = [p for p in sys.path if 'honcho/src' not in p]
+sys.path.insert(0, "/home/hi6688/servers/hermes-agent")
 
-class UserProfileConsolidation(BaseModel):
-    user_profile: str = Field(
-        description="一段 100 到 250 字的純文字「整體印象 (User Profile)」。請確保內容流暢、有文學感、一目了然，不需要條列式。"
-    )
+# 導入 run_agent 及 honcho
+# AIAgent: Hermes AI 代理主類別
+from run_agent import AIAgent
+# Honcho: Honcho 客戶端 SDK 主類別
+from honcho import Honcho
 
-from google import genai
-from google.genai import types
-from google.adk.agents import Agent
-from google.adk.runners import Runner
-from google.adk.apps.app import App, EventsCompactionConfig
-from google.adk.utils.context_utils import Aclosing
-
-from agent.schemas import SleepScheduleParams
-from agent.tools import HiHiAgentTool, get_agent_tools
-from agent.config import get_session_service
-from agent.memory import Mem0MemoryService
+# 導入 Discord 相關遙測模組
 from agent.telemetry import TelemetryMirror
 
 class AgentOrchestrator:
     """
     大腦編排器 (AgentOrchestrator)
-    整合並管理 Google ADK Runner/Agent 的初始化、動態 System Prompt 組裝、自訂工具、Mem0 原生記憶與即時遙測等核心大腦邏輯。
+    整合並管理 Nous Hermes-Agent 的初始化、動態 System Prompt 組裝、本地自建 Honcho 記憶讀寫與即時遙測等核心大腦邏輯。
     """
     def __init__(self, bot, cog_instance):
+        # bot: Discord 機器人實體
         self.bot = bot
+        # cog_instance: AI Chat Cog 實體
         self.cog_instance = cog_instance
+        # api_key: Gemini 驗證金鑰
         self.api_key = os.getenv("GEMINI_API_KEY")
+        # model_name: 語言模型名稱
         self.model_name = os.getenv("AI_MODEL_NAME", "gemini-3.1-flash-lite").split('#')[0].strip()
         
         # 專案路徑設定
@@ -47,84 +43,32 @@ class AgentOrchestrator:
         self.core_memory_file = os.path.join(self.data_dir, 'core_memory.md')
         
         # 載入核心 DNA 記憶
+        # core_memory_text: DNA 人設純文字
         self.core_memory_text = self._load_text(self.core_memory_file, "System Core Missing.")
         
-        # 初始化 GenAI Client
+        # 初始化 Honcho 客戶端
+        # honcho_base_url: 本地 Honcho 伺服器端點
+        self.honcho_base_url = os.getenv("HONCHO_BASE_URL", "http://localhost:8000")
         try:
-            api_base = os.getenv("GEMINI_API_BASE")
-            if api_base:
-                self.client = genai.Client(
-                    api_key=self.api_key,
-                    http_options=types.HttpOptions(base_url=api_base)
-                )
-            else:
-                self.client = genai.Client(api_key=self.api_key)
-            print(f"🤖 [Orchestrator] GenAI Client 啟動完成 (模型: {self.model_name})")
+            # honcho_client: Honcho 客戶端實體
+            self.honcho_client = Honcho(base_url=self.honcho_base_url)
+            print(f"🤖 [Orchestrator] Honcho 客戶端啟動成功 (端點: {self.honcho_base_url})")
         except Exception as e:
-            print(f"❌ [Orchestrator] GenAI Client 啟動失敗: {e}")
-            self.client = None
+            print(f"❌ [Orchestrator] Honcho 客戶端啟動失敗: {e}")
+            self.honcho_client = None
 
         self.inner_world_channel_id = int(os.getenv("INNER_WORLD_CHANNEL_ID", 0))
-        self.telemetry_mirror = TelemetryMirror(bot=self.bot, inner_world_channel_id=self.inner_world_channel_id, client=self.client)
-        self._session_traces = {} # 存放各會話執行軌跡的字典
-        self.file_search_store_name = None
-        self.runner = None
-        self.memory_service = None
+        # telemetry_mirror: 遙測發射器實體
+        self.telemetry_mirror = TelemetryMirror(bot=self.bot, inner_world_channel_id=self.inner_world_channel_id, client=None)
+        
+        # 為了使 cogs/hihi/ai_chat.py 相容，將 memory_service 指向 self
+        # memory_service: 偽裝的記憶服務
+        self.memory_service = self
+        print("🧠 [Orchestrator Hermes] 裝配啟動成功！")
 
-        # 建立 ADK 智能體與持久化 Runner
-        db_url = os.getenv("DATABASE_URL")
-        if db_url and self.api_key:
-            try:
-                # 建立生成設定，避免免費 Key 下因 Thinking 產生過大 Token 消耗
-                generation_config = types.GenerateContentConfig()
-
-                self.search_agent = Agent(
-                    model=self.model_name,
-                    name="search_specialist",
-                    description="一個專職聯網搜尋與常識百科檢索的專家。當你需要進行 Google 搜尋或查詢內部常識百科以獲取客觀事實與最新資訊時使用。你必須傳入一個字串參數 'request'，內容為你具體想搜尋的關鍵字或句子。",
-                    instruction="你是一個冷靜、理性的資訊檢索專家。你的唯一任務是使用你的 Google Search 或 File Search 工具，幫主智能體尋找精準、最新的客觀資訊。請直接把檢索到的事實整理好並回報，不需要任何擬人化或多餘的社交廢話。",
-                    generate_content_config=generation_config
-                )
-
-                self.hihi_agent = Agent(
-                    model=self.model_name,
-                    name="HiHiv3Agent",
-                    instruction=self.core_memory_text,
-                    tools=[
-                        *get_agent_tools(self),
-                        HiHiAgentTool(agent=self.search_agent, telemetry_mirror=self.telemetry_mirror, orchestrator=self)
-                    ],
-                    generate_content_config=generation_config
-                )
-
-                # 初始化會話持久化服務
-                self.session_service = get_session_service()
-                # 初始化自訂的 Mem0 官方記憶服務原生對接介面
-                self.memory_service = Mem0MemoryService(db_url=db_url, google_api_key=self.api_key)
-                
-                # 使用官方推薦的 App 容器封裝智能體，消除 Deprecation 警告
-                app = App(
-                    name="HiHiDiscordBot",
-                    root_agent=self.hihi_agent,
-                    events_compaction_config=EventsCompactionConfig(
-                        compaction_interval=6,
-                        overlap_size=2,
-                        token_threshold=50000,
-                        event_retention_size=16
-                    )
-                )
-                self.runner = Runner(
-                    app=app,
-                    session_service=self.session_service,
-                    memory_service=self.memory_service
-                )
-                print("🧠 [Orchestrator ADK] 官方 Persistent Runner 裝配啟動成功！")
-            except Exception as e:
-                print(f"❌ [Orchestrator ADK] 官方架構初始化失敗: {e}")
-                self.runner = None
-                self.memory_service = None
-
-    def _load_text(self, path, default):
+    def _load_text(self, path: str, default: str) -> str:
+        # path: 檔案路徑
+        # default: 預設純文字
         if os.path.exists(path):
             with open(path, 'r', encoding='utf-8') as f:
                 return f.read()
@@ -132,142 +76,25 @@ class AgentOrchestrator:
 
     async def initialize(self):
         """
-        異步完成 OpenTelemetry 啟動、雲端向量資料庫 (File Search Store) 之偵測與百科文件同步。
+        初始化 Hermes-Agent 環境（相容接口）。
         """
-        # 0. 啟動官方 OpenTelemetry 遙測追蹤
+        # 1. 啟動 Opentelemetry
         try:
             from google.adk.telemetry.setup import maybe_set_otel_providers
             maybe_set_otel_providers()
-            print("📊 [Telemetry] 官方 OpenTelemetry 遙測系統啟動成功！")
+            print("📊 [Telemetry] Opentelemetry 系統啟動成功！")
         except Exception as e:
-            print(f"⚠️ [Telemetry] 遙測系統啟動失敗: {e}")
-
-        # 1. 偵測/建立 Google File Search Store (Managed RAG) 並進行同步
-        if self.client:
-            try:
-                print("📁 [RAG] 正在偵測/初始化 Google 官方 File Search Store...")
-                loop = asyncio.get_running_loop()
-                stores = await loop.run_in_executor(None, lambda: self.client.file_search_stores.list())
-                target_store = None
-                if stores:
-                    for s in stores:
-                        if getattr(s, "display_name", None) == "hihi-knowledge-base":
-                            target_store = s
-                            break
-                        
-                if not target_store:
-                    print("📁 [RAG] 找不到 'hihi-knowledge-base' 向量儲存庫，正在創建...")
-                    target_store = await loop.run_in_executor(
-                        None,
-                        lambda: self.client.file_search_stores.create(
-                            config=types.CreateFileSearchStoreConfig(display_name="hihi-knowledge-base")
-                        )
-                    )
-                    print(f"📁 [RAG] 向量儲存庫創建成功！ID: {target_store.name}")
-                else:
-                    print(f"📁 [RAG] 已找到現有的向量儲存庫。ID: {target_store.name}")
-                
-                self.file_search_store_name = target_store.name
-                
-                # 自動將本地常識百科文件 upload 並同步到官方 store
-                knowledge_path = os.path.join(self.data_dir, 'knowledge.txt')
-                if os.path.exists(knowledge_path):
-                    print("📁 [RAG] 正在上傳並同步本地常識百科至雲端 Store...")
-                    await loop.run_in_executor(
-                        None,
-                        lambda: self.client.file_search_stores.upload_to_file_search_store(
-                            file_search_store_name=self.file_search_store_name,
-                            file=knowledge_path
-                        )
-                    )
-                    print("📁 [RAG] 本地常識百科已成功同步至官方雲端 Store！")
-                
-                # 將 file_search Tool 與 tool_config 動態追加至搜尋專家 Agent
-                if self.search_agent:
-                    if self.search_agent.generate_content_config is None:
-                        self.search_agent.generate_content_config = types.GenerateContentConfig()
-                    
-                    fs_tool = types.Tool(
-                        file_search=types.FileSearch(
-                            file_search_store_names=[self.file_search_store_name]
-                        )
-                    )
-                    
-                    self.search_agent.generate_content_config.tools = [fs_tool]
-                    self.search_agent.generate_content_config.tool_config = types.ToolConfig(
-                        include_server_side_tool_invocations=True
-                    )
-                    print("🧠 [ADK RAG] 官方 File Search 已成功動態追加至搜尋專家 Agent 配置！")
-
-                # 為主大腦啟用高級推理思考鏈
-                if self.hihi_agent:
-                    if self.hihi_agent.generate_content_config is None:
-                        self.hihi_agent.generate_content_config = types.GenerateContentConfig()
-                    
-                    self.hihi_agent.generate_content_config.thinking_config = types.ThinkingConfig(
-                        thinking_level="high",
-                        include_thoughts=True
-                    )
-                    print("🧠 [ADK Main Agent] 主大腦已成功啟用思考鏈！")
-            except Exception as e:
-                print(f"⚠️ [RAG] 官方 File Search 初始化或同步失敗: {e}")
-
-    async def manage_fact(self, action: str, user_id: str, content: str, category: str = "Data") -> str:
-        """
-        管理長期記憶 Facts 的介面。
-        """
-        if not self.memory_service:
-            return "錯誤：記憶服務尚未初始化。"
-
-        self._last_executed_tools.append("manage_fact")
-        print(f"🔧 [Orchestrator Tool] manage_fact: action={action}, user_id={user_id}, category={category}, content={content}")
-        full_fact = f"[{category}] {content}"
+            print(f"⚠️ [Telemetry] 遙測啟動失敗: {e}")
         
-        current_guild_id = getattr(self, "_current_guild_id", "global")
-        if action == "add":
-            await self.memory_service.add_memory(full_fact, user_id=user_id, guild_id=current_guild_id)
-            return f"✅ 已記錄事實: {user_id} - {full_fact}"
-        elif action == "delete":
-            await self.memory_service.remove_fact(user_id, full_fact, guild_id=current_guild_id)
-            return f"🗑️ 已刪除事實: {user_id} - {full_fact}"
-        else:
-            return "❌ 未知操作。請使用 'add' 或 'delete'。"
+        print("🤖 [Orchestrator] Hermes-Agent 協調器初始化完成。")
 
-    async def learn_knowledge(self, term: str, definition: str, category: str = "General") -> str:
-        """
-        學習外部新名詞並同步至雲端向量庫的介面。
-        """
-        self._last_executed_tools.append("learn_knowledge")
-        print(f"🔧 [Orchestrator Tool] learn_knowledge: term={term}, definition={definition}, category={category}")
-        
-        # 1. 寫入本地常識百科檔
-        knowledge_path = os.path.join(self.data_dir, 'knowledge.txt')
-        new_entry = f"\n* **{term}**：[{category}] {definition}\n"
-        with open(knowledge_path, "a", encoding="utf-8") as f:
-            f.write(new_entry)
-            
-        # 2. 動態同步至官方雲端 Store
-        if self.file_search_store_name:
-            try:
-                loop = asyncio.get_running_loop()
-                await loop.run_in_executor(
-                    None,
-                    lambda: self.client.file_search_stores.upload_to_file_search_store(
-                        file_search_store_name=self.file_search_store_name,
-                        file=knowledge_path
-                    )
-                )
-                print(f"✅ [RAG] 雲端知識同步完成：新條目 '{term}' 已成功索引！")
-            except Exception as e:
-                print(f"⚠️ [RAG] 雲端同步失敗: {e}")
-                
-        return f"✅ 已學習知識並同步至雲端: [{category}] {term} = {definition}"
-
-    async def get_system_prompt(self, facts_context="", location_context="", knowledge_context="", self_identity=""):
+    async def get_system_prompt(self, facts_context: str = "", location_context: str = "", knowledge_context: str = "", self_identity: str = "") -> str:
         """
         組裝完整的三明治結構 DNA 系統提示詞。
         """
+        # emoji_docs: 表情符號說明文件
         emoji_docs = self.cog_instance.emoji_service.get_emoji_prompt_docs()
+        # current_time: 台灣當前時間刻度
         current_time = datetime.now(timezone(timedelta(hours=8))).strftime('%Y年%m月%d日 %H:%M')
         
         return f"""
@@ -295,17 +122,20 @@ class AgentOrchestrator:
 # 【記憶與環境 (The Environment)】
 {knowledge_context if knowledge_context else ""}
 
-妳可以直接以普通對話文字與這個宇宙互動，並利用妳擁有的工具（如 `schedule_next_sleep_tool` 安排休眠、或 `search_specialist` 檢索資料）。請根據上述物理感官與記憶，決定妳的下一個動作。
+妳可以直接以普通對話文字與這個宇宙互動，並利用妳擁有的工具（如安排休眠或檢索資料）。請根據上述物理感官與記憶，決定妳的下一個動作。
 """
 
     async def call_adk_runner(self, user_id: str, session_id: str, new_message: Any, system_instruction: str = "", location_info: str = "", user_name: str = "Unknown") -> Tuple[str, str]:
         """
-        官方 Persistent Runner 核心驅動事件流與雙遙測實時播報發射。
+        Nous Hermes-Agent 核心驅動事件流與實時雙層遙測發射。
         """
-        if not self.runner:
-            return "😵 (ADK 官方運行時未初始化)", None
+        # 1. 檢查並遞增發言配額
+        if not self.cog_instance.quota_manager.check_and_increment():
+            print("⚠️ [Global Ledger] 今日發言額度已達上限，暫停生成。")
+            return "😵 (今天累了，我的生理能量已經用完囉，明天見！)", None
 
-        # 💡 解析當前所在的 guild_id，確保跨伺服器記憶隔離
+        # 2. 物理座標與語境建立
+        # current_guild_id: 當前 Discord 伺服器識別碼
         current_guild_id = "global"
         if session_id.startswith("discord_"):
             try:
@@ -318,29 +148,8 @@ class AgentOrchestrator:
             except Exception as ex_guild:
                 print(f"⚠️ [Guild Resolution] 解析 guild_id 失敗: {ex_guild}")
 
-        # 暫存當前 guild_id 供大腦 manage_fact 工具呼叫時取得
-        self._current_guild_id = current_guild_id
-
-        # 確保會話存在於資料庫中
-        try:
-            session = await self.session_service.get_session(
-                app_name="HiHiDiscordBot",
-                user_id=user_id,
-                session_id=session_id
-            )
-            if not session:
-                print(f"📝 [ADK Session] 會話 {session_id} 不存在於資料庫中，正在自動建立...")
-                session = await self.session_service.create_session(
-                    app_name="HiHiDiscordBot",
-                    user_id=user_id,
-                    session_id=session_id,
-                    state={"guild_id": current_guild_id}
-                )
-                print(f"✅ [ADK Session] 會話 {session_id} 建立成功！")
-        except Exception as e:
-            print(f"⚠️ [ADK Session] 確保會話存在時遇到未預期錯誤: {e}")
-
-        # 解析簡潔的對話訊息文字以供遙測與記憶搜尋
+        # 3. 提取文字訊息以進行實時遙測
+        # telemetry_msg: 用於遙測與記憶的純文字訊息
         telemetry_msg = ""
         if isinstance(new_message, str):
             telemetry_msg = new_message
@@ -353,419 +162,240 @@ class AgentOrchestrator:
         else:
             telemetry_msg = str(new_message)
 
-        # 初始化 Trace
-        self._session_traces[session_id] = []
-        trace_list = self._session_traces[session_id]
-
+        # 發射實時「訊息傳入」遙測
         short_input = telemetry_msg[:120] + "..." if len(telemetry_msg) > 120 else telemetry_msg
         await self.telemetry_mirror.emit_telemetry_live(f"💬 **[User]** 傳送了訊息：\"{short_input}\"")
-        await self.telemetry_mirror.emit_telemetry_live(f"🧠 **[主大腦 思考中]** 評估任務...")
-        trace_list.append("主大腦評估任務中...")
+        await self.telemetry_mirror.emit_telemetry_live(f"🧠 **[大腦 ReAct 思考中]** 評估任務與啟動 ReAct 工具循環...")
 
-        # 實時動態檢索長期 facts 與 Profile
-        facts_text = "N/A"
-        user_impression = "N/A"
-        profile_injection = ""
-        if self.memory_service:
-            try:
-                # 同時讀取動態知識 (User Profile) 與檢索 Mem0 長期 facts (並行查詢)
-                user_impression_task = self.memory_service.get_user_impression(user_id)
-                facts_response_task = self.memory_service.search_memory(
-                    app_name="HiHiDiscordBot",
-                    user_id=user_id,
-                    query=telemetry_msg,
-                    guild_id=current_guild_id # 💡 帶入當前 guild_id 進行過濾
+        # 4. 初始化非同步 Callback
+        # loop: 目前執行協程的事件循環
+        loop = asyncio.get_running_loop()
+        
+        # accumulated_thought: 累積的大腦英文思緒過程
+        accumulated_thought = []
+        # current_step: 思考與工具執行之步驟索引
+        current_step = 1
+
+        def on_thinking(text: str) -> None:
+            nonlocal current_step
+            if text:
+                asyncio.run_coroutine_threadsafe(
+                    self.telemetry_mirror.emit_telemetry_live(f"🧠 **[步驟 {current_step}：大腦推理]** {text}"),
+                    loop
                 )
-                user_impression, facts_response = await asyncio.gather(
-                    user_impression_task,
-                    facts_response_task
-                )
+                current_step += 1
 
-                if user_impression:
-                    profile_injection = f"【長期人設印象】\n{user_impression}\n\n"
-                    print(f"🧠 [ADK Memory] 成功載入並注入使用者 {user_name} ({user_id}) 的長期人設印象 Profile！")
-                    trace_list.append("大腦載入長期人設印象 Profile")
+        def on_reasoning(text: str) -> None:
+            if text:
+                accumulated_thought.append(text)
 
-                if facts_response and facts_response.memories:
-                    facts_text = facts_response.memories[0].content.parts[0].text
-                    system_instruction = f"{profile_injection}{facts_text}\n\n{system_instruction}"
-                    print(f"🧠 [ADK Memory] 成功為對話預載並自動注入長期 Facts 偏好庫！")
-                    trace_list.append("大腦載入長期記憶 Facts")
-                elif profile_injection:
-                    # 如果只有 Profile 沒有 facts
-                    system_instruction = f"{profile_injection}{system_instruction}"
-
-            except Exception as e:
-                print(f"⚠️ [ADK Memory] 並行預載 facts/profile 時發生未預期錯誤: {e}")
-
-        # 動態更新大腦 System Prompt
-        if system_instruction:
-            self.hihi_agent.instruction = system_instruction
-
-        # 格式轉換為 ADK Content 類型
-        msg_content = None
-        if isinstance(new_message, str):
-            msg_content = types.Content(
-                role="user",
-                parts=[types.Part.from_text(text=new_message)]
+        def on_tool_start(tool_name: str, arguments: dict) -> None:
+            nonlocal current_step
+            asyncio.run_coroutine_threadsafe(
+                self.telemetry_mirror.emit_telemetry_live(f"🔧 **[步驟 {current_step}：執行工具]** 呼叫了工具：`{tool_name}`\n  * 參數: `{arguments}`"),
+                loop
             )
-        elif isinstance(new_message, list):
-            parts = []
-            for p in new_message:
-                if p.get("type") == "text":
-                    parts.append(types.Part.from_text(text=p["text"]))
-                elif p.get("type") == "image":
-                    raw_data = base64.b64decode(p["data"])
-                    parts.append(types.Part.from_bytes(data=raw_data, mime_type=p["mime_type"]))
-            msg_content = types.Content(role="user", parts=parts)
-        else:
-            msg_content = new_message
+            current_step += 1
 
-        # 初始化工具記錄
-        self._last_executed_tools = []
-        response_text = ""
-        interaction_id = None
+        def on_tool_complete(tool_name: str, status: str, output: str) -> None:
+            nonlocal current_step
+            # 截短工具輸出以防洗版
+            short_output = output[:200] + "..." if len(output) > 200 else output
+            asyncio.run_coroutine_threadsafe(
+                self.telemetry_mirror.emit_telemetry_live(f"📥 **[步驟 {current_step}：工具回傳]** 工具 `{tool_name}` 執行成功，結果已送回大腦推理！\n  * 輸出: `{short_output}`"),
+                loop
+            )
+            current_step += 1
 
-        try:
-            # 檢查並遞增發言配額
-            if not self.cog_instance.quota_manager.check_and_increment():
-                print("⚠️ [Global Ledger] 今日發言額度已達上限，暫停生成。")
-                return "😵 (今天累了，我的生理能量已經用完囉，明天見！)", None
+        # 5. 動態組裝 System Prompt
+        # clean_peer_id: 乾淨的 Peer ID
+        clean_peer_id = "".join(c for c in user_id if c.isalnum() or c in ("-", "_"))
+        # facts_text: 當前使用者的事實偏好
+        facts_text = "N/A"
+        # user_profile: 當前使用者的印象摘要
+        user_profile = "N/A"
 
-            accumulated_thought = ""
-            translation_task = None
-            latest_usage_metadata = None
-
-            # 💡 新增細粒度步驟追蹤器，將大腦的各個階段步驟化
-            current_step = 1
-            step_states = {
-                "thinking": False,
-                "generating": False
-            }
-
-            # 呼叫 ADK 官方非同步生成器執行推理與 Tools 循環
-            async for event in self.runner.run_async(
-                user_id=user_id,
-                session_id=session_id,
-                new_message=msg_content
-            ):
-                is_current_thought = False
-                has_thought_part = False
-                has_text_part = False
-
-                if event.content and event.content.parts:
-                    for part in event.content.parts:
-                        if getattr(part, 'thought', False) is True and part.text:
-                            accumulated_thought += part.text
-                            is_current_thought = True
-                            has_thought_part = True
-                        elif part.text and not getattr(part, 'thought', False):
-                            response_text += part.text
-                            has_text_part = True
-
-                # 1. 步驟遙測：大腦開始進行深度思考
-                if has_thought_part and not step_states["thinking"]:
-                    await self.telemetry_mirror.emit_telemetry_live(
-                        f"🧠 **[步驟 {current_step}：大腦推理]** AI 正在進行深度推理與思考..."
-                    )
-                    trace_list.append(f"步驟 {current_step}：大腦深度思考")
-                    step_states["thinking"] = True
-                    current_step += 1
-
-                # Gemma 並行翻譯管道重疊
-                if accumulated_thought and not is_current_thought and not translation_task:
-                    translation_task = asyncio.create_task(
-                        self.telemetry_mirror._translate_thought_with_gemma(accumulated_thought)
-                    )
-
-                # 2. 步驟遙測：即時工具調用（在非 partial 時，代表呼叫動作確定）
-                func_calls = event.get_function_calls()
-                if func_calls and not event.partial:
-                    for fc in func_calls:
-                        fc_args = fc.args if hasattr(fc, 'args') else {}
-                        if fc.name == "search_specialist":
-                            await self.telemetry_mirror.emit_telemetry_live(
-                                f"🤝 **[步驟 {current_step}：任務委派]** 主大腦呼叫了工具：`AgentTool(search_specialist)`，將控制權轉交子代理。"
-                            )
-                            trace_list.append(f"步驟 {current_step}：委派任務給 search_specialist")
-                            self._last_executed_tools.append("search_specialist")
-                        else:
-                            await self.telemetry_mirror.emit_telemetry_live(
-                                f"🔧 **[步驟 {current_step}：執行工具]** 呼叫了工具：`{fc.name}`\n  * 參數: `{fc_args}`"
-                            )
-                            trace_list.append(f"步驟 {current_step}：執行工具 {fc.name}")
-                            self._last_executed_tools.append(fc.name)
-                    current_step += 1
-
-                # 3. 步驟遙測：工具回傳結果（Event 中包含 function_response，在非 partial 時發送）
-                func_responses = event.get_function_responses()
-                if func_responses and not event.partial:
-                    for fr in func_responses:
-                        await self.telemetry_mirror.emit_telemetry_live(
-                            f"📥 **[步驟 {current_step}：工具回傳]** 工具 `{fr.name}` (ID: `{fr.id}`) 執行成功，結果已送回大腦推理！"
-                        )
-                        trace_list.append(f"步驟 {current_step}：工具 {fr.name} 執行成功回傳")
-                    current_step += 1
-
-                # 4. 步驟遙測：大腦開始生成最終回答（非 thought 的正文）
-                if has_text_part and not step_states["generating"] and event.partial:
-                    await self.telemetry_mirror.emit_telemetry_live(
-                        f"✍️ **[步驟 {current_step}：正文生成]** AI 正在生成最終擬人化回答..."
-                    )
-                    trace_list.append(f"步驟 {current_step}：最終答案生成")
-                    step_states["generating"] = True
-                    current_step += 1
-
-                # Token 統計與互動 ID 提取
-                if getattr(event, 'usage_metadata', None):
-                    latest_usage_metadata = event.usage_metadata
-                if getattr(event, 'interaction_id', None):
-                    interaction_id = event.interaction_id
-                elif event.id and not interaction_id:
-                    interaction_id = event.id
-
-            # 獲取翻譯思緒 (不阻塞使用者回覆，將 Task 傳遞給背景遙測任務處理)
-            translated_thought = "N/A"
-            if translation_task:
-                translated_thought = translation_task
-            elif accumulated_thought:
-                translated_thought = asyncio.create_task(
-                    self.telemetry_mirror._translate_thought_with_gemma(accumulated_thought)
-                )
-
-            # RAG 後續潤飾遙測
-            if "search_specialist" in self._last_executed_tools:
-                await self.telemetry_mirror.emit_telemetry_live(
-                    "🧠 **[主大腦 思考中]** 收到報告，準備進行最終擬人化潤飾..."
-                )
-                trace_list.append("主大腦獲得報告並彙整潤飾")
-            else:
-                trace_list.append("主大腦完成思考與回覆生成")
-
-            # 還原短期歷史對話
-            short_history = []
+        # 從 Honcho 撈取記憶
+        if self.honcho_client:
             try:
-                session_obj = await self.session_service.get_session(
-                    app_name="HiHiDiscordBot",
-                    user_id=user_id,
-                    session_id=session_id
-                )
-                if session_obj and session_obj.events:
-                    compaction_logs = []
-                    normal_logs = []
-                    for ev in session_obj.events:
-                        # 1. 檢查是否為官方 ADK 的滾動壓縮事件 (Compacted Event)
-                        if ev.actions and getattr(ev.actions, "compaction", None):
-                            try:
-                                compaction_action = ev.actions.compaction
-                                if compaction_action.compacted_content and compaction_action.compacted_content.parts:
-                                    comp_text = compaction_action.compacted_content.parts[0].text
-                                    if comp_text:
-                                        compaction_logs.append(f"📜 [歷史滾動壓縮摘要]: {comp_text.strip()}")
-                            except Exception as ex_comp:
-                                print(f"⚠️ [Telemetry Compaction] 解析壓縮事件失敗: {ex_comp}")
-                        # 2. 一般對話事件
-                        elif ev.content and ev.content.parts:
-                            text_parts = [p.text for p in ev.content.parts if p.text and not getattr(p, 'thought', False)]
-                            if text_parts:
-                                merged_text = " ".join(text_parts).strip()
-                                if merged_text:
-                                    role_name = "User" if ev.author == "user" else ev.author
-                                    normal_logs.append(f"{role_name}: {merged_text}")
-                    
-                    # 整合：只保留滾動壓縮摘要，不顯示最近普通對答
-                    short_history = compaction_logs
-            except Exception as ex_hist:
-                print(f"⚠️ [Short History] 還原短期記憶錯誤: {ex_hist}")
-
-            # 發射整合之綜合報告卡 (Post-Mortem Embed)
-            class FakeMemoryState(BaseModel):
-                needs_reply: bool = True
-                current_goal: str = "與親愛的使用者進行貼心交流"
-                suggested_sleep_seconds: int = getattr(self.cog_instance, "next_sleep_duration", 3600)
-                sleep_intent: Optional[str] = getattr(self.cog_instance, "sleep_intent", None)
+                peer = self.honcho_client.peer(clean_peer_id)
+                conclusions_scope = peer.conclusions_of(clean_peer_id)
                 
-            asyncio.create_task(self.telemetry_mirror.emit_logic_telemetry(
-                memory_state=FakeMemoryState(),
-                trigger_text=telemetry_msg,
-                location_info=location_info,
-                daily_usage=self.cog_instance.quota_manager.daily_usage,
-                daily_limit=self.cog_instance.daily_limit_requests,
-                trace_events=trace_list,
-                facts_text=facts_text,
-                short_history=short_history,
-                translated_thought=translated_thought,
-                final_speech=response_text,
-                usage_metadata=latest_usage_metadata,
-                interaction_id=interaction_id,
-                user_profile=user_impression # 💡 新增傳入用戶印象 Profile 記憶
-            ))
+                # 撈取事實偏好
+                facts_list = list(conclusions_scope.list())
+                if facts_list:
+                    facts_text = "\n".join(f"- {c.content}" for c in facts_list)
+                    
+                # 撈取印象摘要
+                user_profile = conclusions_scope.representation()
+            except Exception as e_honcho:
+                print(f"⚠️ [Honcho Preload] 撈取記憶失敗: {e_honcho}")
 
-        except Exception as e:
-            print(f"❌ [ADK Runner] 執行出錯: {e}")
-            return f"😵 (大腦思考時發生未預期錯誤: {e})", None
+        # 組裝 system_prompt
+        # system_prompt: 完整的系統人格提示詞
+        system_prompt = await self.get_system_prompt(
+            facts_context=facts_text if facts_text != "N/A" else "",
+            location_context=f"- 伺服器 (Server): {channel.guild.name if 'channel' in locals() and channel.guild else '私人訊息'}\n- 頻道 (Channel): {channel.name if 'channel' in locals() else '未知'}",
+            knowledge_context=f"【長期人設印象】\n{user_profile}\n\n【長期事實偏好】\n{facts_text}" if user_profile != "N/A" or facts_text != "N/A" else ""
+        )
 
-        # 記憶落盤回調
-        if self.memory_service:
-            try:
-                session_obj = await self.session_service.get_session(
-                    app_name="HiHiDiscordBot",
-                    user_id=user_id,
-                    session_id=session_id
-                )
-                if session_obj:
-                    # 💡 改為背景異步執行，避免 Mem0 提煉事實與 SQL 寫入阻塞對話回覆
-                    asyncio.create_task(self.memory_service.add_session_to_memory(session_obj, current_guild_id))
-                    # 背景啟動印象精煉任務
-                    asyncio.create_task(self.consolidate_user_profile(user_id, user_name))
-            except Exception as e:
-                print(f"⚠️ [ADK Memory] 自動落盤時發生未預期錯誤: {e}")
+        # 6. 呼叫 AIAgent
+        # agent: 當前對話專屬的 AI Agent 實體
+        agent = AIAgent(
+            model=self.model_name,
+            load_soul_identity=True,
+            enabled_toolsets=["memory", "core"],
+            thinking_callback=on_thinking,
+            reasoning_callback=on_reasoning,
+            tool_start_callback=on_tool_start,
+            tool_complete_callback=on_tool_complete,
+            quiet_mode=True
+        )
+
+        # 執行長線對話推理 Loop
+        # result: AI 對話推理執行結果字典
+        result = await loop.run_in_executor(
+            None,
+            lambda: agent.run_conversation(
+                user_message=telemetry_msg,
+                system_message=system_prompt,
+                task_id=session_id
+            )
+        )
+
+        # 7. 對話完成後的遙測收集與發射
+        # response_text: 模型最終擬人化回答
+        response_text = result.get("final_response", "")
+        # interaction_id: 對話交互 ID
+        interaction_id = result.get("session_id", session_id)
+        
+        # 讀取軌跡日誌 ATOF 並轉換成 trace_events
+        # trace_events: 供遙測卡片展示的執行步驟清單
+        trace_events = []
+        try:
+            log_dir = "/home/hi6688/servers/discord_bot/logs"
+            traj_file = os.path.join(log_dir, f"trajectory-{session_id}.json")
+            if os.path.exists(traj_file):
+                with open(traj_file, "r", encoding="utf-8") as f:
+                    traj_data = json.load(f)
+                steps = traj_data.get("steps", [])
+                for step in steps:
+                    if "tool_calls" in step:
+                        for tc in step["tool_calls"]:
+                            trace_events.append(f"調用工具 `{tc.get('function_name')}`，參數: `{tc.get('arguments')}`")
+                    if "observation" in step and step["observation"]:
+                        results = step["observation"].get("results", [])
+                        for res in results:
+                            content = res.get("content", "")
+                            short_c = content[:120] + "..." if len(content) > 120 else content
+                            trace_events.append(f"工具結果 `{short_c}`")
+                    if "message" in step and step["message"]:
+                        trace_events.append(f"大腦輸出回覆正文")
+        except Exception as ex_traj:
+            print(f"⚠️ [ATOF Trajectory] 讀取解析失敗: {ex_traj}")
+
+        # 整合發射綜合邏測報告卡片
+        # final_thought: 大腦英文思緒純文字
+        final_thought = "".join(accumulated_thought) if accumulated_thought else "N/A"
+        
+        # FakeMemoryState: 供舊版卡片相容使用的虛擬類別
+        class FakeMemoryState(BaseModel):
+            needs_reply: bool = True
+            current_goal: str = "與親愛的使用者進行貼心交流"
+            suggested_sleep_seconds: int = getattr(self.cog_instance, "next_sleep_duration", 3600)
+            sleep_intent: Optional[str] = getattr(self.cog_instance, "sleep_intent", None)
+
+        # 建立 Gemma 翻譯管道並行發射
+        # translation_task: 供遙測內部翻譯的非同步 Task
+        translation_task = asyncio.create_task(
+            self.telemetry_mirror._translate_thought_with_gemma(final_thought)
+        )
+
+        # 提取短期滾動對話摘要
+        # short_history: 快取短期會話列表
+        short_history = []
+        try:
+            # 從 Honcho 撈取最新的對話歷史摘要
+            peer = self.honcho_client.peer(clean_peer_id)
+            sessions = list(peer.sessions())
+            current_sess = next((s for s in sessions if s.id == session_id), None)
+            if current_sess:
+                messages = list(current_sess.messages())
+                # 取最後 6 條
+                for msg in messages[-6:]:
+                    short_history.append(f"{msg.role}: {msg.content}")
+        except Exception as ex_hist:
+            print(f"⚠️ [Honcho History] 還原短期記憶錯誤: {ex_hist}")
+
+        asyncio.create_task(self.telemetry_mirror.emit_logic_telemetry(
+            memory_state=FakeMemoryState(),
+            trigger_text=telemetry_msg,
+            location_info=location_info,
+            daily_usage=self.cog_instance.quota_manager.daily_usage,
+            daily_limit=self.cog_instance.daily_limit_requests,
+            trace_events=trace_events if trace_events else ["大腦直接生成擬人化回覆"],
+            facts_text=facts_text,
+            short_history=short_history,
+            translated_thought=translation_task,
+            final_speech=response_text,
+            usage_metadata=None,
+            interaction_id=interaction_id,
+            user_profile=user_profile
+        ))
 
         return response_text, interaction_id
 
-    async def consolidate_user_profile(self, user_id: str, user_name: str) -> None:
+    async def delete_all_user_memories(self, user_id: str) -> None:
         """
-        背景異步精煉用戶的 Facts 成為一段 100-250 字的純文字 Profile。
+        物理抹除用戶在 Honcho 記憶系統中的所有 Conclusions (GDPR 遺忘權)。
         """
-        if not self.memory_service or not self.client:
+        if not self.honcho_client:
             return
-
+        # clean_peer_id: 乾淨的 Peer ID
+        clean_peer_id = "".join(c for c in user_id if c.isalnum() or c in ("-", "_"))
         try:
-            print(f"🔄 [Profile Consolidator] 開始背景精煉用戶 {user_name} ({user_id}) 的印象...")
-            # 1. 撈取所有 facts
-            raw_results = await self.memory_service._run_mem0_with_retry(self.memory_service.memory_layer.get_all, filters={"user_id": user_id})
-            results_list = []
-            if isinstance(raw_results, dict):
-                results_list = raw_results.get("results", raw_results.get("memories", []))
-            elif isinstance(raw_results, list):
-                results_list = raw_results
+            peer = self.honcho_client.peer(clean_peer_id)
+            conclusions_scope = peer.conclusions_of(clean_peer_id)
             
-            facts = []
-            for item in results_list:
-                if isinstance(item, dict):
-                    content = item.get('fact') or item.get('memory')
-                    if content:
-                        facts.append(content)
-                        
-            if not facts:
-                print(f"ℹ️ [Profile Consolidator] 用戶 {user_name} 尚無 Facts，跳過精煉。")
-                return
+            # 撈取所有的 conclusions 並一一刪除
+            conclusions = list(conclusions_scope.list())
+            for c in conclusions:
+                conclusions_scope.delete(c.id)
                 
-            facts_text = "\n".join(f"- {f}" for f in facts)
-            
-            # 2. 呼叫 Gemini 進行精煉 (開啟 Structured Outputs)
-            prompt = f"""
-你是一個極具觀察力與共情能力的人類學家與心理學家。
-請根據以下收集到的關於用戶「{user_name}」的碎片事實，將其精煉、歸納成一段 100 到 250 字的純文字「整體印象 (User Profile)」。
-如果事實中有矛盾，請嘗試以人類心理的複雜性去合理化，或保留其模糊感。
-
-用戶事實清單：
-{facts_text}
-            """
-            
-            # 為了不阻塞，放到 executor 執行
-            loop = asyncio.get_running_loop()
-            response = await loop.run_in_executor(
-                None,
-                lambda: self.client.models.generate_content(
-                    model=self.model_name,
-                    contents=prompt,
-                    config=types.GenerateContentConfig(
-                        response_mime_type="application/json",
-                        response_schema=UserProfileConsolidation
-                    )
-                )
-            )
-            
-            import json
-            result_data = json.loads(response.text.strip())
-            impression = result_data.get("user_profile", "").strip()
-            
-            if impression:
-                # 3. 寫入 DB
-                await self.memory_service.save_user_impression(user_id, user_name, impression)
-                print(f"✅ [Profile Consolidator] 成功精煉並寫入 {user_name} 的新印象！")
-            
+            # 刪除對話 Sessions
+            sessions = list(peer.sessions())
+            for s in sessions:
+                peer.delete_session(s.id)
+            print(f"🧹 [GDPR] 成功為用戶 {clean_peer_id} 銷毀所有長期記憶與對話會話！")
         except Exception as e:
-            print(f"❌ [Profile Consolidator] 印象精煉過程中發生錯誤: {e}")
+            print(f"⚠️ [GDPR] 遺忘權抹除失敗: {e}")
+            raise e
+
+    async def get_user_impression(self, user_id: str) -> Optional[str]:
+        """
+        獲取用戶在 Honcho 記憶系統中的整體印象 (Representation)。
+        """
+        if not self.honcho_client:
+            return None
+        # clean_peer_id: 乾淨的 Peer ID
+        clean_peer_id = "".join(c for c in user_id if c.isalnum() or c in ("-", "_"))
+        try:
+            peer = self.honcho_client.peer(clean_peer_id)
+            conclusions_scope = peer.conclusions_of(clean_peer_id)
+            rep = conclusions_scope.representation()
+            return rep if rep and rep.strip() else None
+        except Exception as e:
+            print(f"⚠️ [Honcho Impression] 讀取失敗: {e}")
+            return None
 
     async def enter_dream_gate(self, user_id: str, user_name: str) -> None:
         """
-        Dream Gate 睡眠造夢與記憶剪枝 (Sleep-Consolidated Memory)。
-        針對指定的 user_id 執行衝突解決、剪枝與高階反思。
+        潛意識造夢整理（在自建 Honcho 滾動壓縮機制下，僅作相容 No-op 輸出）。
         """
-        if not self.memory_service or not self.client:
-            return
+        print(f"🌌 [Dream Gate] 潛意識自動開啟（由 Honcho deriver/dreamer 持續自主反思）...")
 
-        print(f"🌌 [Dream Gate] 潛意識開啟，開始為用戶 {user_name} ({user_id}) 進行記憶造夢與剪枝...")
-        try:
-            # 1. 撈取該使用者的所有 facts
-            raw_results = await self.memory_service._run_mem0_with_retry(self.memory_service.memory_layer.get_all, filters={"user_id": user_id})
-            results_list = []
-            if isinstance(raw_results, dict):
-                results_list = raw_results.get("results", raw_results.get("memories", []))
-            elif isinstance(raw_results, list):
-                results_list = raw_results
-            
-            facts = []
-            for item in results_list:
-                if isinstance(item, dict):
-                    content = item.get('fact') or item.get('memory')
-                    if content:
-                        facts.append(content)
-            
-            if not facts:
-                print(f"🌌 [Dream Gate] 用戶 {user_name} 尚無記憶碎片，夢境結束。")
-                return
-
-            facts_text = "\n".join(f"- {f}" for f in facts)
-            
-            # 2. 準備 Prompt 並呼叫 Gemini (開啟 Structured Outputs)
-            prompt = f"""你正在進行「睡眠記憶剪枝與鞏固 (Sleep-Consolidated Memory)」。
-以下是用戶 {user_name} 過去累積的零碎記憶事實（Facts）：
-{facts_text}
-
-請嚴格執行以下動作：
-1. 【解決衝突】：如果出現時間線矛盾的記憶，保留最新狀態，刪除舊有狀態。
-2. 【無情剪枝】：刪除過於瑣碎、沒有長期保留價值的廢話事實。
-3. 【高階反思 (Reflection)】：從碎片中推導出 1~3 條更深層次的觀察。
-"""
-            loop = asyncio.get_running_loop()
-            response = await loop.run_in_executor(
-                None,
-                lambda: self.client.models.generate_content(
-                    model=self.model_name,
-                    contents=prompt,
-                    config=types.GenerateContentConfig(
-                        response_mime_type="application/json",
-                        response_schema=DreamPrunedMemory
-                    )
-                )
-            )
-            
-            import json
-            result_data = json.loads(response.text.strip())
-            pruned_facts = result_data.get("consolidated_facts", [])
-            
-            if not isinstance(pruned_facts, list):
-                print(f"⚠️ [Dream Gate] Structured Outputs 解析出錯，回傳：{response.text}")
-                return
-
-            print(f"🌌 [Dream Gate] 剪枝完成。原始數量: {len(facts)} -> 剪枝後數量: {len(pruned_facts)}")
-            
-            # 3. 物理刪除所有舊 Facts
-            await self.memory_service.delete_all_user_memories(user_id)
-            
-            # 4. 重新寫入精煉後的新 Facts
-            for new_fact in pruned_facts:
-                if new_fact and isinstance(new_fact, str):
-                    await self.memory_service._run_mem0_with_retry(self.memory_service.memory_layer.add, new_fact, user_id=user_id)
-            
-            print(f"🌌 [Dream Gate] 新記憶已成功覆寫至 Mem0。")
-            
-            # 5. 重新觸發 consolidate_user_profile 更新純文字印象
-            await self.consolidate_user_profile(user_id, user_name)
-
-        except Exception as e:
-            print(f"❌ [Dream Gate] 造夢失敗: {e}")
-
+    async def learn_knowledge(self, term: str, definition: str, category: str = "General") -> str:
+        """
+        相容 Jules 記憶同步（目前為相容 No-op 輸出）。
+        """
+        return f"✅ [相容 Jules] 學習外部新名詞: {term} = {definition}"

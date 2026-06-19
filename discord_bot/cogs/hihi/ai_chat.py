@@ -9,10 +9,27 @@ import base64
 from datetime import datetime, timezone, timedelta
 from discord.ext import commands
 
-# 💡 導入大一統 Agent 模組化元件
-from agent import AgentOrchestrator, HeartbeatScheduler
-from utils.quota_manager import QuotaManager
-from utils.emoji_service import EmojiService
+# 💡 導入大一統 Agent 模組化元件，排除重名 namespace 衝突
+import sys
+_hermes_path = "/home/hi6688/servers/hermes-agent"
+_has_hermes = _hermes_path in sys.path
+if _has_hermes:
+    sys.path.remove(_hermes_path)
+
+# 暫時從 modules 快取中移出，強迫 Python 重新定位本地 package
+_old_agent = sys.modules.pop('agent', None)
+
+try:
+    from agent import AgentOrchestrator, HeartbeatScheduler
+finally:
+    # 還原 sys.path 與 modules 快取
+    if _has_hermes:
+        sys.path.insert(0, _hermes_path)
+    if _old_agent is not None:
+        sys.modules['agent'] = _old_agent
+
+from hihi_utils.quota_manager import QuotaManager
+from hihi_utils.emoji_service import EmojiService
 
 # --- 設定檔路徑 ---
 BASE_DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'data')

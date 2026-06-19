@@ -1,3 +1,6 @@
+import sys
+sys.path = [p for p in sys.path if 'honcho/src' not in p]
+sys.path.insert(0, "/home/hi6688/servers/hermes-agent")
 import discord
 import os
 import asyncio

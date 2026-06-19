@@ -231,12 +231,12 @@ def get_agent_tools(orchestrator) -> list:
         """
         try:
             from agent.schemas import SleepScheduleParams
-            from utils.scheduler_tools import execute_sleep_scheduling
+            from hihi_utils.scheduler_tools import execute_sleep_scheduling
             validated = SleepScheduleParams(seconds=seconds, intent=intent)
             return await execute_sleep_scheduling(orchestrator.cog_instance, validated.seconds, validated.intent)
         except Exception as e:
             print(f"⚠️ [schedule_next_sleep_tool] 參數校正失敗: {e}，將採用安全預設值 (3600秒)")
-            from utils.scheduler_tools import execute_sleep_scheduling
+            from hihi_utils.scheduler_tools import execute_sleep_scheduling
             return await execute_sleep_scheduling(orchestrator.cog_instance, 3600, None)
 
     async def inspect_memory_history_tool(memory_id: str) -> str:

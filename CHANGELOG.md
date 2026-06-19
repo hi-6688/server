@@ -2,6 +2,14 @@
 
 本檔案記錄了專案的所有重大更新與架構變動。這對於 Agent (AI 助手) 理解專案演進至關重要。
 
+## [2026-06-19] - 完全遷移至本地自建開源 Nous Hermes-Agent + Honcho 架構正式完成與驗證
+### 🚀 架構與系統升級 (Architecture)
+- **重構大腦協調器 (orchestrator.py)**：徹底廢除舊有 Google ADK 依賴，改為實例化 `run_agent.AIAgent`。重寫對話 Loop 以非同步 executor 調用 `AIAgent.run_conversation()`，並在 Python 導入前精確過濾 `sys.path` 以避免 `honcho/src` 和 `discord_bot` 的 `utils` 命名空間衝突。
+- **對接本地自建 Honcho 記憶引擎**：配置 `~/.hermes/config.yaml` 使用 `provider: honcho`。實作 `/forget_me` 和 `/profile` 指令底層介面對接 `Honcho` 的 Conclusions (事實與印象) 和 Sessions (會話與短期記憶) 管理。
+- **234 條歷史記憶完整搬遷**：執行並完成 `migrate_to_honcho.py`，物理遷移原 PostgreSQL `hihi_mem0_facts` 的 234 條用戶 facts 到本地自建的 Honcho Server 數據庫中。
+- **NeMo Relay 遙測與事後綜合卡片發射**：啟用 `nemo_relay` 插件導出 ATOF/ATIF 軌跡。在 `orchestrator.py` 配置 `on_thinking`、`on_reasoning` 與工具執行的非同步 callbacks，並在對話結束後讀取解析軌跡 JSON 以發射精美的事後邏測大卡片到 `#心裡世界` 頻道。
+- **單元測試與服務部署**：編寫並執行 `test_hermes_migration.py`，完成 ReAct 推理循環、Honcho 記憶檢索與 telemetry 回調的 100% 綠燈驗證。重啟 systemd 服務 `hermes_bot` 正常運行。
+
 ## [2026-06-18] - 清除內建開發型人設與引導詞
 ### 🔧 設定與提示詞淨化 (Configuration & Prompts)
 - **清空/改寫 prompt_builder.py 中的開發輔助詞**：清空了 `HERMES_AGENT_HELP_GUIDANCE`、`TASK_COMPLETION_GUIDANCE`、`GOOGLE_MODEL_OPERATIONAL_GUIDANCE`，並將 `DEFAULT_AGENT_IDENTITY` 改為 HiHi 的基礎聊天身份設定。

@@ -8,7 +8,7 @@ import datetime
 import json
 import logging
 from dotenv import load_dotenv
-from utils.gcp_manager import GCPManager
+from hihi_utils.gcp_manager import GCPManager
 import aiohttp
 
 logger = logging.getLogger('hihi_bot')

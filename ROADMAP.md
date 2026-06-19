@@ -5,10 +5,10 @@
 ## 🔴 當前急迫事項 (Immediate Actions)
 *嗨嗨 v7.0 核心架構升級與系統修復*
 
-- [x] **P1: NousResearch Hermes-Agent 替代 Google ADK 技術評估與遷移計畫**
-    - **完全本地自建計畫書發布**：編寫並發布 [implementation_plan.md](file:///home/hi6688/.gemini/antigravity-ide/brain/f507483e-b47b-4903-9965-cc19ca3fcfd4/implementation_plan.md)，決定採行「100% 本地自建開源架構」（Self-Hosted Honcho Server + Hermes-Agent），不依賴 SaaS 雲端。
-    - **本地自建環境部署與記憶搬遷**：規劃於主機使用 Docker Compose 部署開源 Honcho 服務端，並透過自研 `migrate_to_honcho.py` 腳本（已更新為本地免密碼/BaseURL 對接）將 Postgres Facts 導入本地。
-    - **Discord Gateway 與遙測設計**：由 Hermes 內建的 Messaging Gateway 接管 Discord 傳輸，並規劃透過監聽會話日誌 JSON 來將大腦思緒即時推送至 Discord `#心裡世界` 頻道的遙測轉接機制。
+- [x] **P1: NousResearch Hermes-Agent 替代 Google ADK 技術評估與遷移計畫 (完全遷移與驗證完成)**
+    - **完全本地自建計畫書發布與審批**：編寫並發布 [implementation_plan.md](file:///home/hi6688/.gemini/antigravity-ide/brain/f507483e-b47b-4903-9965-cc19ca3fcfd4/implementation_plan.md)，決定採行「100% 本地自建開源架構」（Self-Hosted Honcho Server + Hermes-Agent），獲得使用者批准。
+    - **本地自建環境部署與 234 條記憶物理搬遷**：使用 Docker Compose 在本地部署開源 Honcho 服務端，並透過 `migrate_to_honcho.py` 腳本成功將 Postgres 中的 234 條用戶 Facts 搬遷寫入本地 Honcho 數據庫結論中。
+    - **重構大腦協調器與遙測轉接**：將 `orchestrator.py` 改造成調用 `AIAgent.run_conversation()`。配置非同步 ReAct 步驟 callbacks 以進行實時遙測播報，並在對話結束後解析 `trajectory-{session_id}.json` 以發射事後邏測大卡片到 `#心裡世界` 頻道。重啟 systemd 服務 `hermes_bot` 正式部署運作。
 
 - [x] **P1: 清除大腦中殘留的開發型助理人設**
     - **提示詞純化**：修改 [prompt_builder.py](file:///home/hi6688/servers/hermes-agent/agent/prompt_builder.py) 移除了所有工程助理引導詞，精簡 `MEMORY_GUIDANCE` 為無範例的極簡形式以防污染。
