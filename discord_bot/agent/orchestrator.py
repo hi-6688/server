@@ -63,7 +63,7 @@ class AgentOrchestrator:
             from google.genai import types
             self.genai_client = genai.Client(
                 api_key=self.api_key,
-                http_options=types.HttpOptions(timeout=30_000)
+                http_options=types.HttpOptions(timeout=120_000)
             )
             print("🤖 [Orchestrator] Gemini 官方 SDK 客戶端啟動成功")
         except Exception as e_genai:
