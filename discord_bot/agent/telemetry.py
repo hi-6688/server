@@ -130,6 +130,8 @@ class TelemetryMirror:
             # 並行執行所有翻譯
             os_thought, translated_facts, translated_profile = await asyncio.gather(*translation_tasks)
 
+            print(f"DEBUG TELEMETRY: os_thought={repr(os_thought)}, trigger_text={repr(trigger_text)}")
+
             if os_thought == "N/A" or not os_thought.strip():
                 os_thought = "💡 本輪對話大腦未產生顯性思緒呢喃（可能由於模型未開啟長思考，或回覆較為直接）。"
             
@@ -184,6 +186,8 @@ class TelemetryMirror:
             if short_history:
                 formatted_history = [f"> {idx+1}. {line[:120]}" for idx, line in enumerate(short_history)]
                 history_str = "\n".join(formatted_history)
+            if not history_str or not history_str.strip():
+                history_str = "N/A"
             if len(history_str) > 1024:
                 history_str = history_str[:1000] + "\n... (對話摘要超長截斷)"
             embed.add_field(name="💬 滾動對話摘要", value=history_str, inline=False)
@@ -192,6 +196,8 @@ class TelemetryMirror:
             profile_val = "N/A"
             if translated_profile and translated_profile != "N/A":
                 profile_val = "\n".join([f"> {line}" for line in translated_profile.split("\n") if line.strip()])
+            if not profile_val or not profile_val.strip():
+                profile_val = "N/A"
             if len(profile_val) > 1024:
                 profile_val = profile_val[:1000] + "\n... (人設印象超長截斷)"
             embed.add_field(name="👤 長期人設印象 (Profile)", value=profile_val, inline=False)
@@ -200,6 +206,8 @@ class TelemetryMirror:
             facts_val = "N/A"
             if translated_facts and translated_facts != "N/A":
                 facts_val = "\n".join([f"> {line}" for line in translated_facts.split("\n") if line.strip()])
+            if not facts_val or not facts_val.strip():
+                facts_val = "N/A"
             if len(facts_val) > 1024:
                 facts_val = facts_val[:1000] + "\n... (長期事實超長截斷)"
             embed.add_field(name="📚 長期事實偏好 (Facts)", value=facts_val, inline=False)
@@ -213,6 +221,8 @@ class TelemetryMirror:
                     indent_prefix = "　　" if "子代理" in t or "GoogleSearch" in t or "FileSearch" in t or "獲得檢索結果" in t or ("任務完成" in t and not "search_specialist 任務完成" in t) else ""
                     formatted_trace.append(f"> {indent_prefix}{idx+1}. {t}")
                 trace_str = "\n".join(formatted_trace)
+            if not trace_str or not trace_str.strip():
+                trace_str = "N/A"
             if len(trace_str) > 1024:
                 trace_str = trace_str[:1000] + "\n... (軌跡超長截斷)"
             embed.add_field(name="🚀 執行軌跡 (Trace)", value=trace_str, inline=False)

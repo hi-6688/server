@@ -255,6 +255,7 @@ class AgentOrchestrator:
             reasoning_callback=on_reasoning,
             tool_start_callback=on_tool_start,
             tool_complete_callback=on_tool_complete,
+            reasoning_config={"enabled": True, "effort": "high"},
             quiet_mode=True
         )
 
