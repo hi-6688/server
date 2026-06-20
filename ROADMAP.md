@@ -1,9 +1,17 @@
 # 📅 專案開發計畫書 (Roadmap)
 
-最後更新時間: 2026-06-18
+最後更新時間: 2026-06-20
 
 ## 🔴 當前急迫事項 (Immediate Actions)
 *嗨嗨 v7.0 核心架構升級與系統修復*
+
+- [x] **P1: 新增獨立的 Hermes 運維主管服務與安全 FRP stcp 穿透控制面板 (實體隔離與安全對接完成)**
+    - **全域檔案收攏與服務重定向**：建立 `venvs/` 目錄，收攏全伺服器 Python 虛擬環境並重定向 `web_interface`, `hermes_bot`, `hermes_dashboard` 用戶級 systemd 服務。
+    - **實體程式碼與環境完全隔離**：複製獨立 Graves 的 `hermes-agent-admin` 程式碼目錄與 `venv_hermes_admin` 虛擬環境，達成最高級別的主權安全防護。
+    - **恢復原生強大運維提示詞**：在新目錄中恢復了 `prompt_builder.py` 以引進原生 `antigravity-oauth` 及系統開發與運維引導詞，不影響應用程式級的 Discord 機器人。
+    - **部署本機安全 Web Dashboard**：部署並重構 `hermes_dashboard.service`，綁定 `127.0.0.1:9119` 並對接 `server_admin` Profile（獨立 SQLite hindsight 記憶隔離）。
+    - **FRP stcp 加密穿透與手機 Termux 對接**：本地部署 `frpc.service` 服務，並提供手機 Termux 加密對接設定，流量全程加密。
+    - **徹底分離主管與 Discord 頻道設定**：完全清空主管（`default` Profile）設定檔 `~/.hermes/config.yaml` 中繼承自 hihi 的 Discord 頻道等聊天平台配置，解決主管顯示 hihi 設定檔的疑慮。
 
 - [x] **P1: NousResearch Hermes-Agent 替代 Google ADK 技術評估與遷移計畫 (完全遷移與驗證完成)**
     - **完全本地自建計畫書發布與審批**：編寫並發布 [implementation_plan.md](file:///home/hi6688/.gemini/antigravity-ide/brain/f507483e-b47b-4903-9965-cc19ca3fcfd4/implementation_plan.md)，決定採行「100% 本地自建開源架構」（Self-Hosted Honcho Server + Hermes-Agent），獲得使用者批准。

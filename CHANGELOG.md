@@ -2,6 +2,20 @@
 
 本檔案記錄了專案的所有重大更新與架構變動。這對於 Agent (AI 助手) 理解專案演進至關重要。
 
+## [2026-06-20] - 新增獨立的 Hermes 運維主管服務與安全 FRP stcp 穿透控制面板
+### 🚀 架構與系統升級 (Architecture)
+- **徹底分離主管大腦與聊天平台配置**：修剪並清空了 `/home/hi6688/.hermes/config.yaml`（`default` Profile）中殘留的 `discord` 與 `slack` 等平台頻道設定（原自 `hihi` 的 `free_response_channels`），解決了點開主管的 Web 控制面板 Settings 時依然顯示 hihi 聊天設定檔的混淆問題，並重啟 `hermes_dashboard.service` 服務使其載入生效。
+- **全域檔案收攏與服務路徑重定向**：為優化伺服器根目錄結構，建立 `/home/hi6688/servers/venvs` 收納目錄，並將所有 Python 虛擬環境統一移動收攏為 `venv_web`、`venv_hermes` 及 `venv_hermes_admin`，避免根目錄散落。
+- **重新進行 pip editable 綁定**：針對移動後損壞的 python venv 內部 pip 路徑，利用對應虛擬環境直譯器執行 `python -m pip install -e` 成功將 `venv_hermes` 重新綁定至 `hermes-agent`，及將 `venv_hermes_admin` 重新綁定至 `hermes-agent-admin`。
+- **重定向 systemd 背景服務**：修改了 `web_interface.service`、`hermes_bot.service` 與 `hermes_dashboard.service` 的 `ExecStart` 直譯器啟動路徑，重載 systemd daemon 並重啟驗證，確認三個背景服務皆已 100% 綠燈順暢運行 (Active: active (running))。
+- **程式碼與虛擬環境實體隔離**：為確保系統層級主管服務的安全性，複製並建立了獨立的 `hermes-agent-admin` 程式碼資料夾與 `venv_hermes_admin` 虛擬環境，達成最高級別的安全物理隔絕。
+- **還原運維與指令分析提示詞**：在新目錄中還原了 `prompt_builder.py` 提示詞以支援 `antigravity-oauth` 驗證，並使伺服器主管 Agent 重新獲取強大的系統指令分析與推理能力，不影響 Discord 聊天機器人。
+- **建立獨立運維 Profile (server_admin)**：藉由 `hermes profile create` 建立了獨立的運維環境。配置 `memory.provider` 為 `hindsight`（本地 SQLite），完成與 Discord 聊天機器人（`default` profile）的記憶物理隔離。
+- **工具授權與人設定義**：在 `server_admin` 的 `config.yaml` 啟用 `terminal` 與 `file` 工具以獲取主管伺服器能力；重寫了 `SOUL.md`，將其人設定義為專業、冷靜、且以行動優先的雲端伺服器主管。
+- **部署本機安全 Web Dashboard**：編寫並註冊了 `hermes_dashboard.service` 用戶級 systemd 背景服務（注入環境變數 `HERMES_PROFILE=server_admin`），僅 bind 監聽本機 `127.0.0.1:9119`。
+- **配置 FRP stcp 加密隧道與手機端對接**：在本地 `frpc.toml` 新增 `stcp` 加密秘密代理，建立並啟動 `frpc.service` 背景自啟服務。同時為 Android 手機 Termux 訪客端提供了安全的對接設定，流量全程加密。
+- **大腦模型升級至 Gemma 4 31B**：將系統主管大腦的預設 LLM 升級為 Google 最新發布的開源旗艦模型 `gemma-4-31b-it`，由現有的 `GEMINI_API_KEY` 直接驅動，免去額外申請 OpenRouter 金鑰與花費。
+
 ## [2026-06-19] - 完全遷移至本地自建開源 Nous Hermes-Agent + Honcho 架構正式完成與驗證
 ### 🚀 架構與系統升級 (Architecture)
 - **重構大腦協調器 (orchestrator.py)**：徹底廢除舊有 Google ADK 依賴，改為實例化 `run_agent.AIAgent`。重寫對話 Loop 以非同步 executor 調用 `AIAgent.run_conversation()`，並在 Python 導入前精確過濾 `sys.path` 以避免 `honcho/src` 和 `discord_bot` 的 `utils` 命名空間衝突。
