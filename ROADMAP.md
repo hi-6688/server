@@ -14,6 +14,7 @@
     - **徹底分離主管與 Discord 頻道設定**：完全清空主管（`default` Profile）設定檔 `~/.hermes/config.yaml` 中繼承自 hihi 的 Discord 頻道等聊天平台配置，解決主管顯示 hihi 設定檔的疑慮。
     - **對齊主管與機器人 Web 認證憑證 (Session Token)**：為確保 Windows 桌面端軟體能在多 Profile 間順利切換與連線，將主管面板的連線 Token 還原對齊為與 hihi 相同的 `2a1a462e6c7b2594fcf73cf0c7de0b74`，保證連線可用性。
     - **物理封鎖與過濾 Web 端 Profile 列表**：修改兩端 API 以根據環境強制只回傳當前單一 Profile，避免兩端共用 Session Token 時發生瀏覽器快取設定檔與記憶的混淆。
+    - **重置與物理淨化主管大腦記憶**：清除本地主管 SQLite 資料庫，並將其 Honcho 工作區升級為 `server-admin-workspace-v3`，完全阻斷和清空任何混亂期殘留的 hihi 記憶事實。
 
 - [x] **P1: NousResearch Hermes-Agent 替代 Google ADK 技術評估與遷移計畫 (完全遷移與驗證完成)**
     - **完全本地自建計畫書發布與審批**：編寫並發布 [implementation_plan.md](file:///home/hi6688/.gemini/antigravity-ide/brain/f507483e-b47b-4903-9965-cc19ca3fcfd4/implementation_plan.md)，決定採行「100% 本地自建開源架構」（Self-Hosted Honcho Server + Hermes-Agent），獲得使用者批准。
