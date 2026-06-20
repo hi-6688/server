@@ -3,6 +3,10 @@
 本檔案記錄了專案的所有重大更新與架構變動。這對於 Agent (AI 助手) 理解專案演進至關重要。
 
 ## [2026-06-20] - 實作全路徑前綴重寫 ASGI Middleware 與獨立 Hermes 運維主管服務
+### 架構與系統升級 (Architecture)
+- **實現主管端 Profile 與機器人端之絕對對稱**：新建 `server_admin` Profile，並將原先歷史殛留、直接佔用 `~/.hermes/` 根目錄的主管端設定檔、SQLite 狀態資料庫與環境變數檔案完敥搬移至 `/home/hi6688/.hermes/profiles/server_admin/`，讓兩端在檔案目錄履級上遚成「絕對對稱與平排隔離」。
+- **更新 systemd 背景服務身份**：修改亍 `hermes_dashboard.service` 的 `HERMES_PROFILE` 環境變數與加載的 `.env` 檔案路徑，使其以對稱的 `server_admin` 身份正常啟動。
+- **重新調整 ASGI 路由重寫正則**：對兩端代碼庫中的 `ProfilePathRewriteMiddleware` 正則表遚式由 `(hihi|default)` 修改為對稱的 `(hihi|server_admin)`。
 ### 🚀 架構與系統升級 (Architecture)
 - **實作全路徑前綴重寫與 Profile 同步 ASGI Middleware**：在主管端與機器人端的 `web_server.py` 中掛載 `ProfilePathRewriteMiddleware`，實現對所有以 `/<profile_name>/` 開頭的請求進行路徑重寫並注入 `?profile=<profile_name>` 參數，並提供對無尾斜線請求的自動 307 重定向，解決 Windows 桌面端（Hermes Desktop）因為不支援 `?` 參數而無法在單一 Port 9119 下實現連線與 Session 隔離的限制。
 - **支援 Profile 狀態的動態同步**：修改 `/api/profiles/active` 端點，使其接收 `profile` 參數並將當前的 `current` 及 `active` profile 動態設定為傳入的參數值，成功解決前端 React 路由加載時強制跳轉回預設 profile 的問題。

@@ -9,6 +9,7 @@
     - **實作全路徑前綴重寫路徑 (Path Rewrite Middleware)**：在主管端與機器人端的 `web_server.py` 中掛載 `ProfilePathRewriteMiddleware`，對所有以 `/(hihi|default)` 為前綴的請求重寫為剩餘路徑並注入 `profile` 參數。
     - **靜態資源相對路徑重定向**：設計 HTTP 307 重定向機制，對無尾斜線的 `/hihi` 自動重定向為 `/hihi/`，確保網頁資源相對路徑能正常解析。
     - **前端 Profile 狀態同步**：修改 `/api/profiles/active`，支援透過 query 參數 `profile` 重寫 active/current 狀態返回，避免 React 首頁自動還原至 default。
+    - **對稱性重構與完全隔離**：新建 `server_admin` Profile 並搬遷資料，將主管端從 `default` 轉移至對稱的 `profiles/server_admin/`，並修改兩端 Middleware 正則匹配為 `server_admin`，讓根目錄傅保留配置中橚－不留下任何執行期狀態檔，遚成完全對稱的雙 Profile 沙盒隔離。
 
 - [x] **P1: 新增獨立的 Hermes 運維主管服務與安全 FRP stcp 穿透控制面板 (實體隔離與安全對接完成)**
     - **全域檔案收攏與服務重定向**：建立 `venvs/` 目錄，收攏全伺服器 Python 虛擬環境並重定向 `web_interface`, `hermes_bot`, `hermes_dashboard` 用戶級 systemd 服務。
