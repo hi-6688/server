@@ -5,6 +5,7 @@
 ## [2026-06-20] - 新增獨立的 Hermes 運維主管服務與安全 FRP stcp 穿透控制面板
 ### 🚀 架構與系統升級 (Architecture)
 - **徹底分離主管大腦與聊天平台配置**：修剪並清空了 `/home/hi6688/.hermes/config.yaml`（`default` Profile）中殘留的 `discord` 與 `slack` 等平台頻道設定（原自 `hihi` 的 `free_response_channels`），解決了點開主管的 Web 控制面板 Settings 時依然顯示 hihi 聊天設定檔的混淆問題，並重啟 `hermes_dashboard.service` 服務使其載入生效。
+- **隔離主管與機器人 Web 認證憑證 (Session Token)**：將原本主管面板 (`hermes_dashboard.service`) 與 hihi 面板 (`hihi_dashboard.service`) 共用的 Session Token 物理區隔，為主管生成並配置了全新的隨機 Token，解決了兩者在 localhost 下共用 Token 造成的 Session 衝突與安全隱憂，並同步更新測試腳本 `test_dashboards_status.py` 使其能以不同憑證獨立驗證。
 - **全域檔案收攏與服務路徑重定向**：為優化伺服器根目錄結構，建立 `/home/hi6688/servers/venvs` 收納目錄，並將所有 Python 虛擬環境統一移動收攏為 `venv_web`、`venv_hermes` 及 `venv_hermes_admin`，避免根目錄散落。
 - **重新進行 pip editable 綁定**：針對移動後損壞的 python venv 內部 pip 路徑，利用對應虛擬環境直譯器執行 `python -m pip install -e` 成功將 `venv_hermes` 重新綁定至 `hermes-agent`，及將 `venv_hermes_admin` 重新綁定至 `hermes-agent-admin`。
 - **重定向 systemd 背景服務**：修改了 `web_interface.service`、`hermes_bot.service` 與 `hermes_dashboard.service` 的 `ExecStart` 直譯器啟動路徑，重載 systemd daemon 並重啟驗證，確認三個背景服務皆已 100% 綠燈順暢運行 (Active: active (running))。
