@@ -2,7 +2,10 @@
 
 本檔案記錄了專案的所有重大更新與架構變動。這對於 Agent (AI 助手) 理解專案演進至關重要。
 
-## [2026-06-20] - 新增獨立的 Hermes 運維主管服務與安全 FRP stcp 穿透控制面板
+## [2026-06-20] - 實作全路徑前綴重寫 ASGI Middleware 與獨立 Hermes 運維主管服務
+### 🚀 架構與系統升級 (Architecture)
+- **實作全路徑前綴重寫與 Profile 同步 ASGI Middleware**：在主管端與機器人端的 `web_server.py` 中掛載 `ProfilePathRewriteMiddleware`，實現對所有以 `/<profile_name>/` 開頭的請求進行路徑重寫並注入 `?profile=<profile_name>` 參數，並提供對無尾斜線請求的自動 307 重定向，解決 Windows 桌面端（Hermes Desktop）因為不支援 `?` 參數而無法在單一 Port 9119 下實現連線與 Session 隔離的限制。
+- **支援 Profile 狀態的動態同步**：修改 `/api/profiles/active` 端點，使其接收 `profile` 參數並將當前的 `current` 及 `active` profile 動態設定為傳入的參數值，成功解決前端 React 路由加載時強制跳轉回預設 profile 的問題。
 ### 🚀 架構與系統升級 (Architecture)
 - **徹底分離主管大腦與聊天平台配置**：修剪並清空了 `/home/hi6688/.hermes/config.yaml`（`default` Profile）中殘留的 `discord` 與 `slack` 等平台頻道設定（原自 `hihi` 的 `free_response_channels`），解決了點開主管的 Web 控制面板 Settings 時依然顯示 hihi 聊天設定檔的混淆問題，並重啟 `hermes_dashboard.service` 服務使其載入生效。
 - **對齊主管與機器人 Web 認證憑證 (Session Token) 以相容桌面端**：考量到 Windows 桌面端軟體 (Electron) 對多 Profile 連線之 Session Token 的設定限制，我們將主管面板 (`hermes_dashboard.service`) 的 `HERMES_DASHBOARD_SESSION_TOKEN` 還原對齊為 `2a1a462e6c7b2594fcf73cf0c7de0b74`，以確保桌面端能正常連線 Port 9119 的主管面板，並同步更新了偵錯腳本 `test_dashboards_status.py` 驗證成功。

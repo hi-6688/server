@@ -5,6 +5,11 @@
 ## 🔴 當前急迫事項 (Immediate Actions)
 *嗨嗨 v7.0 核心架構升級與系統修復*
 
+- [x] **P1: 實作全路徑前綴重寫與 Profile 同步 ASGI Middleware (方案一完成)**
+    - **實作全路徑前綴重寫路徑 (Path Rewrite Middleware)**：在主管端與機器人端的 `web_server.py` 中掛載 `ProfilePathRewriteMiddleware`，對所有以 `/(hihi|default)` 為前綴的請求重寫為剩餘路徑並注入 `profile` 參數。
+    - **靜態資源相對路徑重定向**：設計 HTTP 307 重定向機制，對無尾斜線的 `/hihi` 自動重定向為 `/hihi/`，確保網頁資源相對路徑能正常解析。
+    - **前端 Profile 狀態同步**：修改 `/api/profiles/active`，支援透過 query 參數 `profile` 重寫 active/current 狀態返回，避免 React 首頁自動還原至 default。
+
 - [x] **P1: 新增獨立的 Hermes 運維主管服務與安全 FRP stcp 穿透控制面板 (實體隔離與安全對接完成)**
     - **全域檔案收攏與服務重定向**：建立 `venvs/` 目錄，收攏全伺服器 Python 虛擬環境並重定向 `web_interface`, `hermes_bot`, `hermes_dashboard` 用戶級 systemd 服務。
     - **實體程式碼與環境完全隔離**：複製獨立 Graves 的 `hermes-agent-admin` 程式碼目錄與 `venv_hermes_admin` 虛擬環境，達成最高級別的主權安全防護。
