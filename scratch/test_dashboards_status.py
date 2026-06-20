@@ -1,8 +1,8 @@
 import requests
 import json
 
-# 已將運維主管與機器人的 Dashboard Token 進行物理隔離，使用不同的憑證
-admin_token = "8a24244f44a455a2c9a0835528734f2a"
+# 已將運維主管與機器人的 Dashboard Token 還原為對齊的憑證，以保證桌面端能正常連線
+admin_token = "2a1a462e6c7b2594fcf73cf0c7de0b74"
 hihi_token = "2a1a462e6c7b2594fcf73cf0c7de0b74"
 
 def check_status(port, name, token):

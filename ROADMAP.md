@@ -12,7 +12,7 @@
     - **部署本機安全 Web Dashboard**：部署並重構 `hermes_dashboard.service`，綁定 `127.0.0.1:9119` 並對接 `server_admin` Profile（獨立 SQLite hindsight 記憶隔離）。
     - **FRP stcp 加密穿透與手機 Termux 對接**：本地部署 `frpc.service` 服務，並提供手機 Termux 加密對接設定，流量全程加密。
     - **徹底分離主管與 Discord 頻道設定**：完全清空主管（`default` Profile）設定檔 `~/.hermes/config.yaml` 中繼承自 hihi 的 Discord 頻道等聊天平台配置，解決主管顯示 hihi 設定檔的疑慮。
-    - **隔離主管與機器人 Web 認證憑證 (Session Token)**：將主管大腦（9119）與 hihi 機器人（9120）的 Web Dashboard Session Token 完全隔離，避免共用憑證的 Session 衝突與安全風險。
+    - **對齊主管與機器人 Web 認證憑證 (Session Token)**：為確保 Windows 桌面端軟體能在多 Profile 間順利切換與連線，將主管面板的連線 Token 還原對齊為與 hihi 相同的 `2a1a462e6c7b2594fcf73cf0c7de0b74`，保證連線可用性。
 
 - [x] **P1: NousResearch Hermes-Agent 替代 Google ADK 技術評估與遷移計畫 (完全遷移與驗證完成)**
     - **完全本地自建計畫書發布與審批**：編寫並發布 [implementation_plan.md](file:///home/hi6688/.gemini/antigravity-ide/brain/f507483e-b47b-4903-9965-cc19ca3fcfd4/implementation_plan.md)，決定採行「100% 本地自建開源架構」（Self-Hosted Honcho Server + Hermes-Agent），獲得使用者批准。
