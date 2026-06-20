@@ -6,6 +6,7 @@
 ### 🚀 架構與系統升級 (Architecture)
 - **徹底分離主管大腦與聊天平台配置**：修剪並清空了 `/home/hi6688/.hermes/config.yaml`（`default` Profile）中殘留的 `discord` 與 `slack` 等平台頻道設定（原自 `hihi` 的 `free_response_channels`），解決了點開主管的 Web 控制面板 Settings 時依然顯示 hihi 聊天設定檔的混淆問題，並重啟 `hermes_dashboard.service` 服務使其載入生效。
 - **對齊主管與機器人 Web 認證憑證 (Session Token) 以相容桌面端**：考量到 Windows 桌面端軟體 (Electron) 對多 Profile 連線之 Session Token 的設定限制，我們將主管面板 (`hermes_dashboard.service`) 的 `HERMES_DASHBOARD_SESSION_TOKEN` 還原對齊為 `2a1a462e6c7b2594fcf73cf0c7de0b74`，以確保桌面端能正常連線 Port 9119 的主管面板，並同步更新了偵錯腳本 `test_dashboards_status.py` 驗證成功。
+- **物理封鎖與過濾 Web 端 Profile 列表**：為了徹底根除兩端 Dashboard 共用 Session Token 時因瀏覽器快取可能引發的設定檔與記憶混淆，我們修改了兩端代碼庫（主管與 hihi）中 `web_server.py` 的 `/api/profiles` API。後端現在會根據執行實體 (HERMES_HOME) 自動識別，並**強制只回傳當前執行的單一 Profile**，在 API 層級上強制鎖死，防止任何跨 Profile 切換、設定檔或記憶污染的漏洞。
 - **全域檔案收攏與服務路徑重定向**：為優化伺服器根目錄結構，建立 `/home/hi6688/servers/venvs` 收納目錄，並將所有 Python 虛擬環境統一移動收攏為 `venv_web`、`venv_hermes` 及 `venv_hermes_admin`，避免根目錄散落。
 - **重新進行 pip editable 綁定**：針對移動後損壞的 python venv 內部 pip 路徑，利用對應虛擬環境直譯器執行 `python -m pip install -e` 成功將 `venv_hermes` 重新綁定至 `hermes-agent`，及將 `venv_hermes_admin` 重新綁定至 `hermes-agent-admin`。
 - **重定向 systemd 背景服務**：修改了 `web_interface.service`、`hermes_bot.service` 與 `hermes_dashboard.service` 的 `ExecStart` 直譯器啟動路徑，重載 systemd daemon 並重啟驗證，確認三個背景服務皆已 100% 綠燈順暢運行 (Active: active (running))。
