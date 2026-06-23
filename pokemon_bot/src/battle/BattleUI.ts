@@ -67,6 +67,8 @@ let playerType1Img: any = null;
 let playerType2Img: any = null;
 let enemyType1Img: any = null;
 let enemyType2Img: any = null;
+let iconTeraImg: any = null;
+let iconMegaImg: any = null;
 
 async function loadCommonAssets() {
   if (!typesImg) {
@@ -98,6 +100,12 @@ async function loadCommonAssets() {
   }
   if (!enemyType2Img) {
     enemyType2Img = await loadImage(path.join(process.cwd(), 'assets/pbinfo_enemy_type2.png'));
+  }
+  if (!iconTeraImg) {
+    iconTeraImg = await loadImage(path.join(process.cwd(), 'assets/icon_tera.png'));
+  }
+  if (!iconMegaImg) {
+    iconMegaImg = await loadImage(path.join(process.cwd(), 'assets/icon_mega.png'));
   }
 }
 
@@ -480,21 +488,11 @@ function drawPokemonHUD(
   ctx.fill();
   ctx.restore();
   
-  // 3. 繪製寶可夢名稱、性別、特殊屬性
+  // 3. 繪製寶可夢名稱、性別、特殊進化/屬性 UI 圖示
   ctx.save();
   ctx.font = '16px Zpix';
   
   let displayName = name;
-  let prefixText = '';
-  let prefixColor = '#FFFFFF';
-  if (isTera) {
-    prefixText = '[太晶]';
-    prefixColor = '#00F0FF';
-  } else if (isMega) {
-    prefixText = '[MEGA]';
-    prefixColor = '#FF64FF';
-  }
-  
   let startX = x + xOffset + skew + 12;
   // 3.1 繪製寶可夢名稱
   drawPixelTextWithStroke(ctx, displayName, startX, y + 20, '#FFFFFF', '#000000', 3);
@@ -513,11 +511,16 @@ function drawPokemonHUD(
     genderWidth = ctx.measureText('♀').width;
   }
   
-  // 3.3 繪製特殊屬性在性別右邊
-  if (prefixText) {
-    ctx.font = '16px Zpix';
-    const specialX = genderX + genderWidth + (genderWidth > 0 ? 8 : 4);
-    drawPixelTextWithStroke(ctx, prefixText, specialX, y + 20, prefixColor, '#000000', 3);
+  // 3.3 繪製特殊進化/屬性 UI 圖示在性別右邊 (取代純文字)
+  const specialX = genderX + genderWidth + (genderWidth > 0 ? 8 : 4);
+  if (isTera && iconTeraImg) {
+    // 太晶化圖示 (寬 24px, 高 30px)，繪製於 y + 10 處
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(iconTeraImg, specialX, y + 9, 16, 20); // 縮小為 16x20 以適配 16px 字高
+  } else if (isMega && iconMegaImg) {
+    // 超級進化圖示 (寬 16px, 高 16px)，繪製於 y + 11 處
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(iconMegaImg, specialX, y + 10, 16, 16); // 保持 16x16 原始比例
   }
   ctx.restore();
   
@@ -529,17 +532,17 @@ function drawPokemonHUD(
     let drawX2 = 0;
     
     if (isPlayer) {
-      // 我方屬性在左邊：貼合左斜邊 (y + 13 和 y + 37 處的 X 坐標)
+      // 我方屬性在左邊：貼合左斜邊 (y + 13 和 y + 37 處的 X 坐標) 且完全貼合不留縫隙
       const edgeX1 = x + 40 + skew - 13 * (skew / (h / 2));
       const edgeX2 = x + 40 + (37 - (h / 2)) * (skew / (h / 2));
-      drawX1 = edgeX1 - 40 - 4;
-      drawX2 = edgeX2 - 40 - 4;
+      drawX1 = edgeX1 - 40;
+      drawX2 = edgeX2 - 40;
     } else {
-      // 敵方屬性在右邊：貼合右斜邊
+      // 敵方屬性在右邊：貼合右斜邊 且完全貼合不留縫隙
       const edgeX1 = x + (w - 40) - skew + 13 * (skew / (h / 2));
       const edgeX2 = x + (w - 40) - (37 - (h / 2)) * (skew / (h / 2));
-      drawX1 = edgeX1 + 4;
-      drawX2 = edgeX2 + 4;
+      drawX1 = edgeX1;
+      drawX2 = edgeX2;
     }
     
     if (types.length === 1) {
