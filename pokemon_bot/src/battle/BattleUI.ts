@@ -476,9 +476,17 @@ function drawPokemonHUD(
   ctx.closePath();
   ctx.clip(); // 限制繪圖在六邊形內
   
-  // 填充為一整塊深紫灰色 (黑色塊，無白色)
+  // 1.1 填充為一整塊深紫灰色六邊形主體 (黑色塊，無白色，寬度為 w - 40 以空出屬性插槽)
   ctx.fillStyle = '#2c2438';
-  ctx.fillRect(x, y, w, h);
+  ctx.beginPath();
+  ctx.moveTo(x + skew, y);
+  ctx.lineTo(x + w - 40 - skew, y);
+  ctx.lineTo(x + w - 40, y + h / 2);
+  ctx.lineTo(x + w - 40 - skew, y + h);
+  ctx.lineTo(x + skew, y + h);
+  ctx.lineTo(x, y + h / 2);
+  ctx.closePath();
+  ctx.fill();
   ctx.restore();
   
   // 2. 繪製 3px 黑色或霓虹發光像素框 (等效 1px)
@@ -494,6 +502,7 @@ function drawPokemonHUD(
     ctx.lineWidth = 3;
   }
   
+  // 2.1 描繪外圍大六邊形外框
   ctx.beginPath();
   ctx.moveTo(x + skew, y);
   ctx.lineTo(x + w - skew, y);
@@ -502,6 +511,13 @@ function drawPokemonHUD(
   ctx.lineTo(x + skew, y + h);
   ctx.lineTo(x, y + h / 2);
   ctx.closePath();
+  ctx.stroke();
+
+  // 2.2 描繪主體卡片右側分隔內框線 (使屬性徽章貼在框外時有邊框分隔)
+  ctx.beginPath();
+  ctx.moveTo(x + w - 40 - skew, y);
+  ctx.lineTo(x + w - 40, y + h / 2);
+  ctx.lineTo(x + w - 40 - skew, y + h);
   ctx.stroke();
   ctx.restore();
   
@@ -544,11 +560,11 @@ function drawPokemonHUD(
     const typeY1 = y + 14; // 上方格 (第一屬性)
     const typeY2 = y + 42; // 下方格 (第二屬性)
     
-    // 計算六邊形右側斜邊在徽章中心高度 (y+26 和 y+54) 的 X 坐標 (-4 用於與黑框無縫貼合)
-    const edgeX1 = x + w - skew + (26 * skew / (h / 2));
-    const edgeX2 = x + w - (14 * skew / (h / 2));
-    const drawX1 = edgeX1 - 4;
-    const drawX2 = edgeX2 - 4;
+    // 計算六邊形主體右側斜邊在徽章中心高度 (y+26 和 y+54) 的 X 坐標 (-2 用於與黑框無縫貼合)
+    const edgeX1 = x + w - 40 - skew + (26 * skew / (h / 2));
+    const edgeX2 = x + w - 40 - (14 * skew / (h / 2));
+    const drawX1 = edgeX1 - 2;
+    const drawX2 = edgeX2 - 2;
     
     if (types.length === 1) {
       // 單屬性：僅在上方格繪製第一屬性 (Type 1)
@@ -560,10 +576,10 @@ function drawPokemonHUD(
     }
   }
   
-  // 5. 繪製自製 3D 像素立體血條 (傾斜平行四邊形槽)
-  const barX = x + 204;
+  // 5. 繪製自製 3D 像素立體血條 (傾斜平行四邊形槽，配合貼合屬性微調寬度與起點)
+  const barX = x + 195;
   const barY = y + 54;
-  const barW = 159;
+  const barW = 125;
   const barH = 9;
   const barSkew = 3;
   
@@ -635,7 +651,7 @@ function drawPokemonHUD(
   if (isPlayer) {
     ctx.font = '11px Zpix';
     ctx.textAlign = 'right';
-    drawPixelTextWithStroke(ctx, `${hp}/${maxHp}`, x + w - skew - 12, y + 70, '#ffffff', '#000000', 2);
+    drawPixelTextWithStroke(ctx, `${hp}/${maxHp}`, x + 320, y + 70, '#ffffff', '#000000', 2);
   }
   ctx.restore();
 }
