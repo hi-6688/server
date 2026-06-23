@@ -272,26 +272,10 @@ function drawPokemonHUD(
     ctx.lineWidth = 3;
   }
   
-  // 2.1 描繪外圍大六邊形外框
-  ctx.beginPath();
-  ctx.moveTo(x + skew, y);
-  ctx.lineTo(x + w - skew, y);
-  ctx.lineTo(x + w, y + h / 2);
-  ctx.lineTo(x + w - skew, y + h);
-  ctx.lineTo(x + skew, y + h);
-  ctx.lineTo(x, y + h / 2);
-  ctx.closePath();
-  ctx.stroke();
-
-  // 2.2 描繪主體卡片右側分隔內框線 (使屬性徽章貼在框外時有邊框分隔)
-  ctx.beginPath();
-  ctx.moveTo(x + w - 40 - skew, y);
-  ctx.lineTo(x + w - 40, y + h / 2);
-  ctx.lineTo(x + w - 40 - skew, y + h);
-  ctx.stroke();
+  // 2. 移除外框與內框線 (應使用者要求，不要任何邊框)
   ctx.restore();
   
-  // 3. 繪製特殊前綴與寶可夢名稱、性別
+  // 3. 繪製寶可夢名稱、性別、特殊屬性 (排版順序：名稱 性別 特殊屬性)
   ctx.save();
   ctx.font = '16px Zpix';
   
@@ -299,29 +283,36 @@ function drawPokemonHUD(
   let prefixText = '';
   let prefixColor = '#FFFFFF';
   if (isTera) {
-    prefixText = '[太晶] ';
+    prefixText = '[太晶]';
     prefixColor = '#00F0FF';
   } else if (isMega) {
-    prefixText = '[MEGA] ';
+    prefixText = '[MEGA]';
     prefixColor = '#FF64FF';
   }
   
   let startX = x + skew + 12;
-  if (prefixText) {
-    drawPixelTextWithStroke(ctx, prefixText, startX, y + 33, prefixColor, '#000000', 3);
-    startX += ctx.measureText(prefixText).width;
-  }
-  
+  // 3.1 繪製寶可夢名稱
   drawPixelTextWithStroke(ctx, displayName, startX, y + 33, '#FFFFFF', '#000000', 3);
   const nameWidth = ctx.measureText(displayName).width;
   
+  // 3.2 繪製性別
   let genderX = startX + nameWidth + 6;
+  let genderWidth = 0;
   if (gender === 'M') {
     ctx.font = '15px Zpix';
     drawPixelTextWithStroke(ctx, '♂', genderX, y + 32, '#5dade2', '#000000', 3);
+    genderWidth = ctx.measureText('♂').width;
   } else if (gender === 'F') {
     ctx.font = '15px Zpix';
     drawPixelTextWithStroke(ctx, '♀', genderX, y + 32, '#f48fb1', '#000000', 3);
+    genderWidth = ctx.measureText('♀').width;
+  }
+  
+  // 3.3 繪製特殊屬性在性別右邊
+  if (prefixText) {
+    ctx.font = '16px Zpix';
+    const specialX = genderX + genderWidth + (genderWidth > 0 ? 8 : 4);
+    drawPixelTextWithStroke(ctx, prefixText, specialX, y + 33, prefixColor, '#000000', 3);
   }
   ctx.restore();
   
@@ -330,11 +321,11 @@ function drawPokemonHUD(
     const typeY1 = y + 14; // 上方格 (第一屬性)
     const typeY2 = y + 42; // 下方格 (第二屬性)
     
-    // 計算六邊形主體右側斜邊在徽章中心高度 (y+26 和 y+54) 的 X 坐標 (-2 用於與黑框無縫貼合)
+    // 計算六邊形主體右側斜邊在徽章中心高度 (y+26 和 y+54) 的 X 坐標 (+4 用於形成無框自然縫隙)
     const edgeX1 = x + w - 40 - skew + (26 * skew / (h / 2));
     const edgeX2 = x + w - 40 - (14 * skew / (h / 2));
-    const drawX1 = edgeX1 - 2;
-    const drawX2 = edgeX2 - 2;
+    const drawX1 = edgeX1 + 4;
+    const drawX2 = edgeX2 + 4;
     
     if (types.length === 1) {
       // 單屬性：僅在上方格繪製第一屬性 (Type 1)
