@@ -539,14 +539,16 @@ function drawPokemonHUD(
   }
   ctx.restore();
   
-  // 4. 繪製屬性徽章 (垂直上下堆疊在右側斜插槽中)
+  // 4. 繪製屬性徽章 (垂直上下堆疊，緊貼在右側六邊形黑框的外面)
   if (types && types.length > 0) {
     const typeY1 = y + 14; // 上方格 (第一屬性)
     const typeY2 = y + 42; // 下方格 (第二屬性)
     
-    // 計算右上插槽 (Type 1) 與右下插槽 (Type 2) 因斜邊產生的 X 軸偏移
-    const drawX1 = (x + w - 12) - 40 - (14 * skew / h);
-    const drawX2 = (x + w - 12) - 40 - (42 * skew / h);
+    // 計算六邊形右側斜邊在徽章中心高度 (y+26 和 y+54) 的 X 坐標 (-4 用於與黑框無縫貼合)
+    const edgeX1 = x + w - skew + (26 * skew / (h / 2));
+    const edgeX2 = x + w - (14 * skew / (h / 2));
+    const drawX1 = edgeX1 - 4;
+    const drawX2 = edgeX2 - 4;
     
     if (types.length === 1) {
       // 單屬性：僅在上方格繪製第一屬性 (Type 1)
