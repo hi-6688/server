@@ -459,7 +459,7 @@ function drawPokemonHUD(
   const skew = 24; // 3倍放大下的平行斜切量
   const h1 = 50; // 上半部深色高度
   
-  // 1. 繪製平行四邊形底板
+  // 1. 繪製六邊形底板 (左右兩端為向外突出的尖角，達成官方 6 邊形排版)
   ctx.save();
   ctx.shadowColor = 'rgba(0, 0, 0, 0.35)';
   ctx.shadowBlur = 8;
@@ -468,11 +468,13 @@ function drawPokemonHUD(
   
   ctx.beginPath();
   ctx.moveTo(x + skew, y);
-  ctx.lineTo(x + w, y);
+  ctx.lineTo(x + w - skew, y);
+  ctx.lineTo(x + w, y + h / 2);
   ctx.lineTo(x + w - skew, y + h);
-  ctx.lineTo(x, y + h);
+  ctx.lineTo(x + skew, y + h);
+  ctx.lineTo(x, y + h / 2);
   ctx.closePath();
-  ctx.clip(); // 限制繪圖在多邊形內
+  ctx.clip(); // 限制繪圖在六邊形內
   
   // 填充為一整塊深紫灰色 (黑色塊，無白色)
   ctx.fillStyle = '#2c2438';
@@ -494,9 +496,11 @@ function drawPokemonHUD(
   
   ctx.beginPath();
   ctx.moveTo(x + skew, y);
-  ctx.lineTo(x + w, y);
+  ctx.lineTo(x + w - skew, y);
+  ctx.lineTo(x + w, y + h / 2);
   ctx.lineTo(x + w - skew, y + h);
-  ctx.lineTo(x, y + h);
+  ctx.lineTo(x + skew, y + h);
+  ctx.lineTo(x, y + h / 2);
   ctx.closePath();
   ctx.stroke();
   ctx.restore();
