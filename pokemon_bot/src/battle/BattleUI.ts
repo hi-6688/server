@@ -474,16 +474,9 @@ function drawPokemonHUD(
   ctx.closePath();
   ctx.clip(); // 限制繪圖在多邊形內
   
-  // 填充上半部深紫灰色
+  // 填充為一整塊深紫灰色 (黑色塊，無白色)
   ctx.fillStyle = '#2c2438';
-  ctx.fillRect(x, y, w, h1);
-  
-  // 填充下半部白色 (帶點微灰漸層)
-  const whiteGrad = ctx.createLinearGradient(x, y + h1, x, y + h);
-  whiteGrad.addColorStop(0, '#ffffff');
-  whiteGrad.addColorStop(1, '#e2e2e2');
-  ctx.fillStyle = whiteGrad;
-  ctx.fillRect(x, y + h1, w, h - h1);
+  ctx.fillRect(x, y, w, h);
   ctx.restore();
   
   // 2. 繪製 3px 黑色或霓虹發光像素框 (等效 1px)
@@ -542,20 +535,22 @@ function drawPokemonHUD(
   }
   ctx.restore();
   
-  // 4. 繪製屬性徽章 (右上角右對齊展示，官方像素斜邊拼接)
+  // 4. 繪製屬性徽章 (垂直上下堆疊在右側斜插槽中)
   if (types && types.length > 0) {
-    const typeY = y + 13;
-    const rightAlignX = x + w - skew - 12;
+    const typeY1 = y + 14; // 上方格 (第一屬性)
+    const typeY2 = y + 42; // 下方格 (第二屬性)
+    
+    // 計算右上插槽 (Type 1) 與右下插槽 (Type 2) 因斜邊產生的 X 軸偏移
+    const drawX1 = (x + w - 12) - 40 - (14 * skew / h);
+    const drawX2 = (x + w - 12) - 40 - (42 * skew / h);
+    
     if (types.length === 1) {
-      // 單屬性：僅繪製一個 type1 (右側徽章)
-      const drawX = rightAlignX - 40;
-      drawPokeRogueTypeBadge(ctx, types[0], drawX, typeY, isPlayer, false);
+      // 單屬性：僅在上方格繪製第一屬性 (Type 1)
+      drawPokeRogueTypeBadge(ctx, types[0], drawX1, typeY1, isPlayer, false);
     } else if (types.length >= 2) {
-      // 雙屬性：右側第二屬性用 type1，左側第一屬性用 type2，無縫拼合
-      const drawX1 = rightAlignX - 40;
-      const drawX2 = drawX1 - 40;
-      drawPokeRogueTypeBadge(ctx, types[1], drawX1, typeY, isPlayer, false); // 第二屬性 (右)
-      drawPokeRogueTypeBadge(ctx, types[0], drawX2, typeY, isPlayer, true);  // 第一屬性 (左)
+      // 雙屬性：上方格繪製第一屬性 (Type 1)，下方格繪製第二屬性 (Type 2)
+      drawPokeRogueTypeBadge(ctx, types[0], drawX1, typeY1, isPlayer, false);
+      drawPokeRogueTypeBadge(ctx, types[1], drawX2, typeY2, isPlayer, true);
     }
   }
   
@@ -634,7 +629,7 @@ function drawPokemonHUD(
   if (isPlayer) {
     ctx.font = '11px Zpix';
     ctx.textAlign = 'right';
-    drawPixelTextWithStroke(ctx, `${hp}/${maxHp}`, x + w - skew - 12, y + 70, '#555555', '#ffffff', 2);
+    drawPixelTextWithStroke(ctx, `${hp}/${maxHp}`, x + w - skew - 12, y + 70, '#ffffff', '#000000', 2);
   }
   ctx.restore();
 }

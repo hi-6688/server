@@ -8,7 +8,7 @@
 - [x] **P1: 寶可夢對戰 HUD 排版重構與屬性切片繪製 (無等級/經驗值 Champion 版本完成)**
     - **移除等級與經驗值**：由於 Champion 版本不需要等級與經驗值，移除 `Lv.` 文字與我方的底部 `EXP` 經驗條。
     - **統一卡片高度為 80px**：重構 `drawPokemonHUD()`，我方與敵方高度統一為 `80px` 平行四邊形卡片，並將我方 HUD 的繪製 Y 坐標微調至 `420`。
-    - **整合屬性切片圖示**：廢除使用 `types_zh-Hant.png` 徽章，升級為使用 PokéRogue 官方帶斜切角的 `pbinfo_player_type1/2.png` 與 `pbinfo_enemy_type1/2.png` 像素底板進行單/雙屬性無縫拼接（單屬性寬 40px，雙屬性緊貼拼合寬 80px），且區分我方與敵方的傾斜朝向，達成 100% 官方視覺效果。
+    - **整合屬性與底板圖示**：廢除 `types_zh-Hant.png` 徽章，升級為 PokéRogue 官方帶斜切角的 `pbinfo_player_type1/2.png` 與 `pbinfo_enemy_type1/2.png` 像素徽章進行右上與右下垂直上下堆疊排版，並依斜率精確偏移 X 軸；並將 HUD 平行四邊形底板由原本下半部白色漸層重構為純深色背景（黑色塊），且將 HP 數值改為白字黑邊以求 100% 官方視覺效果。
     - **整合異常狀態與特殊狀態**：異常狀態（Statuses）徽章切片（源自 `statuses_zh-Hant.png`，放大至 `60x24`）精確排版於白色卡片底左下方。支援太晶化時霓虹青外框及 `[太晶]` 標記，Mega進化時霓虹粉外框及 `[MEGA]` 標記。
     - **修復編譯與重複實作地雷**：刪除 [BattleUI.ts](file:///home/hi6688/servers/pokemon_bot/src/battle/BattleUI.ts) 與測試腳本中的重複舊版函數。
 
