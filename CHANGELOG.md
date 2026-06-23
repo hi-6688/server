@@ -2,6 +2,22 @@
 
 本檔案記錄了專案的所有重大更新與架構變動。這對於 Agent (AI 助手) 理解專案演進至關重要。
 
+## [2026-06-23] - 寶可夢對戰 HUD 排版重構 (無等級/經驗值 Champion 版本)
+### 🎨 介面與體驗優化 (UI/UX)
+- **移除了等級與經驗值繪製**：由於 Champion 版本不需要等級與經驗值，移除 `Lv.` 文字與我方的底部 `EXP` 經驗條。
+- **統一 HUD 卡片高度為 80px**：重新調整我方與敵方 HUD 外框為統一 `80px` 高度平行四邊形卡片，並將我方 HUD 的繪製 Y 坐標微調至 `420`。
+- **重構與整合屬性與異常狀態像素圖示切片**：
+  - **升級為 PokéRogue 官方像素徽章底板**：廢除使用中文長方形 `types_zh-Hant.png` 徽章，改用 PokéRogue 官方帶有斜切角的 `pbinfo_player_type1/2.png` 與 `pbinfo_enemy_type1/2.png` 進行無縫積木式拼接，達成 100% 官方視覺效果。
+  - **拼合積木演算法**：實作單屬性（僅繪製一個 `type1` 右側徽章，寬 40px）與雙屬性（左側為 `type2` 第一屬性，右側為 `type1` 第二屬性緊貼拼合，總寬 80px）繪製邏輯，且完美區分我方（Player）與敵方（Enemy）的傾斜朝向。
+  - **異常狀態徽章切片**：將異常狀態（Statuses）徽章切片（源自 `statuses_zh-Hant.png`，放大至 `60x24`）精確排版於白色卡片底左下方。
+- **新增特殊狀態霓虹外框與標示 (Mega / 太晶化)**：支援太晶化時外框渲染霓虹青色及加上 `[太晶]` 標記；Mega進化時外框渲染霓虹粉色及加上 `[MEGA]` 標記。
+- **修復 TypeScript 編譯與重複實作錯誤**：移除了 [BattleUI.ts](file:///home/hi6688/servers/pokemon_bot/src/battle/BattleUI.ts) 中重疊重複的舊版 `drawPokemonHUD` 函數，解決了 `TransformError` 與重複實作的語法地雷。
+
+## [2026-06-22] - 解決 Git 儲存庫過多使用中變更與編輯器效能限制
+### 🔧 設定與系統最佳化 (Configuration & Performance)
+- **優化 .gitignore 忽略規則**：在根目錄 `.gitignore` 中新增 `venvs/`、`node_modules/`、`**/node_modules/` 與 `.antigravitycli/` 等大型開發依賴與執行期目錄。
+- **排除十萬個未追蹤檔案**：成功將 100,000+ 個由 Python 虛擬環境與 Node 模組產生的檔案排除於版控與編輯器監控外，解決 VS Code 的 Git 檔案變更監控上限警告，恢復編輯器 Git 完整功能。
+
 ## [2026-06-20] - 實作全路徑前綴重寫 ASGI Middleware 與獨立 Hermes 運維主管服務
 ### 架構與系統升級 (Architecture)
 - **實現主管端 Profile 與機器人端之絕對對稱**：新建 `server_admin` Profile，並將原先歷史殛留、直接佔用 `~/.hermes/` 根目錄的主管端設定檔、SQLite 狀態資料庫與環境變數檔案完敥搬移至 `/home/hi6688/.hermes/profiles/server_admin/`，讓兩端在檔案目錄履級上遚成「絕對對稱與平排隔離」。
