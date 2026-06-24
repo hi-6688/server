@@ -307,8 +307,10 @@ function drawPokemonHUD(
   ctx.save();
   ctx.font = '16px Zpix';
   
+  // 依據敵我底框起點（我方 x + 60，敵方 x + 24）動態計算內容起點，使文字與左邊界間隔一致為 24px
+  const contentStartX = isPlayer ? x + 60 : x + 24;
   let displayName = name;
-  let startX = x + 84; // 不分敵我，文字離左邊的間隔均固定為 84px，完美對齊
+  let startX = contentStartX + 24;
   // 3.1 繪製寶可夢名稱
   drawPixelTextWithStroke(ctx, displayName, startX, y + 24, '#FFFFFF', '#000000', 3);
   const nameWidth = ctx.measureText(displayName).width;
@@ -338,7 +340,7 @@ function drawPokemonHUD(
   ctx.restore();
   
   // 4. 繪製血條
-  const barX = x + 205; // 不分敵我，血條均在距左側 205px 處開始，格式完全一致
+  const barX = contentStartX + 145; // 統一血條相對於內容邊界偏移 145px（我方 205px，敵方 169px）
   const barY = y + 40;
   const barW = 120; // 統一縮短至 120px，確保敵方血條右端（325px）不與右側屬性徽章（330px 起）重疊
   const barH = 10;
@@ -390,10 +392,11 @@ function drawPokemonHUD(
   
   // 5. 狀態徽章與 HP 數值
   ctx.save();
-  if (status) drawStatusBadge(ctx, status, x + 84, y + 33); // 狀態徽章固定在 x + 84
+  if (status) drawStatusBadge(ctx, status, contentStartX + 24, y + 33); // 狀態徽章與左邊界間隔 24px
   ctx.font = '12px Zpix';
   ctx.textAlign = 'right';
-  drawPixelTextWithStroke(ctx, `${hp}/${maxHp}`, x + 325, y + 62, '#ffffff', '#000000', 2);
+  // HP 數字靠右對齊點統一在 contentStartX + 265 處（我方 x + 325，敵方 x + 289），剛好對齊血條右端點
+  drawPixelTextWithStroke(ctx, `${hp}/${maxHp}`, contentStartX + 265, y + 62, '#ffffff', '#000000', 2);
   ctx.restore();
 }
 
