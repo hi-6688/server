@@ -230,7 +230,67 @@ function drawPokemonHUD(
   const h = 72; // 框高度設為 72px，配合 4 倍屬性徽章重疊 24px 完美貼合
   const xOffset = isPlayer ? 80 : 0; // 我方屬性在左佔用 80px，主體往右移 80px
   
-  // 1. 先繪製屬性徽章 (在底板下方，這樣底底框的黑色邊框可以壓在屬性上層，遮蓋其邊緣透明塊)
+  // 1. 繪製六邊形底板填充 (在下層/底層)
+  ctx.save();
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.35)';
+  ctx.shadowBlur = 8;
+  ctx.shadowOffsetX = 3;
+  ctx.shadowOffsetY = 3;
+  
+  ctx.fillStyle = '#2c2438';
+  ctx.beginPath();
+  
+  if (isPlayer) {
+    // 我方屬性在左側：左側對接線（向左延伸 3 像素，壓在屬性徽章底下防透光）
+    ctx.moveTo(x + 69, y);
+    ctx.lineTo(x + 77, y + 24);
+    ctx.lineTo(x + 77, y + h);
+    // 右側外邊界六邊形尖角（中點 y + 36 處突出，斜切量為 24px 以修飾角度）
+    ctx.lineTo(x + w - 24, y + h);
+    ctx.lineTo(x + w, y + 36);
+    ctx.lineTo(x + w - 24, y);
+  } else {
+    // 敵方屬性在右側：右側對接線（向右延伸 3 像素，壓在屬性徽章底下防透光）
+    ctx.moveTo(x + 24, y); // 左側斜切量為 24px
+    ctx.lineTo(x + w - 69, y);
+    ctx.lineTo(x + w - 77, y + 24);
+    ctx.lineTo(x + w - 77, y + h);
+    // 左側外邊界六邊形尖角（中點 y + 36 處突出）
+    ctx.lineTo(x + 24, y + h);
+    ctx.lineTo(x, y + 36);
+  }
+  
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+
+  // 2. 繪製黑色粗外邊框 (在底層，但比底色晚，屬性徽章會疊加在它上面)
+  ctx.save();
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = '#000000';
+  ctx.beginPath();
+  
+  if (isPlayer) {
+    ctx.moveTo(x + 69, y);
+    ctx.lineTo(x + 77, y + 24);
+    ctx.lineTo(x + 77, y + h);
+    ctx.lineTo(x + w - 24, y + h);
+    ctx.lineTo(x + w, y + 36);
+    ctx.lineTo(x + w - 24, y);
+  } else {
+    ctx.moveTo(x + 24, y);
+    ctx.lineTo(x + w - 69, y);
+    ctx.lineTo(x + w - 77, y + 24);
+    ctx.lineTo(x + w - 77, y + h);
+    ctx.lineTo(x + 24, y + h);
+    ctx.lineTo(x, y + 36);
+  }
+  
+  ctx.closePath();
+  ctx.stroke();
+  ctx.restore();
+  
+  // 3. 繪製屬性徽章 (在上層，完美壓在底框黑色邊框上，呈現極佳的對齊與邊界細節)
   if (types && types.length > 0) {
     const typeY1 = y;       // 上方第一屬性 (y 到 y + 48)
     const typeY2 = y + 24;  // 下方第二屬性 (y + 24 到 y + 72)，重疊 24px 完美貼合 72px
@@ -252,66 +312,6 @@ function drawPokemonHUD(
       drawPokeRogueTypeBadge(ctx, types[1], drawX2, typeY2, isPlayer, true);
     }
   }
-
-  // 2. 繪製六邊形底板填充 (壓在屬性徽章上層)
-  ctx.save();
-  ctx.shadowColor = 'rgba(0, 0, 0, 0.35)';
-  ctx.shadowBlur = 8;
-  ctx.shadowOffsetX = 3;
-  ctx.shadowOffsetY = 3;
-  
-  ctx.fillStyle = '#2c2438';
-  ctx.beginPath();
-  
-  if (isPlayer) {
-    // 我方屬性在左側：左側對接線（向左擴展 1 像素防抗鋸齒透光）
-    ctx.moveTo(x + 71, y);
-    ctx.lineTo(x + 79, y + 24);
-    ctx.lineTo(x + 79, y + h);
-    // 右側外邊界六邊形尖角（中點 y + 36 處突出，斜切量為 24px 以修飾角度）
-    ctx.lineTo(x + w - 24, y + h);
-    ctx.lineTo(x + w, y + 36);
-    ctx.lineTo(x + w - 24, y);
-  } else {
-    // 敵方屬性在右側：右側對接線（向右擴展 1 像素防抗鋸齒透光）
-    ctx.moveTo(x + 24, y); // 左側斜切量為 24px
-    ctx.lineTo(x + w - 71, y);
-    ctx.lineTo(x + w - 79, y + 24);
-    ctx.lineTo(x + w - 79, y + h);
-    // 左側外邊界六邊形尖角（中點 y + 36 處突出）
-    ctx.lineTo(x + 24, y + h);
-    ctx.lineTo(x, y + 36);
-  }
-  
-  ctx.closePath();
-  ctx.fill();
-  ctx.restore();
-
-  // 2.5 繪製黑色粗外邊框 (在最上層，蓋住屬性接縫與邊緣透明角以防破圖)
-  ctx.save();
-  ctx.lineWidth = 4;
-  ctx.strokeStyle = '#000000';
-  ctx.beginPath();
-  
-  if (isPlayer) {
-    ctx.moveTo(x + 71, y);
-    ctx.lineTo(x + 79, y + 24);
-    ctx.lineTo(x + 79, y + h);
-    ctx.lineTo(x + w - 24, y + h);
-    ctx.lineTo(x + w, y + 36);
-    ctx.lineTo(x + w - 24, y);
-  } else {
-    ctx.moveTo(x + 24, y);
-    ctx.lineTo(x + w - 71, y);
-    ctx.lineTo(x + w - 79, y + 24);
-    ctx.lineTo(x + w - 79, y + h);
-    ctx.lineTo(x + 24, y + h);
-    ctx.lineTo(x, y + 36);
-  }
-  
-  ctx.closePath();
-  ctx.stroke();
-  ctx.restore();
   
   // 3. 繪製寶可夢名稱、性別、特殊進化/屬性 UI 圖示
   ctx.save();
