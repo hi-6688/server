@@ -439,7 +439,7 @@ function drawPokeRogueTypeBadge(
   tempCtx.drawImage(img, 0, -yOffset);
 
   ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(tempCanvas, dx, dy, 40, 24);
+  ctx.drawImage(tempCanvas, dx, dy, 80, 48);
 }
 
 /**
@@ -463,9 +463,8 @@ function drawPokemonHUD(
 ) {
   const hpPercent = Math.max(0, Math.min(100, Math.round((hp / maxHp) * 100)));
   const w = 390;
-  const h = 50; // 縮小高度至 50px 以完全貼合屬性徽章
-  const skew = 15; // 斜切量 15px (半高 25px)
-  const xOffset = isPlayer ? 40 : 0; // 我方屬性在左，主體往右移 40px；敵方屬性在右，主體在左
+  const h = 84; // 框高度拉大至 84px以完全配合 4 倍大小屬性徽章
+  const xOffset = isPlayer ? 80 : 0; // 我方屬性在左佔用 80px，主體往右移 80px；敵方主體在左，屬性在右
   
   // 1. 繪製六邊形底板
   ctx.save();
@@ -474,16 +473,29 @@ function drawPokemonHUD(
   ctx.shadowOffsetX = 3;
   ctx.shadowOffsetY = 3;
   
-  // 1.1 填充為一整塊深紫灰色六邊形主體 (無邊框)
-  const xBody = x + xOffset;
   ctx.fillStyle = '#2c2438';
   ctx.beginPath();
-  ctx.moveTo(xBody + skew, y);
-  ctx.lineTo(xBody + (w - 40) - skew, y);
-  ctx.lineTo(xBody + (w - 40), y + h / 2);
-  ctx.lineTo(xBody + (w - 40) - skew, y + h);
-  ctx.lineTo(xBody + skew, y + h);
-  ctx.lineTo(xBody, y + h / 2);
+  
+  if (isPlayer) {
+    // 我方屬性在左側：左側對接斜邊與垂直線，並向左擴展 1.5 像素以防抗鋸齒透光
+    ctx.moveTo(x + 70.5, y);
+    ctx.lineTo(x + 78.5, y + 48);
+    ctx.lineTo(x + 78.5, y + h);
+    // 右側外邊界六邊形尖角（中點 y + 42 處突出）
+    ctx.lineTo(x + w - 15, y + h);
+    ctx.lineTo(x + w, y + 42);
+    ctx.lineTo(x + w - 15, y);
+  } else {
+    // 敵方屬性在右側：右側對接斜邊與垂直線，並向右擴展 1.5 像素以防抗鋸齒透光
+    ctx.moveTo(x + 15, y);
+    ctx.lineTo(x + w - 70.5, y);
+    ctx.lineTo(x + w - 78.5, y + 48);
+    ctx.lineTo(x + w - 78.5, y + h);
+    // 左側外邊界六邊形尖角（中點 y + 42 處突出）
+    ctx.lineTo(x + 15, y + h);
+    ctx.lineTo(x, y + 42);
+  }
+  
   ctx.closePath();
   ctx.fill();
   ctx.restore();
@@ -493,9 +505,9 @@ function drawPokemonHUD(
   ctx.font = '16px Zpix';
   
   let displayName = name;
-  let startX = x + xOffset + skew + 12;
+  let startX = x + xOffset + 24;
   // 3.1 繪製寶可夢名稱
-  drawPixelTextWithStroke(ctx, displayName, startX, y + 20, '#FFFFFF', '#000000', 3);
+  drawPixelTextWithStroke(ctx, displayName, startX, y + 32, '#FFFFFF', '#000000', 3);
   const nameWidth = ctx.measureText(displayName).width;
   
   // 3.2 繪製性別
@@ -503,46 +515,38 @@ function drawPokemonHUD(
   let genderWidth = 0;
   if (gender === 'M') {
     ctx.font = '15px Zpix';
-    drawPixelTextWithStroke(ctx, '♂', genderX, y + 19, '#5dade2', '#000000', 3);
+    drawPixelTextWithStroke(ctx, '♂', genderX, y + 31, '#5dade2', '#000000', 3);
     genderWidth = ctx.measureText('♂').width;
   } else if (gender === 'F') {
     ctx.font = '15px Zpix';
-    drawPixelTextWithStroke(ctx, '♀', genderX, y + 19, '#f48fb1', '#000000', 3);
+    drawPixelTextWithStroke(ctx, '♀', genderX, y + 31, '#f48fb1', '#000000', 3);
     genderWidth = ctx.measureText('♀').width;
   }
   
   // 3.3 繪製特殊進化/屬性 UI 圖示在性別右邊 (取代純文字)
   const specialX = genderX + genderWidth + (genderWidth > 0 ? 8 : 4);
   if (isTera && iconTeraImg) {
-    // 太晶化圖示 (寬 24px, 高 30px)，繪製於 y + 10 處
     ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(iconTeraImg, specialX, y + 9, 16, 20); // 縮小為 16x20 以適配 16px 字高
+    ctx.drawImage(iconTeraImg, specialX, y + 20, 16, 20); // 縮小為 16x20 以適配 16px 字高
   } else if (isMega && iconMegaImg) {
-    // 超級進化圖示 (寬 16px, 高 16px)，繪製於 y + 11 處
     ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(iconMegaImg, specialX, y + 10, 16, 16); // 保持 16x16 原始比例
+    ctx.drawImage(iconMegaImg, specialX, y + 22, 16, 16); // 保持 16x16 原始比例
   }
   ctx.restore();
   
   // 4. 繪製屬性徽章
   if (types && types.length > 0) {
-    const typeY1 = y + 1;  // 上方格 (第一屬性)
-    const typeY2 = y + 25; // 下方格 (第二屬性)
+    const typeY1 = y;       // 上方第一屬性 (y 到 y + 48)
+    const typeY2 = y + 36;  // 下方第二屬性 (y + 36 到 y + 84)，重疊 12px
     let drawX1 = 0;
     let drawX2 = 0;
     
     if (isPlayer) {
-      // 我方屬性在左邊：貼合左斜邊 (y + 13 和 y + 37 處的 X 坐標) 且完全貼合不留縫隙
-      const edgeX1 = x + 40 + skew - 13 * (skew / (h / 2));
-      const edgeX2 = x + 40 + (37 - (h / 2)) * (skew / (h / 2));
-      drawX1 = edgeX1 - 40;
-      drawX2 = edgeX2 - 40;
+      drawX1 = x;
+      drawX2 = x;
     } else {
-      // 敵方屬性在右邊：貼合右斜邊 且完全貼合不留縫隙
-      const edgeX1 = x + (w - 40) - skew + 13 * (skew / (h / 2));
-      const edgeX2 = x + (w - 40) - (37 - (h / 2)) * (skew / (h / 2));
-      drawX1 = edgeX1;
-      drawX2 = edgeX2;
+      drawX1 = x + w - 80;
+      drawX2 = x + w - 80;
     }
     
     if (types.length === 1) {
@@ -554,10 +558,10 @@ function drawPokemonHUD(
   }
   
   // 5. 繪製血條
-  const barX = x + xOffset + 175;
-  const barY = y + 24;
+  const barX = x + xOffset + 145;
+  const barY = y + 36;
   const barW = 150;
-  const barH = 8;
+  const barH = 10; // 拉大到 10px 高度
   const barSkew = 3;
   
   ctx.save();
@@ -596,21 +600,21 @@ function drawPokemonHUD(
     else if (hpPercent <= 50) colors = { light: '#f8d030', main: '#e0a000', dark: '#a87000' };
     
     ctx.fillStyle = colors.light;
-    ctx.fillRect(barX - 10, barY, barW + 20, 3);
+    ctx.fillRect(barX - 10, barY, barW + 20, 3.5);
     ctx.fillStyle = colors.main;
-    ctx.fillRect(barX - 10, barY + 3, barW + 20, 3);
+    ctx.fillRect(barX - 10, barY + 3.5, barW + 20, 3.5);
     ctx.fillStyle = colors.dark;
-    ctx.fillRect(barX - 10, barY + 6, barW + 20, 3);
+    ctx.fillRect(barX - 10, barY + 7, barW + 20, 3);
   }
   ctx.restore();
   
-  // 6. 狀態與數值
+  // 6. 狀態徽章與 HP 數值
   ctx.save();
-  if (status) drawStatusBadge(ctx, status, x + xOffset + skew + 12, y + 23);
+  if (status) drawStatusBadge(ctx, status, x + xOffset + 24, y + 44);
   if (isPlayer) {
-    ctx.font = '11px Zpix';
+    ctx.font = '12px Zpix';
     ctx.textAlign = 'right';
-    drawPixelTextWithStroke(ctx, `${hp}/${maxHp}`, x + xOffset + 325, y + 43, '#ffffff', '#000000', 2);
+    drawPixelTextWithStroke(ctx, `${hp}/${maxHp}`, x + xOffset + 300, y + 64, '#ffffff', '#000000', 2);
   }
   ctx.restore();
 }
