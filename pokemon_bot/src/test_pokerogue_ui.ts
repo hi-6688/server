@@ -228,7 +228,7 @@ function drawPokemonHUD(
   const hpPercent = Math.max(0, Math.min(100, Math.round((hp / maxHp) * 100)));
   const w = 390;
   const h = 72; // 框高度設為 72px，配合 3 倍屬性徽章不重疊完美貼合
-  const xOffset = 60; // 3 倍屬性在左佔用 60px，主體往右移 60px
+  const xOffset = isPlayer ? 60 : 0; // 我方屬性在左佔 60px，敵方屬性在右（故敵方 xOffset 設為 0 貼齊左邊）
   
   // 1. 繪製六邊形底板填充 (在下層/底層)
   ctx.save();
@@ -240,12 +240,21 @@ function drawPokemonHUD(
   ctx.fillStyle = '#2c2438';
   ctx.beginPath();
   
-  // 屬性徽章統一在左側，底色填充路徑一致（左側對接延伸至 x + 40 以防透光，右側為斜角）
-  ctx.moveTo(x + 40, y);
-  ctx.lineTo(x + w - 24, y);
-  ctx.lineTo(x + w, y + 36);
-  ctx.lineTo(x + w - 24, y + h);
-  ctx.lineTo(x + 40, y + h);
+  if (isPlayer) {
+    // 我方屬性在左側：左側對接線（向左延伸至 x + 40，壓在屬性徽章底下防透光）
+    ctx.moveTo(x + 40, y);
+    ctx.lineTo(x + w - 24, y);
+    ctx.lineTo(x + w, y + 36);
+    ctx.lineTo(x + w - 24, y + h);
+    ctx.lineTo(x + 40, y + h);
+  } else {
+    // 敵方屬性在右側：右側對接線（向右延伸至 x + w - 40，壓在屬性徽章底下防透光）
+    ctx.moveTo(x + 24, y);
+    ctx.lineTo(x + w - 40, y);
+    ctx.lineTo(x + w - 40, y + h);
+    ctx.lineTo(x + 24, y + h);
+    ctx.lineTo(x, y + 36);
+  }
   
   ctx.closePath();
   ctx.fill();
@@ -253,19 +262,19 @@ function drawPokemonHUD(
 
   // 2. 繪製屬性徽章 (在中間層，會被最上層的黑色描邊壓邊，呈現極佳的對齊與邊界細節)
   if (types && types.length > 0) {
-    const drawX1 = x;
-    const drawX2 = x;
+    const drawX1 = isPlayer ? x : x + w - 60;
+    const drawX2 = isPlayer ? x : x + w - 60;
     
     if (types.length === 1) {
       // 單屬性：垂直置中，高度 36px (y + 18 處)
       const typeY1 = y + 18;
-      drawPokeRogueTypeBadge(ctx, types[0], drawX1, typeY1, true, false);
+      drawPokeRogueTypeBadge(ctx, types[0], drawX1, typeY1, isPlayer, false);
     } else if (types.length >= 2) {
       // 雙屬性：不重疊，上下排列，各高 36px (y 與 y + 36 處)
       const typeY1 = y;
       const typeY2 = y + 36;
-      drawPokeRogueTypeBadge(ctx, types[0], drawX1, typeY1, true, false);
-      drawPokeRogueTypeBadge(ctx, types[1], drawX2, typeY2, true, true);
+      drawPokeRogueTypeBadge(ctx, types[0], drawX1, typeY1, isPlayer, false);
+      drawPokeRogueTypeBadge(ctx, types[1], drawX2, typeY2, isPlayer, true);
     }
   }
 
@@ -275,12 +284,21 @@ function drawPokemonHUD(
   ctx.strokeStyle = '#000000';
   ctx.beginPath();
   
-  // 屬性徽章統一在左側，外框黑色描邊一致（左側 x + 60 對接處開放不畫線，其餘三邊封閉）
-  ctx.moveTo(x + 60, y);
-  ctx.lineTo(x + w - 24, y);
-  ctx.lineTo(x + w, y + 36);
-  ctx.lineTo(x + w - 24, y + h);
-  ctx.lineTo(x + 60, y + h);
+  if (isPlayer) {
+    // 我方：開放式外框，左側垂直面對接處不畫線，與屬性徽章無縫融合
+    ctx.moveTo(x + 60, y);
+    ctx.lineTo(x + w - 24, y);
+    ctx.lineTo(x + w, y + 36);
+    ctx.lineTo(x + w - 24, y + h);
+    ctx.lineTo(x + 60, y + h);
+  } else {
+    // 敵方：開放式外框，右側垂直面對接處不畫線，與屬性徽章無縫融合
+    ctx.moveTo(x + w - 60, y);
+    ctx.lineTo(x + 24, y);
+    ctx.lineTo(x, y + 36);
+    ctx.lineTo(x + 24, y + h);
+    ctx.lineTo(x + w - 60, y + h);
+  }
   
   // 不要 closePath()，以保持對接側開放
   ctx.stroke();
