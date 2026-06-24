@@ -227,7 +227,7 @@ function drawPokemonHUD(
 ) {
   const hpPercent = Math.max(0, Math.min(100, Math.round((hp / maxHp) * 100)));
   const w = 390;
-  const h = 96; // 框高度拉大至 96px以完全配合 4 倍大小屬性徽章無縫堆疊
+  const h = 84; // 框高度設為 84px，配合 4 倍屬性徽章重疊 12px 完美貼合
   const xOffset = isPlayer ? 80 : 0; // 我方屬性在左佔用 80px，主體往右移 80px；敵方主體在左，屬性在右
   
   // 1. 繪製六邊形底板
@@ -248,9 +248,9 @@ function drawPokemonHUD(
     ctx.lineTo(x + 75, y + 24);
     ctx.lineTo(x + 79, y + 24);
     ctx.lineTo(x + 79, y + h);
-    // 右側外邊界六邊形尖角（中點 y + 48 處突出，斜切量為 24px 以修飾角度）
+    // 右側外邊界六邊形尖角（中點 y + 42 處突出，斜切量為 24px 以修飾角度）
     ctx.lineTo(x + w - 24, y + h);
-    ctx.lineTo(x + w, y + 48);
+    ctx.lineTo(x + w, y + 42);
     ctx.lineTo(x + w - 24, y);
   } else {
     // 敵方屬性在右側：右側對接 100% 貼合 4 倍徽章左邊緣的階梯折線（向右擴展 1 像素防抗鋸齒透光）
@@ -261,9 +261,9 @@ function drawPokemonHUD(
     ctx.lineTo(x + w - 75, y + 24);
     ctx.lineTo(x + w - 79, y + 24);
     ctx.lineTo(x + w - 79, y + h);
-    // 左側外邊界六邊形尖角（中點 y + 48 處突出）
+    // 左側外邊界六邊形尖角（中點 y + 42 處突出）
     ctx.lineTo(x + 24, y + h);
-    ctx.lineTo(x, y + 48);
+    ctx.lineTo(x, y + 42);
   }
   
   ctx.closePath();
@@ -307,7 +307,7 @@ function drawPokemonHUD(
   // 4. 繪製屬性徽章
   if (types && types.length > 0) {
     const typeY1 = y;       // 上方第一屬性 (y 到 y + 48)
-    const typeY2 = y + 48;  // 下方第二屬性 (y + 48 到 y + 96)，完全無重疊完美貼合
+    const typeY2 = y + 36;  // 下方第二屬性 (y + 36 到 y + 84)，重疊 12px 完美貼合
     let drawX1 = 0;
     let drawX2 = 0;
     
@@ -329,7 +329,7 @@ function drawPokemonHUD(
   
   // 5. 繪製血條
   const barX = x + xOffset + 145;
-  const barY = y + 42; // 下移至 y + 42
+  const barY = y + 38; // 下移至 y + 38，居中舒展
   const barW = 150;
   const barH = 10; // 保持 10px 高度
   const barSkew = 3;
@@ -380,11 +380,11 @@ function drawPokemonHUD(
   
   // 6. 狀態徽章與 HP 數值
   ctx.save();
-  if (status) drawStatusBadge(ctx, status, x + xOffset + 24, y + 42); // 狀態徽章移至 y + 42，與血條對齊
+  if (status) drawStatusBadge(ctx, status, x + xOffset + 24, y + 38); // 狀態徽章移至 y + 38，與血條對齊
   if (isPlayer) {
     ctx.font = '12px Zpix';
     ctx.textAlign = 'right';
-    drawPixelTextWithStroke(ctx, `${hp}/${maxHp}`, x + xOffset + 300, y + 78, '#ffffff', '#000000', 2); // HP 數值平移至下半部偏下 y + 78
+    drawPixelTextWithStroke(ctx, `${hp}/${maxHp}`, x + xOffset + 300, y + 68, '#ffffff', '#000000', 2); // HP 數值平移至下半部偏下 y + 68
   }
   ctx.restore();
 }
