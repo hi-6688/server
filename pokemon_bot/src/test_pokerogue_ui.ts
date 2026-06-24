@@ -305,26 +305,26 @@ function drawPokemonHUD(
   
   // 3. 繪製寶可夢名稱、性別、特殊進化/屬性 UI 圖示
   ctx.save();
-  ctx.font = '16px Zpix';
+  ctx.font = '24px Zpix'; // 放大寶可夢名稱字型大小至 24px
   
   // 依據敵我底框起點（我方 x + 60，敵方 x + 24）動態計算內容起點，使文字與左邊界間隔一致為 24px
   const contentStartX = isPlayer ? x + 60 : x + 24;
   let displayName = name;
   let startX = contentStartX + 24;
   // 3.1 繪製寶可夢名稱
-  drawPixelTextWithStroke(ctx, displayName, startX, y + 24, '#FFFFFF', '#000000', 3);
+  drawPixelTextWithStroke(ctx, displayName, startX, y + 29, '#FFFFFF', '#000000', 3); // 基線微調至 y + 29
   const nameWidth = ctx.measureText(displayName).width;
   
   // 3.2 繪製性別
   let genderX = startX + nameWidth + 6;
   let genderWidth = 0;
   if (gender === 'M') {
-    ctx.font = '15px Zpix';
-    drawPixelTextWithStroke(ctx, '♂', genderX, y + 23, '#5dade2', '#000000', 3);
+    ctx.font = '22px Zpix'; // 放大性別字型大小至 22px
+    drawPixelTextWithStroke(ctx, '♂', genderX, y + 28, '#5dade2', '#000000', 3); // 基線微調至 y + 28
     genderWidth = ctx.measureText('♂').width;
   } else if (gender === 'F') {
-    ctx.font = '15px Zpix';
-    drawPixelTextWithStroke(ctx, '♀', genderX, y + 23, '#f48fb1', '#000000', 3);
+    ctx.font = '22px Zpix'; // 放大性別字型大小至 22px
+    drawPixelTextWithStroke(ctx, '♀', genderX, y + 28, '#f48fb1', '#000000', 3); // 基線微調至 y + 28
     genderWidth = ctx.measureText('♀').width;
   }
   
@@ -392,7 +392,7 @@ function drawPokemonHUD(
   
   // 5. 狀態徽章與 HP 數值
   ctx.save();
-  if (status) drawStatusBadge(ctx, status, contentStartX + 24, y + 33); // 狀態徽章與左邊界間隔 24px
+  if (status) drawStatusBadge(ctx, status, contentStartX + 24, y + 44); // 狀態徽章與左邊界間隔 24px，下移至 y + 44
   ctx.font = '12px Zpix';
   ctx.textAlign = 'right';
   // HP 數字靠右對齊點統一在 contentStartX + 265 處（我方 x + 325，敵方 x + 289），剛好對齊血條右端點
