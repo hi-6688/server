@@ -439,7 +439,7 @@ function drawPokeRogueTypeBadge(
   tempCtx.drawImage(img, 0, -yOffset);
 
   ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(tempCanvas, dx, dy, 80, 48);
+  ctx.drawImage(tempCanvas, dx, dy, 60, 36);
 }
 
 /**
@@ -463,8 +463,8 @@ function drawPokemonHUD(
 ) {
   const hpPercent = Math.max(0, Math.min(100, Math.round((hp / maxHp) * 100)));
   const w = 390;
-  const h = 72; // 框高度設為 72px，配合 4 倍屬性徽章重疊 24px 完美貼合
-  const xOffset = isPlayer ? 80 : 0; // 我方屬性在左佔用 80px，主體往右移 80px
+  const h = 72; // 框高度設為 72px，配合 3 倍屬性徽章不重疊完美貼合
+  const xOffset = 60; // 3 倍屬性在左佔用 60px，主體往右移 60px
   
   // 1. 繪製六邊形底板填充 (在下層/底層)
   ctx.save();
@@ -477,20 +477,20 @@ function drawPokemonHUD(
   ctx.beginPath();
   
   if (isPlayer) {
-    // 我方屬性在左側：左側對接線（向左延伸 3 像素，壓在屬性徽章底下防透光）
-    ctx.moveTo(x + 69, y);
-    ctx.lineTo(x + 77, y + 24);
-    ctx.lineTo(x + 77, y + h);
+    // 我方屬性在左側：左側對接線（向左延伸，壓在屬性徽章底下防透光）
+    ctx.moveTo(x + 49, y);
+    ctx.lineTo(x + 57, y + 24);
+    ctx.lineTo(x + 57, y + h);
     // 右側外邊界六邊形尖角（中點 y + 36 處突出，斜切量為 24px 以修飾角度）
     ctx.lineTo(x + w - 24, y + h);
     ctx.lineTo(x + w, y + 36);
     ctx.lineTo(x + w - 24, y);
   } else {
-    // 敵方屬性在右側：右側對接線（向右延伸 3 像素，壓在屬性徽章底下防透光）
+    // 敵方屬性在右側：右側對接線（向右延伸，壓在屬性徽章底下防透光）
     ctx.moveTo(x + 24, y); // 左側斜切量為 24px
-    ctx.lineTo(x + w - 69, y);
-    ctx.lineTo(x + w - 77, y + 24);
-    ctx.lineTo(x + w - 77, y + h);
+    ctx.lineTo(x + w - 49, y);
+    ctx.lineTo(x + w - 57, y + 24);
+    ctx.lineTo(x + w - 57, y + h);
     // 左側外邊界六邊形尖角（中點 y + 36 處突出）
     ctx.lineTo(x + 24, y + h);
     ctx.lineTo(x, y + 36);
@@ -502,22 +502,25 @@ function drawPokemonHUD(
 
   // 2. 繪製屬性徽章 (在中間層，會被最上層的黑色描邊壓邊，呈現極佳的對齊與邊界細節)
   if (types && types.length > 0) {
-    const typeY1 = y;       // 上方第一屬性 (y 到 y + 48)
-    const typeY2 = y + 24;  // 下方第二屬性 (y + 24 到 y + 72)，重疊 24px 完美貼合 72px
     let drawX1 = 0;
     let drawX2 = 0;
     
     if (isPlayer) {
-      drawX1 = x + 9;
-      drawX2 = x + 9;
+      drawX1 = x;
+      drawX2 = x;
     } else {
-      drawX1 = x + w - 89;
-      drawX2 = x + w - 89;
+      drawX1 = x + w - 60;
+      drawX2 = x + w - 60;
     }
     
     if (types.length === 1) {
+      // 單屬性：垂直置中，高度 36px (y + 18 處)
+      const typeY1 = y + 18;
       drawPokeRogueTypeBadge(ctx, types[0], drawX1, typeY1, isPlayer, false);
     } else if (types.length >= 2) {
+      // 雙屬性：不重疊，上下排列，各高 36px (y 與 y + 36 處)
+      const typeY1 = y;
+      const typeY2 = y + 36;
       drawPokeRogueTypeBadge(ctx, types[0], drawX1, typeY1, isPlayer, false);
       drawPokeRogueTypeBadge(ctx, types[1], drawX2, typeY2, isPlayer, true);
     }
@@ -530,17 +533,17 @@ function drawPokemonHUD(
   ctx.beginPath();
   
   if (isPlayer) {
-    ctx.moveTo(x + 69, y);
-    ctx.lineTo(x + 77, y + 24);
-    ctx.lineTo(x + 77, y + h);
+    ctx.moveTo(x + 49, y);
+    ctx.lineTo(x + 57, y + 24);
+    ctx.lineTo(x + 57, y + h);
     ctx.lineTo(x + w - 24, y + h);
     ctx.lineTo(x + w, y + 36);
     ctx.lineTo(x + w - 24, y);
   } else {
     ctx.moveTo(x + 24, y);
-    ctx.lineTo(x + w - 69, y);
-    ctx.lineTo(x + w - 77, y + 24);
-    ctx.lineTo(x + w - 77, y + h);
+    ctx.lineTo(x + w - 49, y);
+    ctx.lineTo(x + w - 57, y + 24);
+    ctx.lineTo(x + w - 57, y + h);
     ctx.lineTo(x + 24, y + h);
     ctx.lineTo(x, y + 36);
   }
