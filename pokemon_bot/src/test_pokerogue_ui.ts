@@ -264,7 +264,30 @@ function drawPokemonHUD(
   ctx.fill();
   ctx.restore();
 
-  // 2. 繪製黑色粗外邊框 (在底層，但比底色晚，屬性徽章會疊加在它上面)
+  // 2. 繪製屬性徽章 (在中間層，會被最上層的黑色描邊壓邊，呈現極佳的對齊與邊界細節)
+  if (types && types.length > 0) {
+    const typeY1 = y;       // 上方第一屬性 (y 到 y + 48)
+    const typeY2 = y + 24;  // 下方第二屬性 (y + 24 到 y + 72)，重疊 24px 完美貼合 72px
+    let drawX1 = 0;
+    let drawX2 = 0;
+    
+    if (isPlayer) {
+      drawX1 = x + 9;
+      drawX2 = x + 9;
+    } else {
+      drawX1 = x + w - 89;
+      drawX2 = x + w - 89;
+    }
+    
+    if (types.length === 1) {
+      drawPokeRogueTypeBadge(ctx, types[0], drawX1, typeY1, isPlayer, false);
+    } else if (types.length >= 2) {
+      drawPokeRogueTypeBadge(ctx, types[0], drawX1, typeY1, isPlayer, false);
+      drawPokeRogueTypeBadge(ctx, types[1], drawX2, typeY2, isPlayer, true);
+    }
+  }
+
+  // 3. 繪製黑色粗外邊框 (在最上層壓頂，完美蓋在屬性徽章上方以防止透明切角挖空邊框)
   ctx.save();
   ctx.lineWidth = 4;
   ctx.strokeStyle = '#000000';
@@ -289,29 +312,6 @@ function drawPokemonHUD(
   ctx.closePath();
   ctx.stroke();
   ctx.restore();
-  
-  // 3. 繪製屬性徽章 (在上層，完美壓在底框黑色邊框上，呈現極佳的對齊與邊界細節)
-  if (types && types.length > 0) {
-    const typeY1 = y;       // 上方第一屬性 (y 到 y + 48)
-    const typeY2 = y + 24;  // 下方第二屬性 (y + 24 到 y + 72)，重疊 24px 完美貼合 72px
-    let drawX1 = 0;
-    let drawX2 = 0;
-    
-    if (isPlayer) {
-      drawX1 = x;
-      drawX2 = x;
-    } else {
-      drawX1 = x + w - 80;
-      drawX2 = x + w - 80;
-    }
-    
-    if (types.length === 1) {
-      drawPokeRogueTypeBadge(ctx, types[0], drawX1, typeY1, isPlayer, false);
-    } else if (types.length >= 2) {
-      drawPokeRogueTypeBadge(ctx, types[0], drawX1, typeY1, isPlayer, false);
-      drawPokeRogueTypeBadge(ctx, types[1], drawX2, typeY2, isPlayer, true);
-    }
-  }
   
   // 3. 繪製寶可夢名稱、性別、特殊進化/屬性 UI 圖示
   ctx.save();
