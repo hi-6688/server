@@ -391,11 +391,9 @@ function drawPokemonHUD(
   // 5. 狀態徽章與 HP 數值
   ctx.save();
   if (status) drawStatusBadge(ctx, status, x + 84, y + 33); // 狀態徽章固定在 x + 84
-  if (isPlayer) {
-    ctx.font = '12px Zpix';
-    ctx.textAlign = 'right';
-    drawPixelTextWithStroke(ctx, `${hp}/${maxHp}`, x + 360, y + 62, '#ffffff', '#000000', 2);
-  }
+  ctx.font = '12px Zpix';
+  ctx.textAlign = 'right';
+  drawPixelTextWithStroke(ctx, `${hp}/${maxHp}`, x + 325, y + 62, '#ffffff', '#000000', 2);
   ctx.restore();
 }
 
