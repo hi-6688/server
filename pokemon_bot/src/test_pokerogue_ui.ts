@@ -241,21 +241,17 @@ function drawPokemonHUD(
   ctx.beginPath();
   
   if (isPlayer) {
-    // 我方屬性在左側：左側對接線（向左延伸，壓在屬性徽章底下防透光）
-    ctx.moveTo(x + 49, y);
-    ctx.lineTo(x + 57, y + 24);
-    ctx.lineTo(x + 57, y + h);
-    // 右側外邊界六邊形尖角（中點 y + 36 處突出，斜切量為 24px 以修飾角度）
-    ctx.lineTo(x + w - 24, y + h);
-    ctx.lineTo(x + w, y + 36);
+    // 我方屬性在左側：左側對接線（向左延伸至 x + 40，壓在屬性徽章底下防透光）
+    ctx.moveTo(x + 40, y);
     ctx.lineTo(x + w - 24, y);
+    ctx.lineTo(x + w, y + 36);
+    ctx.lineTo(x + w - 24, y + h);
+    ctx.lineTo(x + 40, y + h);
   } else {
-    // 敵方屬性在右側：右側對接線（向右延伸，壓在屬性徽章底下防透光）
-    ctx.moveTo(x + 24, y); // 左側斜切量為 24px
-    ctx.lineTo(x + w - 49, y);
-    ctx.lineTo(x + w - 57, y + 24);
-    ctx.lineTo(x + w - 57, y + h);
-    // 左側外邊界六邊形尖角（中點 y + 36 處突出）
+    // 敵方屬性在右側：右側對接線（向右延伸至 x + w - 40，壓在屬性徽章底下防透光）
+    ctx.moveTo(x + 24, y);
+    ctx.lineTo(x + w - 40, y);
+    ctx.lineTo(x + w - 40, y + h);
     ctx.lineTo(x + 24, y + h);
     ctx.lineTo(x, y + 36);
   }
@@ -297,22 +293,22 @@ function drawPokemonHUD(
   ctx.beginPath();
   
   if (isPlayer) {
-    ctx.moveTo(x + 49, y);
-    ctx.lineTo(x + 57, y + 24);
-    ctx.lineTo(x + 57, y + h);
-    ctx.lineTo(x + w - 24, y + h);
-    ctx.lineTo(x + w, y + 36);
+    // 我方：開放式外框，左側垂直面對接處不畫線，與屬性徽章無縫融合
+    ctx.moveTo(x + 60, y);
     ctx.lineTo(x + w - 24, y);
+    ctx.lineTo(x + w, y + 36);
+    ctx.lineTo(x + w - 24, y + h);
+    ctx.lineTo(x + 60, y + h);
   } else {
-    ctx.moveTo(x + 24, y);
-    ctx.lineTo(x + w - 49, y);
-    ctx.lineTo(x + w - 57, y + 24);
-    ctx.lineTo(x + w - 57, y + h);
-    ctx.lineTo(x + 24, y + h);
+    // 敵方：開放式外框，右側垂直面對接處不畫線，與屬性徽章無縫融合
+    ctx.moveTo(x + w - 60, y);
+    ctx.lineTo(x + 24, y);
     ctx.lineTo(x, y + 36);
+    ctx.lineTo(x + 24, y + h);
+    ctx.lineTo(x + w - 60, y + h);
   }
   
-  ctx.closePath();
+  // 不要 closePath()，以保持對接側開放
   ctx.stroke();
   ctx.restore();
   
