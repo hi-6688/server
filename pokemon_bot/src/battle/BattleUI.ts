@@ -571,7 +571,7 @@ function drawPokemonHUD(
     ctx.drawImage(iconTeraImg, specialX, y + 11, 16, 20); // 下移至 y + 11
   } else if (isMega && iconMegaImg) {
     ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(iconMegaImg, specialX, y + 13, 16, 16); // 下移至 y + 13
+    ctx.drawImage(iconMegaImg, specialX, y + 11, 20, 20); // 放大至 20x20 並調整為 y + 11
   }
   ctx.restore();
   
