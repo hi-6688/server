@@ -226,7 +226,7 @@ function drawPokemonHUD(
   isMega: boolean = false
 ) {
   const hpPercent = Math.max(0, Math.min(100, Math.round((hp / maxHp) * 100)));
-  const w = isPlayer ? 390 : 450; // 我方底框寬 390px，敵方加寬至 450px 以容納右側屬性徽章，確保內容格式與我方完全一致
+  const w = 390; // 敵我底框寬度均統一為 390px
   const h = 72; // 框高度設為 72px，配合 3 倍屬性徽章不重疊完美貼合
   
   // 1. 繪製六邊形底板填充 (在下層/底層)
@@ -338,9 +338,9 @@ function drawPokemonHUD(
   ctx.restore();
   
   // 4. 繪製血條
-  const barX = x + 205; // 不分敵我，血條均在距左側 205px 處開始，格式完全一致（敵方已加寬至 450px 故不與右側屬性重疊）
+  const barX = x + 205; // 不分敵我，血條均在距左側 205px 處開始，格式完全一致
   const barY = y + 40;
-  const barW = 150;
+  const barW = 120; // 統一縮短至 120px，確保敵方血條右端（325px）不與右側屬性徽章（330px 起）重疊
   const barH = 10;
   const barSkew = 3;
   
