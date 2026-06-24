@@ -575,10 +575,10 @@ function drawPokemonHUD(
   }
   ctx.restore();
   
-  // 4. 繪製血條
-  const barX = contentStartX + 145; // 統一血條相對於內容邊界偏移 145px（我方 205px，敵方 169px）
-  const barY = y + 40;
-  const barW = 120; // 統一縮短至 120px，確保敵方血條右端（325px）不與右側屬性徽章（330px 起）重疊
+  // 4. 繪製血條 (放置在黑欄右下角，並稍微加長)
+  const barW = 150; // 加長至 150px
+  const barX = contentStartX + 150; // 起點自 contentStartX + 150 開始，至 contentStartX + 300 結束
+  const barY = y + 52; // 移至右下角 (y + 52)
   const barH = 10;
   const barSkew = 3;
   
@@ -628,11 +628,11 @@ function drawPokemonHUD(
   
   // 5. 狀態徽章與 HP 數值
   ctx.save();
-  if (status) drawStatusBadge(ctx, status, contentStartX + 24, y + 44); // 狀態徽章與左邊界間隔 24px，下移至 y + 44
+  if (status) drawStatusBadge(ctx, status, contentStartX + 24, y + 44); // 狀態徽章與左邊界間隔 24px，在左下角
   ctx.font = '12px Zpix';
   ctx.textAlign = 'right';
-  // HP 數字靠右對齊點統一在 contentStartX + 265 處（我方 x + 325，敵方 x + 289），剛好對齊血條右端點
-  drawPixelTextWithStroke(ctx, `${hp}/${maxHp}`, contentStartX + 265, y + 62, '#ffffff', '#000000', 2);
+  // HP 數字放置在血條的右上方 (基線在 y + 46，X 坐標為血條右端點 contentStartX + 300)
+  drawPixelTextWithStroke(ctx, `${hp}/${maxHp}`, contentStartX + 300, y + 46, '#ffffff', '#000000', 2);
   ctx.restore();
 }
 
