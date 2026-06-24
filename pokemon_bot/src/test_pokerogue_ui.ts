@@ -445,7 +445,7 @@ async function testRender() {
   drawPokemonSprite(ctx, p1Img, p1Json, 270, 480, 3.0);
 
   // 敵方精靈 (噴火龍正面)
-  drawPokemonSprite(ctx, p2Img, p2Json, 690, 330, 3.0);
+  drawPokemonSprite(ctx, p2Img, p2Json, 690, 290, 3.0);
 
   // 敵方 HUD (左上方, x=10, y=15)
   drawPokemonHUD(

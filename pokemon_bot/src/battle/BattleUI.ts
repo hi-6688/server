@@ -737,7 +737,7 @@ export async function generateBattleImage(session: BattleSession, lastLogs: stri
       const p2Asset = await getPokemonSpriteAsset(p2Species, false);
       const p2Img = await loadImage(p2Asset.imagePath);
       const p2Json = JSON.parse(fs.readFileSync(p2Asset.jsonPath, 'utf8'));
-      drawPokemonSprite(ctx, p2Img, p2Json, 690, 330, 3.0);
+      drawPokemonSprite(ctx, p2Img, p2Json, 690, 290, 3.0);
     } catch (err) {
       console.error('無法載入敵方精靈圖片，繪製佔位圓形:', err);
       ctx.fillStyle = '#f1c40f';
