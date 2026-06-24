@@ -647,7 +647,10 @@ function drawPokemonSprite(
   dy: number,
   scale: number = 3
 ) {
-  const frameInfo = json.textures[0].frames[0].frame;
+  // 相容 TexturePacker 結構 (有 textures) 與 Aseprite 結構 (無 textures)
+  const frameInfo = json.textures && json.textures[0]
+    ? json.textures[0].frames[0].frame
+    : json.frames[0].frame;
   const { x, y, w, h } = frameInfo;
 
   const tempCanvas = new Canvas(w, h);

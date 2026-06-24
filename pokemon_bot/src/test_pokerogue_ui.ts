@@ -190,7 +190,10 @@ function drawPokemonSprite(
   dy: number,
   scale: number = 3
 ) {
-  const frameInfo = json.textures[0].frames[0].frame;
+  // 相容 TexturePacker 結構 (有 textures) 與 Aseprite 結構 (無 textures)
+  const frameInfo = json.textures && json.textures[0]
+    ? json.textures[0].frames[0].frame
+    : json.frames[0].frame;
   const { x, y, w, h } = frameInfo;
 
   const tempCanvas = new Canvas(w, h);
@@ -504,36 +507,36 @@ async function testRealBattleRender() {
     id: 'user_a',
     name: '玩家小智',
     team: `
-Venusaur @ Venusaurite
-Ability: Overgrow
-EVs: 252 HP / 252 SpA / 4 SpD
-Modest Nature
-- Giga Drain
-- Sludge Bomb
-- Earth Power
-- Synthesis
+Raichu @ Raichunite X
+Ability: Static
+EVs: 252 SpA / 4 SpD / 252 Spe
+Timid Nature
+- Thunderbolt
+- Focus Blast
+- Surf
+- Nasty Plot
 `
   };
   const playerB = {
     id: 'user_b',
     name: '玩家小茂',
     team: `
-Charizard @ Charizardite Y
-Ability: Blaze
-EVs: 252 SpA / 4 SpD / 252 Spe
-Timid Nature
-- Flamethrower
-- Solar Beam
-- Air Slash
-- Protect
+Dragonite @ Leftovers
+Ability: Multiscale
+EVs: 252 Atk / 4 SpD / 252 Spe
+Adamant Nature
+- Outrage
+- Earthquake
+- Extreme Speed
+- Dragon Dance
 `
   };
 
   const session = new BattleSession(playerA, playerB);
   
-  // 第一回合：小智 mega 進化妙蛙花，小茂 mega 進化噴火龍
+  // 第一回合：小智 Mega 進化雷丘，小茂快龍正常出招
   session.submitChoice('p1', 'move 1 mega');
-  session.submitChoice('p2', 'move 1 mega');
+  session.submitChoice('p2', 'move 1');
 
   console.log('正在為真實戰鬥生成圖片...');
   const logs = session.getNewLogs();
