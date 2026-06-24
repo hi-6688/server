@@ -332,10 +332,10 @@ function drawPokemonHUD(
   const specialX = genderX + genderWidth + (genderWidth > 0 ? 8 : 4);
   if (isTera && iconTeraImg) {
     ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(iconTeraImg, specialX, y + 7, 16, 20); // 調整為 y + 7 垂直置中
+    ctx.drawImage(iconTeraImg, specialX, y + 11, 16, 20); // 下移至 y + 11
   } else if (isMega && iconMegaImg) {
     ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(iconMegaImg, specialX, y + 9, 16, 16); // 調整為 y + 9 垂直置中
+    ctx.drawImage(iconMegaImg, specialX, y + 13, 16, 16); // 下移至 y + 13
   }
   ctx.restore();
   
