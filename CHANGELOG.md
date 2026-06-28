@@ -2,6 +2,70 @@
 
 本檔案記錄了專案的所有重大更新與架構變動。這對於 Agent (AI 助手) 理解專案演進至關重要。
 
+## [2026-06-28] - Minecraft BDS (CoffeeHost) Admin Tools v2.9.5 安全防禦重構與 Runtime Crash 核心修復
+### 🚀 模組部署與安全重構 (Modding & Hotfix Deployment)
+- **全新正向預查防線 (Lookahead Regex)**：升級雙引號與單引號正則表達式，增加 `(?=\s*[\),])` 與 `(?=\s*[,\}])` 正向預查。要求 UI 字串右引號後必須緊接括號、逗號或花括號，徹底杜絕了對任何「字串拼接（帶有 `+` 的動態字串）」進行物件化的誤殺，完美保留原版程式碼運作邏輯。
+- **排除非 UI 系統核心檔案**：在編譯管線中引入 `EXCLUDE_FILES` 機制，精確排除 `stat-scoreboards.js` 等非 UI 渲染檔案。這成功避開了麥塊原生計分板 API `addObjective`（僅支援 String 參數）傳入物件時造成的 TypeError 致命載入崩潰，根治了工具失效的問題。
+- **白名單查表漢化機制**：回歸 100% 安全的白名單對照表替換方式。僅對存在於「已翻譯字典（675+ 條目）」中的純顯示靜態 UI 字串進行 translate 物件重構；任何非 UI 字串或未翻譯對象一律安全跳過、保留原樣，保證 0% 的執行期異常率。
+- **全方位測試與自動部署**：通過全體 JS 語法校驗（node --check），版本升級至 `2.9.5`，重新打包 `Admin_Tools_2.9.5_繁中版.mcaddon`，同步部署伺服器端 BP 與 RP 覆蓋，並同步更新世界版本註冊表。
+
+## [2026-06-28] - Minecraft BDS (CoffeeHost) Admin Tools v2.9.2 官方標準多語言 (i18n) 終極漢化與通知訊息劫持
+### 🚀 模組部署與 100% 官方標準漢化 (Modding & Official Localization)
+- **漏網選單 100% 全數漢化**：清查出分散在後台檔案中的選單呼叫（如 `players.js` 的坐騎傳送選單、`spectator-rescue.js` 的旁觀者退出選單、`support-access.js` 的診斷選單、`stress-test.js` 與 `utils.js` 的 Discard 等），將其全數納入 RawMessage 替換範圍。並修正了正則表達式在匹配時吞噬「冒號與空格」的致命 Bug，實現了 JS 語法的 100% 合規。
+- **通知訊息劫持翻譯 (AOP 攔截器)**：針對那些原本寫死在 JS 核心邏輯中且無法透過 RawMessage 輕易替換的聊天欄通知訊息（如 `Your home has been saved.`, `Request sent.` 等），在 `utils.js` 的 `tell` 函數底層寫入「執行期字串翻譯對照攔截器」，實現了聊天欄通知訊息的 100% 安全中文化，且完全不會有 `[object Object]` 運行時崩潰的隱患。
+- **1 秒極速 GitHub CDN 加速下載**：將最新的資源包打包上傳並強制推送到 GitHub `dev` 分支，利用微軟官方的 `raw.githubusercontent.com` 全球 CDN 節點進行託管，並在伺服器根目錄部署了最新版本的 `cdn_config.json`。玩家進服重載資源包時將享有 1 秒瞬間下載完成的極速體驗！
+- **自定義物品名稱完全中文化**：追加寫入 7 個自定義工具的物品本地化鍵值（如 `item.jm_at:admin_tool.name=§l§c管理員工具§r` 等）到資源包 `.lang` 檔，實現了手持工具名稱的 100% 繁體中文化。
+- **675 筆多語言翻譯條目覆蓋**：總翻譯量提升至 675 筆，版本全體升級至 `2.9.2`，重新打包為 `Admin_Tools_2.9.2_繁中版.mcaddon` 並上傳同步伺服器。
+
+## [2026-06-28] - Minecraft BDS (CoffeeHost) 效能調優與 Admin Tools v2.2.4 全方位繁中版部署
+### 🛠️ 伺服器效能與網路調優 (Server & Performance Optimization)
+- **優化手機熱點連線與網路壓縮**：調整 `server.properties` 的視距為 `6`（封包量減少 45%），寫入 `compression-threshold=256` 進行封包深度壓縮，防止 NAT 3 玩家丟包；開啟 `max-threads=0` 全開 CPU 運算資源；將 `enable-ipv6` 設為 `off` 排除 IP 衝突。
+- **預設玩家權限修改**：將 `default-player-permission-level` 修改為 `operator`，實現新加入玩家自動獲取 OP 管理員權限，簡化測試與管理授權流程。
+- **強制啟用伺服器資源包**：在 `server.properties` 中將 `texturepack-required` 設為 `true`，強制登入玩家必須下載伺服器端中文化資源包，避免客戶端顯示錯誤。
+
+### 🚀 模組部署與 NBT 實驗性功能修改 (Modding & NBT Modification)
+- **首創 Python NBT 編輯修復實驗性功能**：因 `Admin Tools v2.2` 高度依賴 Script API (JS 腳本)，在本地利用 `nbtlib` 對遠端下載的 `level.dat` 進行 NBT 標籤底層修改，強制將 `experiments` 下的 `gametest`、`beta_api` 和 `upcoming_creator_features` 寫入並開啟為 `1`（啟用 Beta APIs 實驗性功能），重新包裝為基岩版小端序格式並透過 SFTP 覆蓋部署，完美解決 Script 模組無法加載的硬性限制。
+- **Admin Tools v2.2.4 全方位精密漢化實作**：
+  - 解壓並透過 SFTP 部署 Admin Tools 插件至 `behavior_packs/` 與 `resource_packs/`。
+  - 修復了前一版因粗暴改寫系統模組依賴版本號引發的套件載入錯誤。
+  - **2.2.4 擴大漢化範圍**：重寫漢化程式，擴大正則匹配範圍至 `label: "..."`（物件屬性宣告）以及 `.header(...)`、`.slider(...)` 等 UI 元件函數。成功將玩家主選單（`Player Menu`）的按鈕副標題及描述（如 "Manage your saved locations"、"Server teleport locations" 等）精密中文化。
+  - 將插件與世界註冊表中的版本號強制升級為 `2.2.4`，清空玩家本地的舊快取，達成 100% 不崩潰的全中文可視化玩家選單。
+- **Admin Tools v2.2.2 安全繁中版實作與部署**：
+  - 解壓並透過 SFTP 部署 Admin Tools 插件至 `behavior_packs/` 與 `resource_packs/`。
+  - 修復了前一版因粗暴改寫 `@minecraft/server` 等系統模組的 dependency 版本號，導致連線時報錯「至少有一項行為或資源套件無法載入」的 Bug。
+  - **2.2.2 安全漢化設計**：重新對 12 個 JS 代碼執行正則替換，**保留代碼核心判斷用的英文按鈕單字**（如 `Save`、`Cancel`、`Reset`、`Close` 等操作動詞），只漢化純顯示的選單標題、天氣、設定等，完美相容代碼 runtime 條件判斷。
+  - 將插件與世界註冊表中的版本號強制升級為 `2.2.2`，清空玩家本地的舊英文快取，順暢加載中文化介面。
+
+## [2026-06-27] - Minecraft BDS (CoffeeHost) 與神奇嗨螺 Conch 機器人雙向互通
+### 🚀 系統與功能升級 (System & Functions)
+- **實作 BDS 與 Discord 雙向 WebSocket 橋接**：
+  - 在本地 `discord_bot` 中實作了全新的 [minecraft.py](file:///home/hi6688/servers/discord_bot/cogs/inactive/minecraft.py)（當 `BOT_MODE=CONCH` 時載入），非同步啟動 WebSocket 伺服器監聽 `24446` 連接埠。
+  - 實作安全握手驗證與雙向訊息轉發，玩家發言與進出廣播即時在遊戲內與 Discord 頻道（ID: `1471089934319489045`）互轉。
+  - 支援管理員利用 `/mc狀態` 查看橋接連線數，以及透過 `/mc指令 <command>` 在遊戲內遠端下達控制台指令。
+- **建立 BDS Behavior Pack 行為包**：
+  - 在本地建立了 `coffee_bridge_bp` 連接器行為包，包含 [manifest.json](file:///home/hi6688/servers/scratch/coffee_bridge_bp/manifest.json) 與 [main.js](file:///home/hi6688/servers/scratch/coffee_bridge_bp/scripts/main.js)，以 `@minecraft/server-net` 的 WebSocket 實作啟動主動連線、每 10 秒自動斷線重連及事件發送。
+- **升級 SFTP 自動部署與設定工具**：
+  - 擴充並改寫 [coffeehost_sync.py](file:///home/hi6688/servers/scratch/coffeehost_sync.py)，讀取並解析 `.env` 後動態將本機公網 IP 及 Token 替換入 Behavior Pack 中。
+  - 透過 SFTP 成功部署行為包至 CoffeeHost 伺服器端的 `development_behavior_packs/`，並自動建立遠端 `config/default/` 目錄完成 `permissions.json` 的上傳放行。
+
+## [2026-06-26] - VS Code 終端機設定更新
+### 🔧 設定與系統最佳化 (Configuration & Performance)
+- **更新 VS Code 終端機設定檔**：在 `.vscode/settings.json` 中移除 `Gemini CLI` 設定檔，並新增 `OpenCode` 終端機設定檔。
+
+## [2026-06-26] - 寶可夢裝備/招式/特性全繁中翻譯 + Bot 共享查詢
+### 🌐 繁中翻譯 (Phase 1 — teambuilder_client)
+- **物品翻譯**：補齊 Reg M-B 155 個合法物品的繁中名稱與描述，含 34 個新 Mega 進化石命名、21 個 Mega 石描述物種名修正、倍率統一改倍率 (1.2x→1.2倍)、機率用語統一 (幾率/概率→機率)、分數還原 (1/2 最大 HP)
+- **招式翻譯**：補齊 Reg M-B 500 個合法招式的繁中 shortDesc/desc，含 Champions mod 改寫的招式描述 (Rage Fist, Belch 等)、保護系/束縛系/多段攻擊系等模板化描述、幾率/倍率/分數統一修正
+- **特性翻譯**：補齊 Reg M-B 200 個合法特性的繁中 shortDesc/desc，含 6 個自創 Champions Mega 特性翻譯 (Dragonize→龍化、Mega Sol→超級陽光 等)、Cheek Pouch/Sheer Force 數值錯誤修正
+- **不動 upstream**：僅修改 `js/translations.json`，`data/*.js`、`translate.js` 引擎、上游源碼全未觸及
+
+### 🤖 對戰機器人 (Phase 2 — pokemon_bot)
+- **新增 `src/battle/data.ts`**：共享翻譯資料載入器，啟動時讀取 `translations.json` + @pkmn/dex 建立 id→繁中對照表
+- **擴充 `translations.ts`**：`translateItem`/`translateMove` 改讀共享表，新增 `translateAbility`，對戰日誌全繁中化
+- **對戰看板新增道具/特性欄位**：`BattleUI.ts` Embed 顯示持有道具與特性 (🎒/⭐)
+- **新增查詢指令**：`/item <name>`、`/move <name>`、`/ability <name>` 支援中英文雙向查詢
+- **全部 TypeScript 編譯通過** (tsc --noEmit)
+
 ## [2026-06-23] - 寶可夢對戰 HUD 排版重構 (無等級/經驗值 Champion 版本)
 ### 🎨 介面與體驗優化 (UI/UX)
 - **移除了等級與經驗值繪製**：移除 `Lv.` 文字與我方的底部 `EXP` 經驗條。

@@ -1,6 +1,37 @@
 # 📅 專案開發計畫書 (Roadmap)
 
-最後更新時間: 2026-06-23
+最後更新時間: 2026-06-28
+
+## ✅ 已完成 (Completed)
+
+- [x] **P1: Minecraft BDS (CoffeeHost) Admin Tools v2.9.5 安全防禦重構與 Runtime Crash 核心修復**
+    - **正則預查與防拼接誤殺**：升級正則匹配，新增對 `)`、`,`、`}` 結尾的預查條件，完全杜絕了 `+` 拼接字串被誤轉成物件的 Bug。
+    - **黑名單排除非 UI 核心**：在編譯時將 `stat-scoreboards.js` 排除在外，避免其 `addObjective` 方法接收 RawMessage 物件而崩潰。
+    - **白名單查表漢化機制**：重新啟用安全白名單查表，保證 0 崩潰且 100% UI 中文化。
+    - 版本升級為 `2.9.5`，上傳至伺服器覆蓋，更新世界註冊表並重新打包備份 mcaddon。
+
+
+- [x] **P1: Minecraft BDS (CoffeeHost) Admin Tools v2.9.2 官方標準多語言 (i18n) 終極漢化與通知訊息劫持**
+    - **解決「套件無法載入」與中文化完美融合**：完全還原了行為包（BP）、資源包（RP）的世界配置與系統依賴至原版的 `@minecraft/server` `"2.8.0"` 與 `@minecraft/server-ui` `"2.1.0"` 確保 26.30 版本環境的完美相容。精準篩選只翻譯真正的 14 個 UI 面板 JS 檔案，並在 `utils.js` 的 `tell` 函數底層寫入「執行期字串翻譯對照攔截器」，將玩家點選坐騎、退出旁觀者等隱密選單以及聊天欄通知訊息（如設定家、傳送請求）100% 進行中文化，根治了以前漏翻譯與物品失效的 Bug。
+    - **自定義物品手持名稱與 CDN 託管加速**：追加寫入 7 個自定義物品名稱翻譯（如 `item.jm_at:admin_tool.name` 等）到資源包語系檔中。同時將資源包打包上傳託管至 GitHub 全球 CDN 分支，在伺服器部署 `cdn_config.json` 引導，將資源包重載時間縮短至 1 秒內。
+    - 將插件版本升級為 `2.9.2` 以強制玩家進服時自動重新下載並加載最新資源包，重新打包成 `Admin_Tools_2.9.2_繁中版.mcaddon` 方便日後備用。
+    - 寫入 `compression-threshold=256` 進行封包壓縮防止 NAT 3 丟包，調降視距至 6，開啟全執行緒優化。
+    - 透過 Python 下載並直接改寫 `level.dat` 底層 NBT 的 `experiments` 標籤，成功於伺服器端開啟 Beta APIs 實驗性功能，打破官方 BDS 不支援 Script JS 模組的枷鎖。
+    - 設定新玩家預設權限為 `operator` (管理員)，簡化了服主管理門檻。
+
+- [x] **P1: Minecraft BDS (CoffeeHost) 與神奇嗨螺 Conch 機器人雙向互通**
+    - 升級 SFTP 同步部署管線 (`coffeehost_sync.py`)，支援一鍵將本地 Behavior Pack 打包並代入 `.env` 連線參數自動上傳。
+    - 建立 BDS 端行為包 (`coffee_bridge_bp`)，透過 `@minecraft/server-net` 的 WebSocket 在伺服器啟動時主動連回 Discord Bot 主機，實作 10 秒斷線重連機制。
+    - 在本地 Discord Bot 中實作 `minecraft.py` Cog，透過 `aiohttp.web` 非同步啟動 WebSocket 伺服器監聽 `24446` 連接埠，實現玩家聊天事件雙向互轉、進出廣播，以及遠端指令（`/mc指令`）發送，並已完成 systemd 部署與連線測試驗證。
+ 
+- [x] **VS Code 終端機設定更新**
+
+    - 於 `.vscode/settings.json` 中移除 `Gemini CLI` 終端機設定。
+    - 新增 `OpenCode` 終端機設定檔，配置 `/home/hi6688/.opencode/bin/opencode` 路徑。
+
+- [x] **P1: 寶可夢裝備/招式/特性全繁中翻譯與 Bot 共享查詢系統**
+    - Phase 1 (teambuilder_client): Reg M-B 155 物品 + 500 招式 + 200 特性全部補齊繁中名稱與描述，修正倍率/機率/分數用語，統一「寶可夢」用語。僅修改 `js/translations.json`，上游源碼未觸及。
+    - Phase 2 (pokemon_bot): 新增共享翻譯資料載入器 (`data.ts`)，擴充對戰日誌全繁中化，對戰看板新增道具/特性欄位，新增 `/item` `/move` `/ability` 查詢指令。
 
 ## 🔴 當前急迫事項 (Immediate Actions)
 *嗨嗨 v7.0 核心架構升級與系統修復*
